@@ -1,0 +1,155 @@
+# app/routers/auth.py
+from datetime import datetime, timedelta
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
+from passlib.context import CryptContext
+from jose import jwt
+
+from ..database import models, db
+from .. import schemas
+from ..config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
+from ..services.email_service import send_reset_code_email, EmailSendError
+
+router = APIRouter(prefix="/auth", tags=["Autenticación"])
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# --- FUNCIONES DE AYUDA ---
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+# --- RUTAS ---
+@router.post("/register", status_code=status.HTTP_201_CREATED, response_model=schemas.UserResponse)
+def register_user(user: schemas.UserCreate, db_session: Session = Depends(db.get_db)):
+    user_exists = db_session.query(models.User).filter(
+        (models.User.email == user.email) | (models.User.username == user.username)
+    ).first()
+
+    if user_exists:
+        raise HTTPException(status_code=400, detail="El usuario o correo ya está registrado")
+
+    hashed_pwd = get_password_hash(user.password)
+    new_user = models.User(username=user.username, email=user.email, hashed_password=hashed_pwd)
+
+    db_session.add(new_user)
+    db_session.commit()
+    db_session.refresh(new_user)
+    return new_user
+
+@router.post("/login", response_model=schemas.Token)
+def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db_session: Session = Depends(db.get_db)):
+    # 1. Buscar al usuario por su username
+    user = db_session.query(models.User).filter(models.User.username == form_data.username).first()
+
+    # 2. Verificar que exista y que la contraseña coincida
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Credenciales incorrectas",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # 3. Generar el Token JWT
+    access_token = create_access_token(data={"sub": user.username})
+
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.post("/forgot-password", response_model=schemas.MessageResponse)
+def forgot_password(data: schemas.PasswordResetRequest, db_session: Session = Depends(db.get_db)):
+    generic_message = {"message": "Si los datos son correctos, te enviamos un código a tu correo."}
+
+    user = db_session.query(models.User).filter(
+        models.User.username == data.username,
+        models.User.email == data.email,
+    ).first()
+
+    if not user:
+        return generic_message
+
+    code = models.PasswordResetCode.generate_code()
+    reset_entry = models.PasswordResetCode(
+        user_id=user.id,
+        code=code,
+        expires_at=models.PasswordResetCode.new_expiration(minutes=15),
+    )
+    db_session.add(reset_entry)
+    db_session.commit()
+
+    try:
+        send_reset_code_email(to_email=user.email, username=user.username, code=code)
+    except EmailSendError:
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo enviar el correo. Intenta de nuevo en unos minutos.",
+        )
+
+    return generic_message
+
+
+@router.post("/reset-password", response_model=schemas.MessageResponse)
+def reset_password(data: schemas.PasswordResetVerify, db_session: Session = Depends(db.get_db)):
+    user = db_session.query(models.User).filter(models.User.username == data.username).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Código inválido o vencido")
+
+    reset_entry = (
+        db_session.query(models.PasswordResetCode)
+        .filter(
+            models.PasswordResetCode.user_id == user.id,
+            models.PasswordResetCode.code == data.code,
+            models.PasswordResetCode.used == False,  
+        )
+        .order_by(models.PasswordResetCode.id.desc())
+        .first()
+    )
+
+    if not reset_entry or reset_entry.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Código inválido o vencido")
+
+    user.hashed_password = get_password_hash(data.new_password)
+    reset_entry.used = True
+    db_session.commit()
+
+    return {"message": "Contraseña actualizada correctamente"}
+
+
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError
+
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
+def get_current_user(token: str = Depends(oauth2_scheme), db_session: Session = Depends(db.get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="No se pudieron validar las credenciales",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    # 1. Se lee el token
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    # 2. Buscar si el usuario del token realmente existe en la BD
+    user = db_session.query(models.User).filter(models.User.username == username).first()
+    if user is None:
+        raise credentials_exception
+
+    return user
