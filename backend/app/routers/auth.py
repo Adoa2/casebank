@@ -30,7 +30,14 @@ def create_access_token(data: dict):
     return encoded_jwt
 
 # --- RUTAS ---
-@router.post("/register", status_code=status.HTTP_201_CREATED, response_model=schemas.UserResponse)
+@router.post(
+    "/register",
+    status_code=status.HTTP_201_CREATED,
+    response_model=schemas.UserResponse,
+    summary="Registrar nuevo usuario",
+    description="Crea una cuenta nueva. El nombre de usuario y el correo deben ser únicos.",
+    response_description="Usuario creado exitosamente.",
+)
 def register_user(user: schemas.UserCreate, db_session: Session = Depends(db.get_db)):
     user_exists = db_session.query(models.User).filter(
         (models.User.email == user.email) | (models.User.username == user.username)
@@ -47,7 +54,13 @@ def register_user(user: schemas.UserCreate, db_session: Session = Depends(db.get
     db_session.refresh(new_user)
     return new_user
 
-@router.post("/login", response_model=schemas.Token)
+@router.post(
+    "/login",
+    response_model=schemas.Token,
+    summary="Iniciar sesión",
+    description="Autentica al usuario con nombre de usuario y contraseña, y devuelve un token JWT.",
+    response_description="Token de acceso generado.",
+)
 def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db_session: Session = Depends(db.get_db)):
     # 1. Buscar al usuario por su username
     user = db_session.query(models.User).filter(models.User.username == form_data.username).first()
@@ -66,7 +79,14 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db_session: Ses
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-@router.post("/forgot-password", response_model=schemas.MessageResponse)
+@router.post(
+    "/forgot-password",
+    response_model=schemas.MessageResponse,
+    summary="Solicitar código de recuperación",
+    description="Envía un código de 6 dígitos al correo del usuario, válido por 15 minutos. "
+                "Por seguridad, siempre devuelve el mismo mensaje exista o no la cuenta.",
+    response_description="Confirmación de que la solicitud fue procesada.",
+)
 def forgot_password(data: schemas.PasswordResetRequest, db_session: Session = Depends(db.get_db)):
     generic_message = {"message": "Si los datos son correctos, te enviamos un código a tu correo."}
 
@@ -97,8 +117,13 @@ def forgot_password(data: schemas.PasswordResetRequest, db_session: Session = De
 
     return generic_message
 
-
-@router.post("/reset-password", response_model=schemas.MessageResponse)
+@router.post(
+    "/reset-password",
+    response_model=schemas.MessageResponse,
+    summary="Restablecer contraseña",
+    description="Verifica el código recibido por correo y establece la nueva contraseña.",
+    response_description="Confirmación de que la contraseña fue actualizada.",
+)
 def reset_password(data: schemas.PasswordResetVerify, db_session: Session = Depends(db.get_db)):
     user = db_session.query(models.User).filter(models.User.username == data.username).first()
     if not user:
