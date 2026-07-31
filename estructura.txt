@@ -1,0 +1,54 @@
+﻿├── frontend/
+│   ├── src/
+│   │   ├── data/
+│   │   │   ├── mockManual.js
+│   │   ├── views/
+│   │   │   ├── RegisterView.jsx
+│   │   │   ├── ResetPasswordView.jsx
+│   │   │   ├── LoginView.jsx
+│   │   │   ├── DashboardView.jsx
+│   │   │   ├── ForgotPasswordView.jsx
+│   │   ├── api/
+│   │   │   ├── auth.js
+│   │   ├── components/
+│   │   │   ├── Header.jsx
+│   │   │   ├── ManualContent.jsx
+│   │   │   ├── ManualSidebar.jsx
+│   │   │   ├── ChatPanel.jsx
+│   │   │   ├── AuthField.jsx
+│   │   │   ├── AuthMessage.jsx
+│   │   │   ├── BrandPanel.jsx
+│   │   ├── index.css
+│   │   ├── main.jsx
+│   │   ├── App.jsx
+│   │   ├── config.js
+│   ├── postcss.config.js
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── tailwind.config.js
+│   ├── .gitignore
+│   ├── .env.example
+│   ├── package-lock.json
+│   ├── index.html
+├── backend/
+│   ├── data/
+│   │   ├── manual_structure.json
+│   │   ├── manualcb.pdf
+│   ├── app/
+│   │   ├── services/
+│   │   │   ├── prueba_indice.py
+│   │   │   ├── pdf_processor.py
+│   │   │   ├── email_service.py
+│   │   ├── routers/
+│   │   │   ├── auth.py
+│   │   ├── database/
+│   │   │   ├── models.py
+│   │   │   ├── db.py
+│   │   ├── schemas.py
+│   │   ├── main.py
+│   │   ├── config.py
+│   ├── sql_app.db
+│   ├── requirements.txt
+│   ├── requeriments.txt
+├── vercel.json
+├── estructura.txt

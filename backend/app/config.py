@@ -1,11 +1,15 @@
 # app/config.py
+import os
+from dotenv import load_dotenv
 
-SECRET_KEY = "mi_clave_super_secreta_para_el_manual"
+load_dotenv()
+
+SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60  
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 587
-SMTP_USER = "adolfoamador1213@gmail.com"
-SMTP_PASSWORD = "cbcm ertv upna uxto"
+SMTP_USER = os.getenv("SMTP_USER")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 EMAIL_FROM_NAME = "CaseBank - Manual Interactivo"
