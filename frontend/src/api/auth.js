@@ -5,9 +5,8 @@ async function parseError(res, fallback) {
   return new Error(data.detail || fallback)
 }
 
-// POST /auth/login 
 export async function login(username, password) {
-  const res = await fetch(`${API_BASE_URL}/auth/login`, {
+  const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ username, password }),
@@ -20,9 +19,8 @@ export async function login(username, password) {
   return res.json()
 }
 
-// POST /auth/register 
 export async function register(username, email, password) {
-  const res = await fetch(`${API_BASE_URL}/auth/register`, {
+  const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, email, password }),
@@ -35,9 +33,8 @@ export async function register(username, email, password) {
   return res.json()
 }
 
-// POST /auth/forgot-password 
 export async function forgotPassword(username, email) {
-  const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+  const res = await fetch(`${API_BASE_URL}/api/auth/forgot-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, email }),
@@ -50,9 +47,8 @@ export async function forgotPassword(username, email) {
   return res.json()
 }
 
-// POST /auth/reset-password 
 export async function resetPassword(username, code, newPassword) {
-  const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+  const res = await fetch(`${API_BASE_URL}/api/auth/reset-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, code, new_password: newPassword }),
