@@ -184,6 +184,16 @@ def call_gemini_generate(prompt):
     return partes[0].get("text", "")
 
 
+def _respuesta_indica_sin_informacion(respuesta):
+    """
+    Revisa si la respuesta del modelo equivale a la frase de "no tengo esa
+    informacion", tolerando que el modelo la envuelva en markdown (**negrita**)
+    o comillas, en vez de exigir una coincidencia exacta al inicio del texto.
+    """
+    normalizado = respuesta.replace("*", "").replace('"', "").replace("'", "").strip().lower()
+    return FRASE_SIN_INFORMACION.lower() in normalizado
+
+
 def answer_question(question):
     """
     Funcion principal del RAG: busca contexto relevante, genera la respuesta
@@ -208,23 +218,33 @@ def answer_question(question):
     prompt = build_prompt(question, chunks)
     respuesta = call_gemini_generate(prompt)
 
-    fuentes = [
-        {
-            "seccion_id": c["metadata"]["seccion_id"],
-            "titulo": c["metadata"]["titulo"],
-            "pagina": c["metadata"]["pagina_inicio"],
-        }
-        for c in chunks
-    ]
+    # Si el modelo determino que el contexto no responde la pregunta, no
+    # tiene sentido adjuntar fuentes/imagenes: los chunks se recuperaron
+    # por similitud, pero el propio modelo dice que no le sirvieron.
+    sin_informacion = _respuesta_indica_sin_informacion(respuesta)
 
-    imagenes = []
-    for c in chunks:
-        imagenes.extend(c["metadata"].get("imagenes") or [])
+    if sin_informacion:
+        fuentes = []
+        imagenes = []
+    else:
+        fuentes = [
+            {
+                "seccion_id": c["metadata"]["seccion_id"],
+                "titulo": c["metadata"]["titulo"],
+                "pagina": c["metadata"]["pagina_inicio"],
+            }
+            for c in chunks
+        ]
+
+        imagenes_raw = []
+        for c in chunks:
+            imagenes_raw.extend(c["metadata"].get("imagenes") or [])
+        imagenes = list(dict.fromkeys(imagenes_raw))  # sin duplicados, conserva el orden
 
     return {
         "respuesta": respuesta,
         "fuentes": fuentes,
-        "imagenes": list(dict.fromkeys(imagenes)),  # sin duplicados, conserva el orden
+        "imagenes": imagenes,
     }
 
 
