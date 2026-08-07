@@ -60,6 +60,7 @@ export default function ResetPasswordView({ username, onBackToLogin, onReset }) 
         value={newPassword}
         onChange={(e) => setNewPassword(e.target.value)}
       />
+      <p className="text-xs text-slate -mt-4 mb-4">La contraseña debe tener al menos 8 caracteres.</p>
       <AuthField
         id="resetNewPasswordConfirm"
         label="Confirmar nueva contraseña"
