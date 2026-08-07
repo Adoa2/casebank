@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { API_BASE_URL } from '../config'
 import { authHeaders } from '../api/authToken'
 import { buildManualTree } from '../utils/manualTree'
@@ -8,6 +8,7 @@ export default function ManualSidebar({ selectedId, onSelect }) {
   const [openChapters, setOpenChapters] = useState(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     let cancelado = false
@@ -43,6 +44,36 @@ export default function ManualSidebar({ selectedId, onSelect }) {
     }
   }, [])
 
+  // Lista plana de todas las subsecciones, en el mismo orden del manual,
+  // conservando referencia a su capitulo. Sirve tanto para el buscador
+  // como para calcular la seccion anterior/siguiente.
+  const flatSections = useMemo(() => {
+    const flat = []
+    for (const chapter of chapters) {
+      for (const sub of chapter.subchapters) {
+        flat.push({ chapter, subchapter: sub })
+      }
+    }
+    return flat
+  }, [chapters])
+
+  const searchResults = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+
+    return flatSections
+      .filter(
+        ({ subchapter }) =>
+          subchapter.title?.toLowerCase().includes(q) || subchapter.contenido?.toLowerCase().includes(q)
+      )
+      .slice(0, 30)
+  }, [query, flatSections])
+
+  const currentIndex = useMemo(
+    () => flatSections.findIndex(({ subchapter }) => subchapter.id === selectedId),
+    [flatSections, selectedId]
+  )
+
   function toggleChapter(id) {
     setOpenChapters((prev) => {
       const next = new Set(prev)
@@ -54,6 +85,22 @@ export default function ManualSidebar({ selectedId, onSelect }) {
       return next
     })
   }
+
+  function goToIndex(index) {
+    const item = flatSections[index]
+    if (!item) return
+    onSelect(item.subchapter, item.chapter)
+    setOpenChapters((prev) => new Set(prev).add(item.chapter.id))
+  }
+
+  function handleSearchSelect(item) {
+    onSelect(item.subchapter, item.chapter)
+    setOpenChapters((prev) => new Set(prev).add(item.chapter.id))
+    setQuery('')
+  }
+
+  const canGoPrev = currentIndex > 0
+  const canGoNext = currentIndex !== -1 && currentIndex < flatSections.length - 1
 
   if (loading) {
     return (
@@ -73,8 +120,65 @@ export default function ManualSidebar({ selectedId, onSelect }) {
 
   return (
     <nav className="w-full h-full overflow-y-auto bg-white">
-      <div className="px-4 py-4 border-b border-line">
+      {/* Contenedor fijo: header + buscador + flechas de navegacion.
+          Al quedar sticky en la parte superior, nunca lo tapa la lista
+          del indice al desplegarse hacia abajo. */}
+      <div className="sticky top-0 z-10 bg-white px-4 py-4 border-b border-line">
         <h2 className="font-display text-sm font-semibold text-slate uppercase tracking-wide">Índice del manual</h2>
+
+        <div className="relative mt-3">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar en el manual..."
+            className="w-full text-sm rounded-lg border border-line px-3 py-2 outline-none focus:border-brand-blue transition"
+          />
+
+          {query.trim() && (
+            <div className="absolute left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-lg border border-line bg-white shadow-lg z-20">
+              {searchResults.length === 0 ? (
+                <p className="px-3 py-2.5 text-sm text-slate">Sin resultados.</p>
+              ) : (
+                searchResults.map((item) => (
+                  <button
+                    key={item.subchapter.id}
+                    type="button"
+                    onClick={() => handleSearchSelect(item)}
+                    className="w-full text-left px-3 py-2 hover:bg-brand-blue/5 transition border-b border-line last:border-b-0 cursor-pointer"
+                  >
+                    <p className="text-sm text-ink font-medium truncate">{item.subchapter.title}</p>
+                    <p className="text-xs text-slate truncate">{item.chapter.title}</p>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-line bg-paper px-2 py-1.5">
+          <button
+            type="button"
+            onClick={() => goToIndex(currentIndex - 1)}
+            disabled={!canGoPrev}
+            className="text-sm px-2 py-1 rounded-md text-slate hover:bg-brand-blue/5 hover:text-ink transition disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+          >
+            {'\u2039'} Anterior
+          </button>
+
+          <span className="text-xs text-slate">
+            {currentIndex !== -1 ? `${currentIndex + 1} / ${flatSections.length}` : '—'}
+          </span>
+
+          <button
+            type="button"
+            onClick={() => goToIndex(currentIndex === -1 ? 0 : currentIndex + 1)}
+            disabled={!canGoNext}
+            className="text-sm px-2 py-1 rounded-md text-slate hover:bg-brand-blue/5 hover:text-ink transition disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+          >
+            Siguiente {'\u203A'}
+          </button>
+        </div>
       </div>
 
       <ul className="py-2">
