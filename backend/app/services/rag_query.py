@@ -50,6 +50,11 @@ N_RESULTS = 8          # candidatos iniciales a recuperar de Postgres
 DISTANCE_FACTOR = 1.3  # un chunk se descarta si su distancia supera 1.3x la del mejor resultado
 MAX_CHUNKS_USADOS = 4  # tope de chunks que realmente se usan como contexto/fuentes
 
+# Frase fija que se le pide al modelo cuando no encuentra la respuesta en el
+# contexto. Se usa para detectar ese caso de forma confiable y no devolver
+# fuentes/imagenes que en realidad no respaldan nada.
+FRASE_SIN_INFORMACION = "No cuento con esa información en el manual."
+
 
 def _post_con_reintentos(url, body):
     """POST con reintentos por rate limit (429), usado tanto para embed como para generar."""
@@ -149,8 +154,8 @@ def build_prompt(pregunta, chunks):
 
     prompt = f"""Eres un asistente que responde preguntas sobre el Manual de Usuario del Sistema CaseBank.
 Usa UNICAMENTE la siguiente informacion extraida del manual para responder. Si la
-respuesta no se encuentra en el contexto, indica claramente que no cuentas con esa
-informacion en el manual, sin inventar pasos.
+respuesta no se encuentra en el contexto, no inventes pasos: responde UNICAMENTE
+con esta frase exacta, sin agregar nada mas: "{FRASE_SIN_INFORMACION}"
 
 Contexto del manual:
 {contexto}
