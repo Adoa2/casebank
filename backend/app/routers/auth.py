@@ -71,11 +71,18 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db_session: Ses
         func.lower(models.User.username) == form_data.username.lower()
     ).first()
 
-    # 2. Verificar que exista y que la contraseña coincida
+    # 2. Verificar que exista, esté activo, y que la contraseña coincida
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Esta cuenta está inactiva",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
