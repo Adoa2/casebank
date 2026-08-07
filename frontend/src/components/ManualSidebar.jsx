@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { API_BASE_URL } from '../config'
 import { authHeaders } from '../api/authToken'
 import { buildManualTree } from '../utils/manualTree'
@@ -9,6 +9,7 @@ export default function ManualSidebar({ selectedId, onSelect }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [query, setQuery] = useState('')
+  const itemRefs = useRef({})
 
   useEffect(() => {
     let cancelado = false
@@ -102,6 +103,16 @@ export default function ManualSidebar({ selectedId, onSelect }) {
   const canGoPrev = currentIndex > 0
   const canGoNext = currentIndex !== -1 && currentIndex < flatSections.length - 1
 
+  // Cada vez que cambia la seccion seleccionada (clic manual, buscador, o
+  // Anterior/Siguiente), asegura que quede visible dentro del indice,
+  // aunque este fuera del area que se ve actualmente.
+  useEffect(() => {
+    const el = itemRefs.current[selectedId]
+    if (el) {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }
+  }, [selectedId, openChapters])
+
   if (loading) {
     return (
       <nav className="w-full h-full overflow-y-auto bg-white px-4 py-4">
@@ -181,6 +192,9 @@ export default function ManualSidebar({ selectedId, onSelect }) {
                       <li key={sub.id}>
                         <button
                           type="button"
+                          ref={(el) => {
+                            itemRefs.current[sub.id] = el
+                          }}
                           onClick={() => onSelect(sub, chapter)}
                           style={{ paddingLeft: `${10 + indent * 14}px` }}
                           className={`w-full text-left py-1.5 pr-2.5 rounded-lg text-sm transition cursor-pointer ${
