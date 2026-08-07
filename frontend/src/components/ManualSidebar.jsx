@@ -155,30 +155,6 @@ export default function ManualSidebar({ selectedId, onSelect }) {
             </div>
           )}
         </div>
-
-        <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-line bg-paper px-2 py-1.5">
-          <button
-            type="button"
-            onClick={() => goToIndex(currentIndex - 1)}
-            disabled={!canGoPrev}
-            className="text-sm px-2 py-1 rounded-md text-slate hover:bg-brand-blue/5 hover:text-ink transition disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
-          >
-            {'\u2039'} Anterior
-          </button>
-
-          <span className="text-xs text-slate">
-            {currentIndex !== -1 ? `${currentIndex + 1} / ${flatSections.length}` : '—'}
-          </span>
-
-          <button
-            type="button"
-            onClick={() => goToIndex(currentIndex === -1 ? 0 : currentIndex + 1)}
-            disabled={!canGoNext}
-            className="text-sm px-2 py-1 rounded-md text-slate hover:bg-brand-blue/5 hover:text-ink transition disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
-          >
-            Siguiente {'\u203A'}
-          </button>
-        </div>
       </div>
 
       <ul className="py-2">
@@ -224,6 +200,32 @@ export default function ManualSidebar({ selectedId, onSelect }) {
           )
         })}
       </ul>
+
+      {/* Contenedor fijo al pie del sidebar. Al ser sticky bottom-0, la
+          lista del indice puede desplegarse hacia abajo sin taparlo. */}
+      <div className="sticky bottom-0 z-10 bg-white border-t border-line px-4 py-2.5 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => goToIndex(currentIndex - 1)}
+          disabled={!canGoPrev}
+          className="text-sm px-2 py-1 rounded-md text-slate hover:bg-brand-blue/5 hover:text-ink transition disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+        >
+          {'\u2039'} Anterior
+        </button>
+
+        <span className="text-xs text-slate">
+          {currentIndex !== -1 ? `${currentIndex + 1} / ${flatSections.length}` : '—'}
+        </span>
+
+        <button
+          type="button"
+          onClick={() => goToIndex(currentIndex === -1 ? 0 : currentIndex + 1)}
+          disabled={!canGoNext}
+          className="text-sm px-2 py-1 rounded-md text-slate hover:bg-brand-blue/5 hover:text-ink transition disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+        >
+          Siguiente {'\u203A'}
+        </button>
+      </div>
     </nav>
   )
 }
