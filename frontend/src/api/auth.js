@@ -3,7 +3,6 @@ import { API_BASE_URL } from '../config'
 const FIELD_MESSAGES = {
   new_password: 'La contraseña debe tener al menos 8 caracteres.',
   code: 'El código debe tener 6 dígitos.',
-  username: 'El usuario es obligatorio.',
   email: 'El correo no es válido.',
   password: 'La contraseña debe tener al menos 8 caracteres.',
 }
@@ -51,11 +50,11 @@ export async function register(username, email, password) {
   return res.json()
 }
 
-export async function forgotPassword(username, email) {
+export async function forgotPassword(email) {
   const res = await fetch(`${API_BASE_URL}/api/auth/forgot-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, email }),
+    body: JSON.stringify({ email }),
   })
 
   if (!res.ok) {
@@ -65,11 +64,11 @@ export async function forgotPassword(username, email) {
   return res.json()
 }
 
-export async function resetPassword(username, code, newPassword) {
+export async function resetPassword(email, code, newPassword) {
   const res = await fetch(`${API_BASE_URL}/api/auth/reset-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, code, new_password: newPassword }),
+    body: JSON.stringify({ email, code, new_password: newPassword }),
   })
 
   if (!res.ok) {

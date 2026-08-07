@@ -50,7 +50,7 @@ def send_reset_code_email(to_email: str, username: str, code: str) -> None:
         f"    {code}\n\n"
         f"Este codigo vence en 15 minutos. Si no solicitaste este cambio, "
         f"puedes ignorar este correo con tranquilidad.\n\n"
-        f"- Equipo CaseBank"
+        f"EVALUATE-CASEBANK"
     )
 
     message = MIMEMultipart()

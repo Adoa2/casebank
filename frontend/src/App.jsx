@@ -9,11 +9,11 @@ import DashboardView from './views/DashboardView'
 export default function App() {
   const [authenticated, setAuthenticated] = useState(() => Boolean(localStorage.getItem('casebank_token')))
   const [view, setView] = useState('login')
-  const [resetUsername, setResetUsername] = useState('')
+  const [resetEmail, setResetEmail] = useState('')
   const [loginNotice, setLoginNotice] = useState(null)
 
-  function goToReset(username) {
-    setResetUsername(username)
+  function goToReset(email) {
+    setResetEmail(email)
     setView('reset')
   }
 
@@ -63,7 +63,7 @@ export default function App() {
 
           {view === 'reset' && (
             <ResetPasswordView
-              username={resetUsername}
+              email={resetEmail}
               onBackToLogin={() => setView('login')}
               onReset={() =>
                 goToLoginWithNotice({ text: 'Contraseña actualizada. Ya puedes iniciar sesión.', type: 'success' })

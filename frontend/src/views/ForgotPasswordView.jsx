@@ -4,7 +4,6 @@ import AuthMessage from '../components/AuthMessage'
 import { forgotPassword } from '../api/auth'
 
 export default function ForgotPasswordView({ onBackToLogin, onCodeSent }) {
-  const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [message, setMessage] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -14,11 +13,11 @@ export default function ForgotPasswordView({ onBackToLogin, onCodeSent }) {
     setMessage(null)
     setLoading(true)
 
-    const trimmedUsername = username.trim()
+    const trimmedEmail = email.trim()
 
     try {
-      await forgotPassword(trimmedUsername, email.trim())
-      onCodeSent(trimmedUsername)
+      await forgotPassword(trimmedEmail)
+      onCodeSent(trimmedEmail)
     } catch (err) {
       setMessage({ text: err.message || 'No se pudo conectar con el servidor.', type: 'error' })
     } finally {
@@ -29,18 +28,10 @@ export default function ForgotPasswordView({ onBackToLogin, onCodeSent }) {
   return (
     <form className="w-full" onSubmit={handleSubmit} noValidate>
       <h2 className="font-display text-[1.75rem] font-semibold mb-1.5">Recupera tu acceso</h2>
-      <p className="text-slate mb-8">Confirma tu usuario y correo para continuar.</p>
+      <p className="text-slate mb-8">Confirma tu correo para continuar.</p>
 
       <AuthMessage text={message?.text} type={message?.type} />
 
-      <AuthField
-        id="forgotUsername"
-        label="Usuario"
-        placeholder="tu usuario"
-        autoComplete="username"
-        value={username}
-        onChange={(e) => setUsername(e.target.value)}
-      />
       <AuthField
         id="forgotEmail"
         label="Correo electrónico"

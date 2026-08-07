@@ -1,7 +1,7 @@
-# app/routers/auth.py
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from jose import jwt
@@ -39,8 +39,11 @@ def create_access_token(data: dict):
     response_description="Usuario creado exitosamente.",
 )
 def register_user(user: schemas.UserCreate, db_session: Session = Depends(db.get_db)):
+    # Comparación case-insensitive: evita crear "Juan" y "juan" como cuentas distintas,
+    # lo que dejaría ambiguo el login (que tambien es case-insensitive).
     user_exists = db_session.query(models.User).filter(
-        (models.User.email == user.email) | (models.User.username == user.username)
+        (func.lower(models.User.email) == user.email.lower())
+        | (func.lower(models.User.username) == user.username.lower())
     ).first()
 
     if user_exists:
@@ -58,12 +61,15 @@ def register_user(user: schemas.UserCreate, db_session: Session = Depends(db.get
     "/login",
     response_model=schemas.Token,
     summary="Iniciar sesión",
-    description="Autentica al usuario con nombre de usuario y contraseña, y devuelve un token JWT.",
+    description="Autentica al usuario con nombre de usuario y contraseña, y devuelve un token JWT. "
+                "El nombre de usuario no distingue mayúsculas de minúsculas.",
     response_description="Token de acceso generado.",
 )
 def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db_session: Session = Depends(db.get_db)):
-    # 1. Buscar al usuario por su username
-    user = db_session.query(models.User).filter(models.User.username == form_data.username).first()
+    # 1. Buscar al usuario por su username, sin distinguir mayúsculas/minúsculas
+    user = db_session.query(models.User).filter(
+        func.lower(models.User.username) == form_data.username.lower()
+    ).first()
 
     # 2. Verificar que exista y que la contraseña coincida
     if not user or not verify_password(form_data.password, user.hashed_password):
@@ -91,8 +97,7 @@ def forgot_password(data: schemas.PasswordResetRequest, db_session: Session = De
     generic_message = {"message": "Si los datos son correctos, te enviamos un código a tu correo."}
 
     user = db_session.query(models.User).filter(
-        models.User.username == data.username,
-        models.User.email == data.email,
+        func.lower(models.User.email) == data.email.lower(),
     ).first()
 
     if not user:
@@ -125,7 +130,9 @@ def forgot_password(data: schemas.PasswordResetRequest, db_session: Session = De
     response_description="Confirmación de que la contraseña fue actualizada.",
 )
 def reset_password(data: schemas.PasswordResetVerify, db_session: Session = Depends(db.get_db)):
-    user = db_session.query(models.User).filter(models.User.username == data.username).first()
+    user = db_session.query(models.User).filter(
+        func.lower(models.User.email) == data.email.lower()
+    ).first()
     if not user:
         raise HTTPException(status_code=400, detail="Código inválido o vencido")
 

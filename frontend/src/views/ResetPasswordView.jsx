@@ -3,7 +3,7 @@ import AuthField from '../components/AuthField'
 import AuthMessage from '../components/AuthMessage'
 import { resetPassword } from '../api/auth'
 
-export default function ResetPasswordView({ username, onBackToLogin, onReset }) {
+export default function ResetPasswordView({ email, onBackToLogin, onReset }) {
   const [code, setCode] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
@@ -25,7 +25,7 @@ export default function ResetPasswordView({ username, onBackToLogin, onReset }) 
     setLoading(true)
 
     try {
-      await resetPassword(username, code.trim(), newPassword)
+      await resetPassword(email, code.trim(), newPassword)
       onReset()
     } catch (err) {
       setMessage({ text: err.message, type: 'error' })

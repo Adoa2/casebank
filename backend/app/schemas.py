@@ -43,13 +43,12 @@ class Token(BaseModel):
 
 class PasswordResetRequest(BaseModel):
     """Datos para solicitar el código de recuperación de contraseña."""
-    username: str = Field(..., description="Nombre de usuario de la cuenta a recuperar.")
     email: str = Field(..., description="Correo electrónico asociado a la cuenta.")
 
 
 class PasswordResetVerify(BaseModel):
     """Datos para verificar el código de recuperación y establecer una nueva contraseña."""
-    username: str = Field(..., description="Nombre de usuario de la cuenta.")
+    email: str = Field(..., description="Correo electrónico asociado a la cuenta.")
     code: str = Field(
         ...,
         min_length=6,
