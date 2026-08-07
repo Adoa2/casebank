@@ -1,14 +1,74 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Header from '../components/Header'
 import ManualSidebar from '../components/ManualSidebar'
 import ManualContent from '../components/ManualContent'
 import ChatPanel from '../components/ChatPanel'
+import { API_BASE_URL } from '../config'
+import { authHeaders } from '../api/authToken'
+import { buildManualTree } from '../utils/manualTree'
 
 export default function DashboardView({ onLogout }) {
   const [selected, setSelected] = useState({ chapter: null, subchapter: null })
+  const [chapters, setChapters] = useState([])
+  const [manualLoading, setManualLoading] = useState(true)
+  const [manualError, setManualError] = useState(null)
+
+  useEffect(() => {
+    let cancelado = false
+
+    async function cargarManual() {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/manual`, {
+          headers: authHeaders(),
+        })
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(data.detail || 'No se pudo cargar el índice del manual.')
+        }
+
+        const secciones = await res.json()
+        const tree = buildManualTree(secciones)
+
+        if (!cancelado) {
+          setChapters(tree)
+        }
+      } catch (err) {
+        if (!cancelado) setManualError(err.message)
+      } finally {
+        if (!cancelado) setManualLoading(false)
+      }
+    }
+
+    cargarManual()
+    return () => {
+      cancelado = true
+    }
+  }, [])
+
+  // Lista plana de todas las subsecciones, con referencia a su capitulo.
+  // La usa handleSelectSource para ubicar la seccion que referencia el chat.
+  const flatSections = useMemo(() => {
+    const flat = []
+    for (const chapter of chapters) {
+      for (const sub of chapter.subchapters) {
+        flat.push({ chapter, subchapter: sub })
+      }
+    }
+    return flat
+  }, [chapters])
 
   function handleSelect(subchapter, chapter) {
     setSelected({ chapter, subchapter })
+  }
+
+  // Llamado cuando el usuario hace clic en una fuente citada por el chat.
+  function handleSelectSource(seccionId) {
+    const targetId = `sec-${seccionId}`
+    const item = flatSections.find(({ subchapter }) => subchapter.id === targetId)
+    if (item) {
+      handleSelect(item.subchapter, item.chapter)
+    }
   }
 
   return (
@@ -17,13 +77,19 @@ export default function DashboardView({ onLogout }) {
 
       <div className="flex-1 flex min-h-0">
         <div className="hidden md:block w-[280px] flex-shrink-0 border-r border-line min-h-0">
-          <ManualSidebar selectedId={selected.subchapter?.id} onSelect={handleSelect} />
+          <ManualSidebar
+            chapters={chapters}
+            loading={manualLoading}
+            error={manualError}
+            selectedId={selected.subchapter?.id}
+            onSelect={handleSelect}
+          />
         </div>
 
         <ManualContent chapter={selected.chapter} subchapter={selected.subchapter} />
 
         <div className="hidden xl:block w-[340px] flex-shrink-0 border-l border-line min-h-0">
-          <ChatPanel />
+          <ChatPanel onSelectSource={handleSelectSource} />
         </div>
       </div>
     </div>

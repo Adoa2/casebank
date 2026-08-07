@@ -11,10 +11,27 @@ const INITIAL_MESSAGES = [
   },
 ]
 
-export default function ChatPanel() {
+// El modelo devuelve texto con enfasis estilo markdown (**negrita**).
+// Esta funcion lo convierte en elementos <strong> reales en vez de
+// mostrar los asteriscos tal cual.
+function renderTextoConNegritas(texto) {
+  const partes = texto.split(/(\*\*[^*]+\*\*)/g)
+  return partes.map((parte, idx) => {
+    if (parte.startsWith('**') && parte.endsWith('**')) {
+      return <strong key={idx}>{parte.slice(2, -2)}</strong>
+    }
+    return <span key={idx}>{parte}</span>
+  })
+}
+
+export default function ChatPanel({ onSelectSource }) {
   const [messages, setMessages] = useState(INITIAL_MESSAGES)
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(false)
+
+  function handleClear() {
+    setMessages([...INITIAL_MESSAGES])
+  }
 
   async function handleSend(e) {
     e.preventDefault()
@@ -61,9 +78,18 @@ export default function ChatPanel() {
 
   return (
     <aside className="w-full h-full flex flex-col bg-white">
-      <div className="px-4 py-4 border-b border-line">
-        <h2 className="font-display text-sm font-semibold text-ink">Asistente CaseBank</h2>
-        <p className="text-xs text-slate mt-0.5">Responde según el contenido real del manual</p>
+      <div className="px-4 py-4 border-b border-line flex items-start justify-between gap-2">
+        <div>
+          <h2 className="font-display text-sm font-semibold text-ink">Asistente CaseBank</h2>
+          <p className="text-xs text-slate mt-0.5">Responde según el contenido real del manual</p>
+        </div>
+        <button
+          type="button"
+          onClick={handleClear}
+          className="text-xs text-slate hover:text-brand-blue border border-line rounded-md px-2 py-1 transition cursor-pointer flex-shrink-0"
+        >
+          Limpiar chat
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
@@ -74,14 +100,19 @@ export default function ChatPanel() {
               message.role === 'user' ? 'ml-auto bg-brand-blue text-white' : 'bg-paper text-ink'
             }`}
           >
-            <p className="whitespace-pre-line">{message.text}</p>
+            <p className="whitespace-pre-line">{renderTextoConNegritas(message.text)}</p>
 
             {message.fuentes && message.fuentes.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-line/60 text-xs text-slate space-y-0.5">
+              <div className="mt-2 pt-2 border-t border-line/60 text-xs space-y-0.5">
                 {message.fuentes.map((f, idx) => (
-                  <p key={idx}>
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => onSelectSource?.(f.seccion_id)}
+                    className="block text-left text-brand-blue hover:underline cursor-pointer"
+                  >
                     {f.titulo} (pág. {f.pagina})
-                  </p>
+                  </button>
                 ))}
               </div>
             )}

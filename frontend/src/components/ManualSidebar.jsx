@@ -1,49 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { API_BASE_URL } from '../config'
-import { authHeaders } from '../api/authToken'
-import { buildManualTree } from '../utils/manualTree'
 
-export default function ManualSidebar({ selectedId, onSelect }) {
-  const [chapters, setChapters] = useState([])
+export default function ManualSidebar({ chapters, loading, error, selectedId, onSelect }) {
   const [openChapters, setOpenChapters] = useState(new Set())
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
   const [query, setQuery] = useState('')
   const itemRefs = useRef({})
 
+  // Al llegar el primer manual cargado, abre el primer capitulo por defecto.
   useEffect(() => {
-    let cancelado = false
-
-    async function cargarManual() {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/manual`, {
-          headers: authHeaders(),
-        })
-
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}))
-          throw new Error(data.detail || 'No se pudo cargar el índice del manual.')
-        }
-
-        const secciones = await res.json()
-        const tree = buildManualTree(secciones)
-
-        if (!cancelado) {
-          setChapters(tree)
-          setOpenChapters(new Set([tree[0]?.id]))
-        }
-      } catch (err) {
-        if (!cancelado) setError(err.message)
-      } finally {
-        if (!cancelado) setLoading(false)
-      }
+    if (chapters.length > 0 && openChapters.size === 0) {
+      setOpenChapters(new Set([chapters[0].id]))
     }
-
-    cargarManual()
-    return () => {
-      cancelado = true
-    }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chapters])
 
   // Lista plana de todas las subsecciones, en el mismo orden del manual,
   // conservando referencia a su capitulo. Sirve tanto para el buscador
@@ -75,6 +43,21 @@ export default function ManualSidebar({ selectedId, onSelect }) {
     [flatSections, selectedId]
   )
 
+  // Si la seccion seleccionada viene de fuera (ej. clic en una fuente del
+  // chat) y su capitulo todavia esta cerrado, lo abre automaticamente.
+  useEffect(() => {
+    if (!selectedId) return
+    const item = flatSections.find(({ subchapter }) => subchapter.id === selectedId)
+    if (!item) return
+
+    setOpenChapters((prev) => {
+      if (prev.has(item.chapter.id)) return prev
+      const next = new Set(prev)
+      next.add(item.chapter.id)
+      return next
+    })
+  }, [selectedId, flatSections])
+
   function toggleChapter(id) {
     setOpenChapters((prev) => {
       const next = new Set(prev)
@@ -91,21 +74,19 @@ export default function ManualSidebar({ selectedId, onSelect }) {
     const item = flatSections[index]
     if (!item) return
     onSelect(item.subchapter, item.chapter)
-    setOpenChapters((prev) => new Set(prev).add(item.chapter.id))
   }
 
   function handleSearchSelect(item) {
     onSelect(item.subchapter, item.chapter)
-    setOpenChapters((prev) => new Set(prev).add(item.chapter.id))
     setQuery('')
   }
 
   const canGoPrev = currentIndex > 0
   const canGoNext = currentIndex !== -1 && currentIndex < flatSections.length - 1
 
-  // Cada vez que cambia la seccion seleccionada (clic manual, buscador, o
-  // Anterior/Siguiente), asegura que quede visible dentro del indice,
-  // aunque este fuera del area que se ve actualmente.
+  // Cada vez que cambia la seccion seleccionada (clic manual, buscador,
+  // Anterior/Siguiente, o una fuente del chat), asegura que quede visible
+  // dentro del indice, aunque este fuera del area que se ve actualmente.
   useEffect(() => {
     const el = itemRefs.current[selectedId]
     if (el) {
@@ -131,9 +112,9 @@ export default function ManualSidebar({ selectedId, onSelect }) {
 
   return (
     <nav className="w-full h-full overflow-y-auto bg-white">
-      {/* Contenedor fijo: header + buscador + flechas de navegacion.
-          Al quedar sticky en la parte superior, nunca lo tapa la lista
-          del indice al desplegarse hacia abajo. */}
+      {/* Contenedor fijo: header + buscador. Al quedar sticky en la parte
+          superior, nunca lo tapa la lista del indice al desplegarse hacia
+          abajo. */}
       <div className="sticky top-0 z-10 bg-white px-4 py-4 border-b border-line">
         <h2 className="font-display text-sm font-semibold text-slate uppercase tracking-wide">Índice del manual</h2>
 

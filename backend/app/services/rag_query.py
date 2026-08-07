@@ -94,7 +94,7 @@ def search_relevant_chunks(pregunta, n_results=N_RESULTS):
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT titulo, pagina_inicio, pagina_fin, contenido, imagenes,
+        SELECT seccion_id, titulo, pagina_inicio, pagina_fin, contenido, imagenes,
                embedding <=> %s::vector AS distance
         FROM manual_chunks
         ORDER BY distance
@@ -107,10 +107,11 @@ def search_relevant_chunks(pregunta, n_results=N_RESULTS):
     conn.close()
 
     chunks = []
-    for titulo, pagina_inicio, pagina_fin, contenido, imagenes, distance in filas:
+    for seccion_id, titulo, pagina_inicio, pagina_fin, contenido, imagenes, distance in filas:
         chunks.append({
             "documento": contenido,
             "metadata": {
+                "seccion_id": seccion_id,
                 "titulo": titulo,
                 "pagina_inicio": pagina_inicio,
                 "pagina_fin": pagina_fin,
@@ -181,7 +182,8 @@ def call_gemini_generate(prompt):
 def answer_question(question):
     """
     Funcion principal del RAG: busca contexto relevante, genera la respuesta
-    y arma la lista de fuentes (titulo + pagina) e imagenes relacionadas.
+    y arma la lista de fuentes (seccion_id + titulo + pagina) e imagenes
+    relacionadas.
 
     Devuelve un diccionario con las llaves: respuesta, fuentes, imagenes.
     Esta funcion ya queda lista para ser importada directamente en un
@@ -202,7 +204,11 @@ def answer_question(question):
     respuesta = call_gemini_generate(prompt)
 
     fuentes = [
-        {"titulo": c["metadata"]["titulo"], "pagina": c["metadata"]["pagina_inicio"]}
+        {
+            "seccion_id": c["metadata"]["seccion_id"],
+            "titulo": c["metadata"]["titulo"],
+            "pagina": c["metadata"]["pagina_inicio"],
+        }
         for c in chunks
     ]
 
@@ -225,7 +231,7 @@ if __name__ == "__main__":
     print(f"Respuesta:\n{resultado['respuesta']}\n")
     print("Fuentes:")
     for f in resultado["fuentes"]:
-        print(f"  - {f['titulo']} (pag. {f['pagina']})")
+        print(f"  - [{f['seccion_id']}] {f['titulo']} (pag. {f['pagina']})")
     if resultado["imagenes"]:
         print("\nImagenes relacionadas:")
         for img in resultado["imagenes"]:

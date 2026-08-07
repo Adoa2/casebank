@@ -29,6 +29,11 @@ class ChatQuery(BaseModel):
 
 
 class FuenteManual(BaseModel):
+    seccion_id: int = Field(
+        ...,
+        description="ID de la seccion del manual (coincide con el id devuelto por GET /api/manual), "
+                    "usado por el frontend para enlazar la fuente con el indice lateral.",
+    )
     titulo: str = Field(..., description="Titulo de la seccion del manual de donde se obtuvo la informacion.")
     pagina: int = Field(..., description="Numero de pagina donde inicia esa seccion en el manual.")
 
