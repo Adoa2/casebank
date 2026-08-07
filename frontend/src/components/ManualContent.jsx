@@ -30,8 +30,8 @@ export default function ManualContent({ chapter, subchapter }) {
   return (
     <div className="flex-1 min-w-0 overflow-y-auto px-8 py-10">
       <div className="max-w-2xl mx-auto">
-        <p className="text-sm text-brand-blue font-medium mb-2">{chapter?.title}</p>
-        <h1 className="font-display text-2xl font-semibold mb-1">{subchapter.title}</h1>
+        <h1 className="font-display text-2xl font-semibold mb-1">{chapter?.title}</h1>
+        <p className="text-base text-brand-blue font-medium mb-2">{subchapter.title}</p>
         {subchapter.paginaInicio != null && (
           <p className="text-xs text-slate mb-4">Página {mostrarRangoPaginas}</p>
         )}
