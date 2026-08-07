@@ -1,10 +1,23 @@
 import { API_BASE_URL } from '../config'
 
+const FIELD_MESSAGES = {
+  new_password: 'La contraseña debe tener al menos 8 caracteres.',
+  code: 'El código debe tener 6 dígitos.',
+  username: 'El usuario es obligatorio.',
+  email: 'El correo no es válido.',
+  password: 'La contraseña debe tener al menos 8 caracteres.',
+}
+
 async function parseError(res, fallback) {
   const data = await res.json().catch(() => ({}))
 
   if (typeof data.detail === 'string') {
     return new Error(data.detail)
+  }
+
+  if (Array.isArray(data.detail) && data.detail.length > 0) {
+    const field = data.detail[0]?.loc?.[data.detail[0].loc.length - 1]
+    return new Error(FIELD_MESSAGES[field] || fallback)
   }
 
   return new Error(fallback)
