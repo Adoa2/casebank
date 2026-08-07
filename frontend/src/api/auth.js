@@ -3,14 +3,11 @@ import { API_BASE_URL } from '../config'
 async function parseError(res, fallback) {
   const data = await res.json().catch(() => ({}))
 
-  if (Array.isArray(data.detail)) {
-    const msg = data.detail
-      .map((e) => e.msg || JSON.stringify(e))
-      .join(' | ')
-    return new Error(msg || fallback)
+  if (typeof data.detail === 'string') {
+    return new Error(data.detail)
   }
 
-  return new Error(data.detail || fallback)
+  return new Error(fallback)
 }
 
 export async function login(username, password) {
