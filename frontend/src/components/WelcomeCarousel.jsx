@@ -1,31 +1,25 @@
 import { useEffect, useState } from 'react'
 
-const SLIDE_DURATION_MS = 6000
+const SLIDE_DURATION_MS = 4000
 
 const SLIDES = [
   {
     title: 'Manejo de Cartera',
     description:
       'Manejo de cuentas de Aportaciones, Ahorros retirables, etc. y fácil parametrización de nuevos productos financieros.',
-    image: 'https://picsum.photos/seed/casebank-cartera/900/560',
-  },
-  {
-    title: 'Compatible con líneas de negocio',
-    description:
-      'Con el sistema ALMA integramos líneas de negocio en las Cooperativas (Comisariatos, Tiendas de conveniencia, entre otros).',
-    image: 'https://picsum.photos/seed/casebank-alma/900/560',
+    image: 'https://coopvinci.com/wp-content/uploads/2019/06/aportaciones-coopvinci.png',
   },
   {
     title: 'Conexión con la banca',
     description:
       'Nuestros clientes pueden conectar con los servicios de la banca mediante nuestro software CASEBANK.',
-    image: 'https://picsum.photos/seed/casebank-banca/900/560',
+    image: 'https://media.istockphoto.com/id/962095876/es/foto/hombre-usando-banca-en-l%C3%ADnea-con-tarjeta-de-cr%C3%A9dito-en-el-dispositivo-de-pantalla-t%C3%A1ctil-banca.jpg?s=612x612&w=0&k=20&c=9Ec7VNswKfgl9Kpyw4_0GqBS9roLEhFz_RiFvrq7KsE=',
   },
   {
     title: 'La solución de tus problemas es nuestra prioridad',
     description:
       'Nuestros sistemas son 100% personalizables, lo que significa que nos adaptamos a tu negocio de una manera fluida y permanente.',
-    image: 'https://picsum.photos/seed/casebank-soluciones/900/560',
+    image: 'https://www.holded.com/_next/image?url=%2Fimages%2Fblog%2Ferp-para-contabilidad.jpeg&w=1920&q=75&dpl=dpl_3DiuAxxubguXgZmaRbBza42NE9io',
   },
   {
     title: '¿Por qué elegir CaseBank?',
