@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react'
+import flecha1 from '../assets/flecha1.png'
 
 const SLIDE_DURATION_MS = 4000
 
 const SLIDES = [
+  {
+    title: 'Visualiza nuestro manual',
+    description:
+      'A tu izquierda encontrarás el manual completo CASEBANK, organizado por capítulos y secciones. Ahí encontrarás cada capítulo y sección con la información necesaria para resolver tus dudas.',
+    image: flecha1,
+  },
   {
     title: 'Manejo de Cartera',
     description:
@@ -61,15 +68,15 @@ export default function WelcomeCarousel() {
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
       >
-        <img src={slide.image} alt={slide.title} className="w-full h-64 object-cover" />
+        <img src={slide.image} alt={slide.title} className="w-full h-96 object-cover" />
 
         <div className="p-6 min-h-[9.5rem]">
-          <h2 className="font-display text-base font-semibold mb-2">{slide.title}</h2>
+          <h2 className="font-display text-lg font-semibold mb-2">{slide.title}</h2>
 
-          {slide.description && <p className="text-base text-slate leading-relaxed">{slide.description}</p>}
+          {slide.description && <p className="text-lg text-slate leading-relaxed">{slide.description}</p>}
 
           {slide.bullets && (
-            <ul className="text-sm text-slate leading-relaxed list-disc pl-5 space-y-1">
+            <ul className="text-base text-slate leading-relaxed list-disc pl-5 space-y-1">
               {slide.bullets.map((bullet, i) => (
                 <li key={i}>{bullet}</li>
               ))}
@@ -93,7 +100,7 @@ export default function WelcomeCarousel() {
       </div>
 
       <div className="mt-5 border border-line rounded-xl p-5 bg-paper">
-        <p className="text-sm text-slate leading-relaxed">
+        <p className="text-base text-slate leading-relaxed">
           Sistema diseñado específicamente para las necesidades del sector financiero y cooperativista, con más de
           30 años de existir, asegurando cumplimiento con regulaciones y mejores prácticas.
         </p>
