@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import flecha1 from '../assets/flecha1.png'
-
+import flecha2 from '../assets/flecha2.png'
 const SLIDE_DURATION_MS = 4000
 
 const SLIDES = [
@@ -9,6 +9,12 @@ const SLIDES = [
     description:
       'A tu izquierda encontrarás el manual completo CASEBANK, organizado por capítulos y secciones. Ahí encontrarás cada capítulo y sección con la información necesaria para resolver tus dudas.',
     image: flecha1,
+  },
+    {
+    title: 'La IA a tu disposición',
+    description:
+      'A tu derecha encontrarás nuestra IA, diseñada para responder todas tus dudas relacionadas con el manual. No solo te indicará los pasos necesarios para realizar cada procedimiento, sino que también te proporcionará referencias específicas del manual para que puedas consultar la información de manera rápida y sencilla.',
+    image: flecha2,
   },
   {
     title: 'Manejo de Cartera',
@@ -68,7 +74,7 @@ export default function WelcomeCarousel() {
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
       >
-        <img src={slide.image} alt={slide.title} className="w-full h-96 object-cover" />
+        <img src={slide.image} alt={slide.title} className="w-full h-80 object-cover" />
 
         <div className="p-6 min-h-[9.5rem]">
           <h2 className="font-display text-lg font-semibold mb-2">{slide.title}</h2>
