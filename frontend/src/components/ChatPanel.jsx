@@ -83,7 +83,7 @@ export default function ChatPanel({ onSelectSource }) {
         <button
           type="button"
           onClick={handleClear}
-          className="text-xs text-slate border border-line rounded-md px-2.5 py-1.5 transition-colors cursor-pointer flex-shrink-0 hover:text-brand-teal-600 hover:border-brand-teal-200 hover:bg-brand-teal-50"
+          className="text-xs text-slate border border-line rounded-md px-2.5 py-1.5 transition-colors cursor-pointer flex-shrink-0 hover:text-brand-blue hover:border-brand-blue/30 hover:bg-brand-blue/5"
         >
           Limpiar chat
         </button>
@@ -128,12 +128,12 @@ export default function ChatPanel({ onSelectSource }) {
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Escribe tu pregunta..."
           disabled={loading}
-          className="flex-1 min-w-0 px-3 py-2 border border-line rounded-lg text-sm focus:outline-none focus:border-brand-teal-400 focus:ring-[3px] focus:ring-brand-teal-400/15 disabled:opacity-60"
+          className="flex-1 min-w-0 px-3 py-2 border border-line rounded-lg text-sm focus:outline-none focus:border-brand-blue focus:ring-[3px] focus:ring-brand-blue/15 disabled:opacity-60"
         />
         <button
           type="submit"
           disabled={loading}
-          className="px-4 py-2 rounded-lg bg-gradient-to-r from-brand-teal-600 to-brand-teal-500 text-white text-sm font-semibold shadow-sm hover:from-brand-teal-700 hover:to-brand-teal-600 hover:shadow-md transition disabled:opacity-60"
+          className="px-4 py-2 rounded-lg bg-gradient-to-r from-brand-blue to-sky-cyan text-white text-sm font-semibold shadow-sm hover:brightness-105 hover:shadow-md transition disabled:opacity-60"
         >
           Enviar
         </button>

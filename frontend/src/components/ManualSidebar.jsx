@@ -118,7 +118,7 @@ export default function ManualSidebar({ chapters, loading, error, selectedId, on
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar en el manual..."
-            className="w-full text-sm rounded-lg border border-line px-3 py-2 outline-none focus:border-brand-teal-400 focus:ring-[3px] focus:ring-brand-teal-400/15 transition"
+            className="w-full text-sm rounded-lg border border-line px-3 py-2 outline-none focus:border-brand-blue focus:ring-[3px] focus:ring-brand-blue/15 transition"
           />
 
           {query.trim() && (
@@ -131,7 +131,7 @@ export default function ManualSidebar({ chapters, loading, error, selectedId, on
                     key={item.subchapter.id}
                     type="button"
                     onClick={() => handleSearchSelect(item)}
-                    className="w-full text-left px-3 py-2 hover:bg-brand-teal-50 transition border-b border-line last:border-b-0 cursor-pointer"
+                    className="w-full text-left px-3 py-2 hover:bg-brand-blue/5 transition border-b border-line last:border-b-0 cursor-pointer"
                   >
                     <p className="text-sm text-ink font-medium truncate">{item.subchapter.title}</p>
                     <p className="text-xs text-slate truncate">{item.chapter.title}</p>
@@ -151,7 +151,7 @@ export default function ManualSidebar({ chapters, loading, error, selectedId, on
               <button
                 type="button"
                 onClick={() => toggleChapter(chapter.id)}
-                className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left text-sm font-medium text-ink hover:bg-brand-teal-50 transition cursor-pointer"
+                className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left text-sm font-medium text-ink hover:bg-brand-blue/5 transition cursor-pointer"
               >
                 <span>{chapter.title}</span>
                 <span className={`text-slate transition-transform ${isOpen ? 'rotate-90' : ''}`}>{'\u203A'}</span>
@@ -174,8 +174,8 @@ export default function ManualSidebar({ chapters, loading, error, selectedId, on
                           style={{ paddingLeft: `${10 + indent * 14}px` }}
                           className={`w-full text-left py-1.5 pr-2.5 rounded-lg text-sm transition cursor-pointer ${
                             active
-                              ? 'bg-brand-teal-50 text-brand-teal-700 font-medium'
-                              : 'text-slate hover:bg-brand-teal-50 hover:text-ink'
+                              ? 'bg-brand-blue/10 text-brand-blue font-medium'
+                              : 'text-slate hover:bg-brand-blue/5 hover:text-ink'
                           }`}
                         >
                           {sub.title}
@@ -195,7 +195,7 @@ export default function ManualSidebar({ chapters, loading, error, selectedId, on
           type="button"
           onClick={() => goToIndex(currentIndex - 1)}
           disabled={!canGoPrev}
-          className="text-sm px-2.5 py-1.5 rounded-md text-slate hover:bg-brand-teal-50 hover:text-brand-teal-700 transition disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+          className="text-sm px-2.5 py-1.5 rounded-md text-slate hover:bg-brand-blue/5 hover:text-brand-blue transition disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
         >
           {'\u2039'} Anterior
         </button>
@@ -208,7 +208,7 @@ export default function ManualSidebar({ chapters, loading, error, selectedId, on
           type="button"
           onClick={() => goToIndex(currentIndex === -1 ? 0 : currentIndex + 1)}
           disabled={!canGoNext}
-          className="text-sm px-2.5 py-1.5 rounded-md text-slate hover:bg-brand-teal-50 hover:text-brand-teal-700 transition disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+          className="text-sm px-2.5 py-1.5 rounded-md text-slate hover:bg-brand-blue/5 hover:text-brand-blue transition disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
         >
           Siguiente {'\u203A'}
         </button>
