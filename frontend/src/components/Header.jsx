@@ -21,7 +21,7 @@ export default function Header({ onLogout, onGoHome }) {
       <button
         type="button"
         onClick={handleLogoutClick}
-        className="text-sm text-slate hover:text-ink transition cursor-pointer"
+        className="text-sm text-slate border border-transparent rounded-md px-3 py-1.5 transition-colors hover:text-brand-red-600 hover:border-brand-red-100 hover:bg-brand-red-50 cursor-pointer"
       >
         Cerrar sesión
       </button>

@@ -11,9 +11,6 @@ const INITIAL_MESSAGES = [
   },
 ]
 
-// El modelo devuelve texto con enfasis estilo markdown (**negrita**).
-// Esta funcion lo convierte en elementos <strong> reales en vez de
-// mostrar los asteriscos tal cual.
 function renderTextoConNegritas(texto) {
   const partes = texto.split(/(\*\*[^*]+\*\*)/g)
   return partes.map((parte, idx) => {
@@ -86,7 +83,7 @@ export default function ChatPanel({ onSelectSource }) {
         <button
           type="button"
           onClick={handleClear}
-          className="text-xs text-slate hover:text-brand-blue border border-line rounded-md px-2 py-1 transition cursor-pointer flex-shrink-0"
+          className="text-xs text-slate border border-line rounded-md px-2.5 py-1.5 transition-colors cursor-pointer flex-shrink-0 hover:text-brand-teal-600 hover:border-brand-teal-200 hover:bg-brand-teal-50"
         >
           Limpiar chat
         </button>
@@ -131,12 +128,12 @@ export default function ChatPanel({ onSelectSource }) {
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Escribe tu pregunta..."
           disabled={loading}
-          className="flex-1 min-w-0 px-3 py-2 border border-line rounded-lg text-sm focus:outline-none focus:border-brand-blue focus:ring-[3px] focus:ring-brand-blue/15 disabled:opacity-60"
+          className="flex-1 min-w-0 px-3 py-2 border border-line rounded-lg text-sm focus:outline-none focus:border-brand-teal-400 focus:ring-[3px] focus:ring-brand-teal-400/15 disabled:opacity-60"
         />
         <button
           type="submit"
           disabled={loading}
-          className="px-4 py-2 rounded-lg bg-gradient-to-r from-brand-blue to-sky-cyan text-white text-sm font-semibold hover:brightness-105 transition disabled:opacity-60"
+          className="px-4 py-2 rounded-lg bg-gradient-to-r from-brand-teal-600 to-brand-teal-500 text-white text-sm font-semibold shadow-sm hover:from-brand-teal-700 hover:to-brand-teal-600 hover:shadow-md transition disabled:opacity-60"
         >
           Enviar
         </button>
