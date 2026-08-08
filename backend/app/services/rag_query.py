@@ -47,12 +47,11 @@ EMBED_DIMENSION = 768  # debe coincidir con el usado en build_vector_db.py
 MAX_REINTENTOS = 5
 
 N_RESULTS = 8          # candidatos iniciales a recuperar de Postgres
-DISTANCE_FACTOR = 1.3  # un chunk se descarta si su distancia supera 1.3x la del mejor resultado
-MAX_CHUNKS_USADOS = 4  # tope de chunks que realmente se usan como contexto/fuentes
+DISTANCE_FACTOR = 1.3 
+MAX_CHUNKS_USADOS = 4 
 
 # Frase fija que se le pide al modelo cuando no encuentra la respuesta en el
-# contexto. Se usa para detectar ese caso de forma confiable y no devolver
-# fuentes/imagenes que en realidad no respaldan nada.
+
 FRASE_SIN_INFORMACION = "No cuento con esa información en el manual."
 
 
@@ -219,8 +218,6 @@ def answer_question(question):
     respuesta = call_gemini_generate(prompt)
 
     # Si el modelo determino que el contexto no responde la pregunta, no
-    # tiene sentido adjuntar fuentes/imagenes: los chunks se recuperaron
-    # por similitud, pero el propio modelo dice que no le sirvieron.
     sin_informacion = _respuesta_indica_sin_informacion(respuesta)
 
     if sin_informacion:
