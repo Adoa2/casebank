@@ -29,7 +29,7 @@ const SLIDES = [
       'Incluye asistencia especializada y actualizaciones regulares para garantizar mejoras continuas y seguridad de la información.',
       'Garantiza el cumplimiento de normativas contables y regulatorias con auditorías automáticas y encriptación de datos.',
     ],
-    image: 'https://picsum.photos/seed/casebank-beneficios/900/560',
+    image: 'https://img.magnific.com/foto-gratis/hombre-expresivo-barba-camisa_273609-5928.jpg?semt=ais_test_b&w=740&q=80',
   },
 ]
 
