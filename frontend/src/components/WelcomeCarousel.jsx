@@ -50,7 +50,7 @@ export default function WelcomeCarousel() {
   const slide = SLIDES[index]
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-4xl mx-auto">
       <h1 className="font-display text-2xl font-semibold mb-1">Manual interactivo de CaseBank</h1>
       <p className="text-slate leading-relaxed mb-6">
         Selecciona un capítulo del índice a la izquierda para ver su contenido.
@@ -61,12 +61,12 @@ export default function WelcomeCarousel() {
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
       >
-        <img src={slide.image} alt={slide.title} className="w-full h-48 object-cover" />
+        <img src={slide.image} alt={slide.title} className="w-full h-64 object-cover" />
 
-        <div className="p-5 min-h-[9.5rem]">
+        <div className="p-6 min-h-[9.5rem]">
           <h2 className="font-display text-base font-semibold mb-2">{slide.title}</h2>
 
-          {slide.description && <p className="text-sm text-slate leading-relaxed">{slide.description}</p>}
+          {slide.description && <p className="text-base text-slate leading-relaxed">{slide.description}</p>}
 
           {slide.bullets && (
             <ul className="text-sm text-slate leading-relaxed list-disc pl-5 space-y-1">
