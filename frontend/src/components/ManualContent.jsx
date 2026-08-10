@@ -119,7 +119,7 @@ export default function ManualContent({ chapter, subchapter }) {
   return (
     <div className="flex-1 min-w-0 overflow-y-auto px-8 py-10 manual-bg">
       <div className="max-w-2xl mx-auto">
-        <div className="flex items-start justify-between gap-4 mb-4">
+        <div className="flex items-start justify-between gap-4 mb-4 bg-white border border-line rounded-xl px-5 py-4">
           <div>
             <h1 className="font-display text-2xl font-semibold mb-1">{chapter?.title}</h1>
             <p className="text-base text-brand-blue font-medium">{subchapter.title}</p>
@@ -132,16 +132,13 @@ export default function ManualContent({ chapter, subchapter }) {
         </div>
 
         {grupos.length > 0 ? (
-          <div className="space-y-4">
+          <div className="border border-line rounded-xl bg-white text-sm text-slate leading-relaxed overflow-hidden">
             {grupos.map((grupo, gi) => {
               const marcadorPagina = grupo.find((p) => p.tipo === 'pagina')
               const contenidoGrupo = grupo.filter((p) => p.tipo !== 'pagina')
 
               return (
-                <div
-                  key={gi}
-                  className="border border-line rounded-xl bg-white text-sm text-slate leading-relaxed overflow-hidden"
-                >
+                <div key={gi} className={gi > 0 ? 'border-t border-line' : ''}>
                   {marcadorPagina && (
                     <div className="flex justify-center py-1.5 border-b border-brand-blue/25 bg-brand-blue/5">
                       <span className="text-[11px] font-medium text-brand-blue tracking-wide">
