@@ -201,6 +201,8 @@ def embed_lote(chunks_lote):
         if respuesta.status_code in (429, 500, 503):
             espera = 2 ** intento
             print(f"  {respuesta.status_code}, esperando {espera}s antes de reintentar...")
+            if respuesta.status_code == 429:
+                print(f"  Detalle del error: {respuesta.text[:500]}")
             time.sleep(espera)
             continue
 

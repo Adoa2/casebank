@@ -58,13 +58,23 @@ def extract_page_content(page, page_num, images_dir, min_size=MIN_ICON_SIZE):
 
     for block in blocks_ordenados:
         if block.get("type") == 0:  # bloque de texto
-            texto_bloque = ""
+            lineas = []
             for line in block.get("lines", []):
+                texto_linea = ""
                 for span in line.get("spans", []):
-                    texto_bloque += span.get("text", "")
-                texto_bloque += "\n"
-            if texto_bloque.strip():
-                piezas.append(texto_bloque.rstrip("\n"))
+                    texto_linea += span.get("text", "")
+                texto_linea = texto_linea.strip()
+                if texto_linea:
+                    lineas.append(texto_linea)
+
+            if lineas:
+                # Las lineas dentro de un mismo bloque casi siempre son el
+                # mismo parrafo partido por el ancho de la pagina, no un
+                # salto de parrafo real, asi que se unen con espacio para
+                # que el texto fluya igual que en el manual original. El
+                # salto de linea real queda para la separacion ENTRE
+                # bloques (parrafos, items de lista, etc.), no dentro de uno.
+                piezas.append(" ".join(lineas))
 
         elif block.get("type") == 1:  # bloque de imagen
             bbox = block["bbox"]
