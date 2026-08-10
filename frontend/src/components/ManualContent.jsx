@@ -4,6 +4,7 @@ import AuthImage from './AuthImage'
 import WelcomeCarousel from './WelcomeCarousel'
 
 const IMG_MARKER_REGEX = /\[IMG:([^\]]+)\]/g
+const LINEA_NUMERO_REGEX = /^\d{1,4}$/
 
 export default function ManualContent({ chapter, subchapter }) {
   const [imagenActiva, setImagenActiva] = useState(null)
@@ -11,23 +12,68 @@ export default function ManualContent({ chapter, subchapter }) {
   const partes = useMemo(() => {
     if (!subchapter?.contenido) return []
     const texto = subchapter.contenido
-    const resultado = []
+
+    // 1. Separar el texto por los marcadores de imagen [IMG:...]
+    const segmentos = []
     let ultimoIndice = 0
     let match
 
     IMG_MARKER_REGEX.lastIndex = 0
     while ((match = IMG_MARKER_REGEX.exec(texto)) !== null) {
       if (match.index > ultimoIndice) {
-        resultado.push({ tipo: 'texto', valor: texto.slice(ultimoIndice, match.index) })
+        segmentos.push({ tipo: 'texto', valor: texto.slice(ultimoIndice, match.index) })
       }
-      resultado.push({ tipo: 'imagen', valor: match[1] })
+      segmentos.push({ tipo: 'imagen', valor: match[1] })
       ultimoIndice = match.index + match[0].length
     }
     if (ultimoIndice < texto.length) {
-      resultado.push({ tipo: 'texto', valor: texto.slice(ultimoIndice) })
+      segmentos.push({ tipo: 'texto', valor: texto.slice(ultimoIndice) })
     }
+
+    // 2. Dentro de cada segmento de texto, aislar las lineas que son
+    // UNICAMENTE un numero de pagina valido para esta seccion (viene del
+    // numero de pagina impreso en el PDF original, capturado junto con el
+    // texto). Solo se convierten en etiqueta si el numero cae dentro del
+    // rango real de paginas de la seccion, para no confundir un numero
+    // legitimo del contenido con un numero de pagina.
+    const paginasValidas = new Set()
+    if (subchapter.paginaInicio != null) {
+      const fin = subchapter.paginaFin || subchapter.paginaInicio
+      for (let p = subchapter.paginaInicio; p <= fin; p++) {
+        paginasValidas.add(String(p))
+      }
+    }
+
+    const resultado = []
+    for (const segmento of segmentos) {
+      if (segmento.tipo !== 'texto') {
+        resultado.push(segmento)
+        continue
+      }
+
+      const lineas = segmento.valor.split('\n')
+      let buffer = []
+      const vaciarBuffer = () => {
+        if (buffer.length > 0) {
+          resultado.push({ tipo: 'texto', valor: buffer.join('\n') })
+          buffer = []
+        }
+      }
+
+      for (const linea of lineas) {
+        const limpia = linea.trim()
+        if (paginasValidas.size > 0 && LINEA_NUMERO_REGEX.test(limpia) && paginasValidas.has(limpia)) {
+          vaciarBuffer()
+          resultado.push({ tipo: 'pagina', valor: limpia })
+        } else {
+          buffer.push(linea)
+        }
+      }
+      vaciarBuffer()
+    }
+
     return resultado
-  }, [subchapter?.contenido])
+  }, [subchapter?.contenido, subchapter?.paginaInicio, subchapter?.paginaFin])
 
   if (!subchapter) {
     return (
@@ -65,21 +111,36 @@ export default function ManualContent({ chapter, subchapter }) {
 
         <div className="border border-line rounded-xl p-5 bg-white text-sm text-slate leading-relaxed">
           {partes.length > 0 ? (
-            partes.map((parte, i) =>
-              parte.tipo === 'texto' ? (
-                <span key={i} className="whitespace-pre-line">
-                  {parte.valor}
-                </span>
-              ) : (
-                <button
-                  key={i}
-                  onClick={() => setImagenActiva(parte.valor)}
-                  className="inline-flex items-center gap-1 mx-1 my-1 px-2 py-0.5 rounded-md border border-brand-blue/30 text-brand-blue text-xs font-medium hover:bg-brand-blue/5 align-middle"
-                >
-                  Ver referencia
-                </button>
+            partes.map((parte, i) => {
+              if (parte.tipo === 'texto') {
+                return (
+                  <span key={i} className="whitespace-pre-line">
+                    {parte.valor}
+                  </span>
+                )
+              }
+
+              if (parte.tipo === 'imagen') {
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setImagenActiva(parte.valor)}
+                    className="inline-flex items-center gap-1 mx-1 my-1 px-2 py-0.5 rounded-md border border-brand-blue/30 text-brand-blue text-xs font-medium hover:bg-brand-blue/5 align-middle"
+                  >
+                    Ver referencia
+                  </button>
+                )
+              }
+
+              // parte.tipo === 'pagina'
+              return (
+                <div key={i} className="flex justify-center my-3">
+                  <span className="text-[11px] text-slate border border-line rounded-md px-2 py-0.5 bg-paper">
+                    Página {parte.valor}
+                  </span>
+                </div>
               )
-            )
+            })
           ) : (
             'Esta sección no tiene contenido de texto adicional.'
           )}
