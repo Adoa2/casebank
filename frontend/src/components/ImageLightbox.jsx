@@ -60,7 +60,7 @@ export default function ImageLightbox({ nombreArchivo, onClose }) {
       onClick={onClose}
     >
       <div
-        className="relative bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden"
+        className="relative bg-white rounded-xl shadow-xl w-full max-w-xl flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-2 border-b border-line">
@@ -92,7 +92,7 @@ export default function ImageLightbox({ nombreArchivo, onClose }) {
           </button>
         </div>
 
-        <div className="flex-1 overflow-auto bg-paper flex items-center justify-center p-4">
+        <div className="aspect-square overflow-auto bg-paper flex items-center justify-center p-4">
           {error && <p className="text-sm text-slate">No se pudo cargar la imagen.</p>}
           {!error && !blobUrl && <p className="text-sm text-slate">Cargando imagen...</p>}
           {blobUrl && (

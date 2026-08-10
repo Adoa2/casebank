@@ -70,7 +70,7 @@ export default function ManualContent({ chapter, subchapter }) {
                   onClick={() => setImagenActiva(parte.valor)}
                   className="inline-flex items-center gap-1 mx-1 my-1 px-2 py-0.5 rounded-md border border-brand-blue/30 text-brand-blue text-xs font-medium hover:bg-brand-blue/5 align-middle"
                 >
-                  Ver imagen
+                  Ver referencia
                 </button>
               )
             )
