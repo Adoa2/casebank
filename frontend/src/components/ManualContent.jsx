@@ -140,7 +140,7 @@ export default function ManualContent({ chapter, subchapter }) {
               return (
                 <div key={gi} className={gi > 0 ? 'border-t border-line' : ''}>
                   {marcadorPagina && (
-                    <div className="flex justify-center py-1.5 border-b border-brand-blue/25 bg-brand-blue/5">
+                    <div className="flex justify-center py-1.5 border-b-2 border-brand-blue/50 bg-white">
                       <span className="text-[11px] font-medium text-brand-blue tracking-wide">
                         Página {marcadorPagina.valor}
                       </span>
