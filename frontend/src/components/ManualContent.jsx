@@ -99,7 +99,7 @@ export default function ManualContent({ chapter, subchapter }) {
 
   if (!subchapter) {
     return (
-      <div className="flex-1 min-w-0 overflow-y-auto px-8 py-10">
+      <div className="flex-1 min-w-0 overflow-y-auto px-8 py-10 manual-bg">
         <WelcomeCarousel />
       </div>
     )
@@ -117,7 +117,7 @@ export default function ManualContent({ chapter, subchapter }) {
   const imagenesSinInline = (subchapter.imagenes || []).filter((nombre) => !imagenesInline.has(nombre))
 
   return (
-    <div className="flex-1 min-w-0 overflow-y-auto px-8 py-10">
+    <div className="flex-1 min-w-0 overflow-y-auto px-8 py-10 manual-bg">
       <div className="max-w-2xl mx-auto">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
