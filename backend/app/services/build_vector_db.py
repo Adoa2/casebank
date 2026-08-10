@@ -24,6 +24,7 @@ ya que asume que manual_structure.json vive en ../../data/manual_structure.json
 
 import json
 import os
+import re
 import time
 import requests
 import psycopg2
@@ -61,6 +62,21 @@ EMBED_BATCH_SIZE = 20
 # tier gratis, 5s entre llamadas deja margen (~12 llamadas/minuto).
 PAUSA_ENTRE_LOTES_SEG = 5
 MAX_REINTENTOS = 6
+
+# pdf_processor.py inserta marcadores [IMG:nombre_archivo.png] en el texto
+# para que el frontend sepa donde mostrar el boton "Ver imagen". Ese
+# marcador es util para el frontend, pero no aporta nada al significado
+# semantico del texto, asi que se quita antes de generar embeddings y
+# antes de guardar el contenido en manual_chunks (el contexto que se le
+# pasa a Gemini al responder en el chat no debe incluir ese ruido).
+IMG_MARKER_PATTERN = re.compile(r"\[IMG:[^\]]+\]")
+
+
+def limpiar_marcadores_imagen(texto):
+    """Quita los marcadores [IMG:...] y colapsa las lineas en blanco que quedan."""
+    limpio = IMG_MARKER_PATTERN.sub("", texto)
+    limpio = re.sub(r"\n{3,}", "\n\n", limpio)
+    return limpio.strip()
 
 
 def cargar_manual(path):
@@ -111,6 +127,13 @@ def construir_chunks(secciones):
     chunks = []
     for seccion in secciones:
         contenido = (seccion.get("contenido") or "").strip()
+        if not contenido:
+            continue
+
+        # Se limpia ANTES de trocear y de generar el embedding: ni el
+        # vector semantico ni el contexto que se guarda en manual_chunks
+        # deben llevar los marcadores [IMG:...].
+        contenido = limpiar_marcadores_imagen(contenido)
         if not contenido:
             continue
 

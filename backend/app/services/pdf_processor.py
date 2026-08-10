@@ -1,6 +1,7 @@
 # app/services/pdf_processor.py
 import fitz  # PyMuPDF
 import os
+import re
 import json
 
 # --- AJUSTA ESTO ANTES DE CORRER SOBRE LAS 1000 PÁGINAS -------------------
@@ -16,56 +17,78 @@ MIN_ICON_SIZE = 15  # px
 
 # Si además quieres una captura visual de la página completa (útil como
 # respaldo para páginas con tablas/diseño complejo), pon esto en True.
-# Por defecto apagado: los iconos/capturas ya se extraen individualmente
-# más abajo, así que esto normalmente sería redundante.
 RENDER_FULL_PAGE = False
+
+# Patrón para encontrar los marcadores [IMG:nombre_archivo.png] insertados
+# en el texto. Se reutiliza tanto aquí (para armar la lista "imagenes" de
+# cada sección) como en el frontend (para renderizarlos como "Ver imagen").
+IMG_MARKER_PATTERN = re.compile(r"\[IMG:([^\]]+)\]")
 
 # ---------------------------------------------------------------------------
 
 
-def extract_page_icons(page, page_num, images_dir, min_size=MIN_ICON_SIZE):
+def extract_page_content(page, page_num, images_dir, min_size=MIN_ICON_SIZE):
     """
-    Extrae las imágenes INCRUSTADAS reales de la página (iconos, capturas
-    de pantalla embebidas), no una foto de la página completa. Filtra
-    imágenes microscópicas que son solo ruido decorativo.
+    Recorre los bloques de la página en orden de lectura (de arriba hacia
+    abajo, izquierda a derecha) y devuelve un único string con el texto de
+    la página y marcadores [IMG:nombre_archivo.png] insertados exactamente
+    en el punto donde aparecía cada imagen incrustada.
 
-    NOTA DE RENDIMIENTO: esto usa page.get_text("dict") en vez de
-    get_images() + get_image_rects(). Ese segundo método es MUY lento
-    (recompone un pixmap y calcula un MD5 por cada imagen para ubicarla),
-    y con páginas que tienen capturas de pantalla grandes puede tardar
-    minutos por página. get_text("dict") ya trae la posición (bbox) y
-    los bytes de la imagen listos para guardar, sin ese costo extra.
+    Esto reemplaza el enfoque anterior (texto e imágenes por separado) para
+    poder reconstruir en el frontend la posición real de cada imagen dentro
+    del contenido, en vez de agruparlas todas al final de la sección.
+
+    NOTA DE RENDIMIENTO: se usa page.get_text("dict") en vez de
+    get_images() + get_image_rects(). Ese segundo método es MUY lento en
+    páginas con capturas grandes; get_text("dict") ya trae la posición
+    (bbox) y los bytes de la imagen listos para guardar.
     """
-    icon_filenames = []
     blocks = page.get_text("dict")["blocks"]
-    idx = 0
 
-    for block in blocks:
-        if block.get("type") != 1:  # 1 = bloque de imagen
-            continue
+    # Orden de lectura aproximado: primero de arriba hacia abajo (Y),
+    # y entre bloques que están a la misma altura, de izquierda a
+    # derecha (X). El redondeo de Y evita que diferencias de sub-píxel
+    # separen bloques que en realidad están en la misma línea visual.
+    blocks_ordenados = sorted(
+        blocks, key=lambda b: (round(b["bbox"][1], 0), b["bbox"][0])
+    )
 
-        bbox = block["bbox"]
-        width = bbox[2] - bbox[0]
-        height = bbox[3] - bbox[1]
-        if width < min_size or height < min_size:
-            continue  # descarta ruiditos/decoraciones diminutas
+    piezas = []
+    idx_icono = 0
 
-        img_bytes = block.get("image")
-        ext = block.get("ext", "png")
-        if not img_bytes:
-            continue
+    for block in blocks_ordenados:
+        if block.get("type") == 0:  # bloque de texto
+            texto_bloque = ""
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    texto_bloque += span.get("text", "")
+                texto_bloque += "\n"
+            if texto_bloque.strip():
+                piezas.append(texto_bloque.rstrip("\n"))
 
-        try:
-            filename = f"pagina_{page_num + 1}_icono_{idx}.{ext}"
-            filepath = os.path.join(images_dir, filename)
-            with open(filepath, "wb") as f:
-                f.write(img_bytes)
-            icon_filenames.append(filename)
-            idx += 1
-        except Exception as e:
-            print(f"No se pudo guardar imagen en página {page_num + 1}: {e}")
+        elif block.get("type") == 1:  # bloque de imagen
+            bbox = block["bbox"]
+            width = bbox[2] - bbox[0]
+            height = bbox[3] - bbox[1]
+            if width < min_size or height < min_size:
+                continue  # descarta ruiditos/decoraciones diminutas
 
-    return icon_filenames
+            img_bytes = block.get("image")
+            ext = block.get("ext", "png")
+            if not img_bytes:
+                continue
+
+            try:
+                filename = f"pagina_{page_num + 1}_icono_{idx_icono}.{ext}"
+                filepath = os.path.join(images_dir, filename)
+                with open(filepath, "wb") as f:
+                    f.write(img_bytes)
+                piezas.append(f"[IMG:{filename}]")
+                idx_icono += 1
+            except Exception as e:
+                print(f"No se pudo guardar imagen en página {page_num + 1}: {e}")
+
+    return "\n".join(piezas)
 
 
 def process_pdf_high_performance(pdf_path: str, output_dir: str):
@@ -97,21 +120,17 @@ def process_pdf_high_performance(pdf_path: str, output_dir: str):
 
     zoom_matrix = fitz.Matrix(1.5, 1.5)
 
-    pages_text = {}
-    pages_icons = {}
+    pages_content = {}
     pages_full_render = {}
 
     for page_num in range(total_pages):
         page = document[page_num]
         p_num = page_num + 1
 
-        # 1. Texto plano de la página
-        pages_text[p_num] = page.get_text()
+        # Texto + marcadores de imagen intercalados en orden de lectura
+        pages_content[p_num] = extract_page_content(page, page_num, images_dir)
 
-        # 2. Iconos/imágenes incrustadas reales (no captura de página completa)
-        pages_icons[p_num] = extract_page_icons(page, page_num, images_dir)
-
-        # 3. (Opcional) captura visual de la página completa
+        # (Opcional) captura visual de la página completa
         if RENDER_FULL_PAGE:
             img_filename = f"pagina_{p_num}_visual.png"
             img_path = os.path.join(images_dir, img_filename)
@@ -148,18 +167,24 @@ def process_pdf_high_performance(pdf_path: str, output_dir: str):
             pagina_fin = pagina_inicio
 
         texto_seccion = ""
-        iconos_seccion = []
         capturas_seccion = []
 
         for p in range(pagina_inicio, pagina_fin + 1):
-            if p in pages_text:
-                texto_seccion += pages_text[p] + "\n"
-            if p in pages_icons:
-                for icono in pages_icons[p]:
-                    if icono not in iconos_seccion:
-                        iconos_seccion.append(icono)
+            if p in pages_content:
+                texto_seccion += pages_content[p] + "\n\n"
             if RENDER_FULL_PAGE and pages_full_render.get(p):
                 capturas_seccion.append(pages_full_render[p])
+
+        texto_seccion = texto_seccion.strip()
+
+        # La lista "imagenes" se sigue devolviendo (por compatibilidad con
+        # el resto del sistema y como respaldo), pero ahora se deriva de
+        # los marcadores ya insertados en el texto, en vez de recolectarse
+        # aparte.
+        iconos_seccion = []
+        for nombre in IMG_MARKER_PATTERN.findall(texto_seccion):
+            if nombre not in iconos_seccion:
+                iconos_seccion.append(nombre)
 
         seccion_info = {
             "id": len(manual_data) + 1,
@@ -167,7 +192,7 @@ def process_pdf_high_performance(pdf_path: str, output_dir: str):
             "titulo": titulo.strip(),
             "pagina_inicio": pagina_inicio,
             "pagina_fin": pagina_fin,
-            "contenido": texto_seccion.strip(),
+            "contenido": texto_seccion,
             "imagenes": iconos_seccion,
         }
         if RENDER_FULL_PAGE:
