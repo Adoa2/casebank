@@ -9,7 +9,7 @@
   --teal: #0CD6A3;
 
   /* Pega aqui la URL de tu imagen de fondo, entre las comillas. */
-  --manual-bg-image: url('https://www.freepik.es/fotos-vectores-gratis/fondo-poligonal-azul/48');
+--manual-bg-image: url('./assets/manual-bg.jpg');
 }
 
 @layer base {
