@@ -140,35 +140,37 @@ export default function ManualContent({ chapter, subchapter }) {
               return (
                 <div
                   key={gi}
-                  className="border border-line rounded-xl p-5 bg-white text-sm text-slate leading-relaxed"
+                  className="border border-line rounded-xl bg-white text-sm text-slate leading-relaxed overflow-hidden"
                 >
-                  {contenidoGrupo.map((parte, i) => {
-                    if (parte.tipo === 'texto') {
-                      return (
-                        <span key={i} className="whitespace-pre-line">
-                          {parte.valor}
-                        </span>
-                      )
-                    }
-
-                    return (
-                      <button
-                        key={i}
-                        onClick={() => setImagenActiva(parte.valor)}
-                        className="inline-flex items-center gap-1 mx-1 my-1 px-2 py-0.5 rounded-md border border-brand-blue/30 text-brand-blue text-xs font-medium hover:bg-brand-blue/5 align-middle"
-                      >
-                        Ver referencia
-                      </button>
-                    )
-                  })}
-
                   {marcadorPagina && (
-                    <div className="flex justify-end mt-3 pt-2 border-t border-line/60">
-                      <span className="text-[11px] text-slate border border-line rounded-md px-2 py-0.5 bg-paper">
+                    <div className="flex justify-center py-1.5 border-b border-brand-blue/25 bg-brand-blue/5">
+                      <span className="text-[11px] font-medium text-brand-blue tracking-wide">
                         Página {marcadorPagina.valor}
                       </span>
                     </div>
                   )}
+
+                  <div className="p-5">
+                    {contenidoGrupo.map((parte, i) => {
+                      if (parte.tipo === 'texto') {
+                        return (
+                          <span key={i} className="whitespace-pre-line">
+                            {parte.valor}
+                          </span>
+                        )
+                      }
+
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => setImagenActiva(parte.valor)}
+                          className="inline-flex items-center gap-1 mx-1 my-1 px-2 py-0.5 rounded-md border border-brand-blue/30 text-brand-blue text-xs font-medium hover:bg-brand-blue/5 align-middle"
+                        >
+                          Ver referencia
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
               )
             })}
