@@ -7,6 +7,9 @@
   --brand-blue: #155EEF;
   --sky-cyan: #1FDDF2;
   --teal: #0CD6A3;
+
+  /* Pega aqui la URL de tu imagen de fondo, entre las comillas. */
+  --manual-bg-image: url('https://www.freepik.es/fotos-vectores-gratis/fondo-poligonal-azul/48');
 }
 
 @layer base {
@@ -33,6 +36,15 @@
     background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.08) 1px, transparent 0);
     background-size: 28px 28px;
     pointer-events: none;
+  }
+
+  .manual-bg {
+    background-image:
+      linear-gradient(to bottom, rgba(248, 250, 252, 0.93), rgba(248, 250, 252, 0.93)),
+      var(--manual-bg-image);
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
   }
 }
 
