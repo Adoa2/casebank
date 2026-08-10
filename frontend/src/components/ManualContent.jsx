@@ -9,11 +9,15 @@ const LINEA_NUMERO_REGEX = /^\d{1,4}$/
 export default function ManualContent({ chapter, subchapter }) {
   const [imagenActiva, setImagenActiva] = useState(null)
 
+  // partes: version "plana" del contenido, alternando texto, marcadores de
+  // imagen y marcadores de numero de pagina (estos ultimos detectados solo
+  // cuando una linea es UNICAMENTE un numero dentro del rango real de
+  // paginas de la seccion, para no confundir un numero legitimo del texto
+  // con un numero de pagina).
   const partes = useMemo(() => {
     if (!subchapter?.contenido) return []
     const texto = subchapter.contenido
 
-    // 1. Separar el texto por los marcadores de imagen [IMG:...]
     const segmentos = []
     let ultimoIndice = 0
     let match
@@ -30,12 +34,6 @@ export default function ManualContent({ chapter, subchapter }) {
       segmentos.push({ tipo: 'texto', valor: texto.slice(ultimoIndice) })
     }
 
-    // 2. Dentro de cada segmento de texto, aislar las lineas que son
-    // UNICAMENTE un numero de pagina valido para esta seccion (viene del
-    // numero de pagina impreso en el PDF original, capturado junto con el
-    // texto). Solo se convierten en etiqueta si el numero cae dentro del
-    // rango real de paginas de la seccion, para no confundir un numero
-    // legitimo del contenido con un numero de pagina.
     const paginasValidas = new Set()
     if (subchapter.paginaInicio != null) {
       const fin = subchapter.paginaFin || subchapter.paginaInicio
@@ -75,6 +73,30 @@ export default function ManualContent({ chapter, subchapter }) {
     return resultado
   }, [subchapter?.contenido, subchapter?.paginaInicio, subchapter?.paginaFin])
 
+  // grupos: el contenido de "partes" agrupado por pagina. Cada vez que
+  // aparece un marcador de pagina, cierra el grupo actual (ese marcador
+  // queda como etiqueta al pie del recuadro). Si una seccion no tiene
+  // marcadores de pagina detectados, queda todo en un unico grupo, igual
+  // que antes.
+  const grupos = useMemo(() => {
+    const resultado = []
+    let actual = []
+
+    for (const parte of partes) {
+      if (parte.tipo === 'pagina') {
+        actual.push(parte)
+        resultado.push(actual)
+        actual = []
+      } else {
+        actual.push(parte)
+      }
+    }
+    if (actual.length > 0) {
+      resultado.push(actual)
+    }
+    return resultado
+  }, [partes])
+
   if (!subchapter) {
     return (
       <div className="flex-1 min-w-0 overflow-y-auto px-8 py-10">
@@ -109,42 +131,53 @@ export default function ManualContent({ chapter, subchapter }) {
           )}
         </div>
 
-        <div className="border border-line rounded-xl p-5 bg-white text-sm text-slate leading-relaxed">
-          {partes.length > 0 ? (
-            partes.map((parte, i) => {
-              if (parte.tipo === 'texto') {
-                return (
-                  <span key={i} className="whitespace-pre-line">
-                    {parte.valor}
-                  </span>
-                )
-              }
+        {grupos.length > 0 ? (
+          <div className="space-y-4">
+            {grupos.map((grupo, gi) => {
+              const marcadorPagina = grupo.find((p) => p.tipo === 'pagina')
+              const contenidoGrupo = grupo.filter((p) => p.tipo !== 'pagina')
 
-              if (parte.tipo === 'imagen') {
-                return (
-                  <button
-                    key={i}
-                    onClick={() => setImagenActiva(parte.valor)}
-                    className="inline-flex items-center gap-1 mx-1 my-1 px-2 py-0.5 rounded-md border border-brand-blue/30 text-brand-blue text-xs font-medium hover:bg-brand-blue/5 align-middle"
-                  >
-                    Ver referencia
-                  </button>
-                )
-              }
-
-              // parte.tipo === 'pagina'
               return (
-                <div key={i} className="flex justify-center my-3">
-                  <span className="text-[11px] text-slate border border-line rounded-md px-2 py-0.5 bg-paper">
-                    Página {parte.valor}
-                  </span>
+                <div
+                  key={gi}
+                  className="border border-line rounded-xl p-5 bg-white text-sm text-slate leading-relaxed"
+                >
+                  {contenidoGrupo.map((parte, i) => {
+                    if (parte.tipo === 'texto') {
+                      return (
+                        <span key={i} className="whitespace-pre-line">
+                          {parte.valor}
+                        </span>
+                      )
+                    }
+
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => setImagenActiva(parte.valor)}
+                        className="inline-flex items-center gap-1 mx-1 my-1 px-2 py-0.5 rounded-md border border-brand-blue/30 text-brand-blue text-xs font-medium hover:bg-brand-blue/5 align-middle"
+                      >
+                        Ver referencia
+                      </button>
+                    )
+                  })}
+
+                  {marcadorPagina && (
+                    <div className="flex justify-end mt-3 pt-2 border-t border-line/60">
+                      <span className="text-[11px] text-slate border border-line rounded-md px-2 py-0.5 bg-paper">
+                        Página {marcadorPagina.valor}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )
-            })
-          ) : (
-            'Esta sección no tiene contenido de texto adicional.'
-          )}
-        </div>
+            })}
+          </div>
+        ) : (
+          <div className="border border-line rounded-xl p-5 bg-white text-sm text-slate leading-relaxed">
+            Esta sección no tiene contenido de texto adicional.
+          </div>
+        )}
 
         {imagenesSinInline.length > 0 && (
           <div className="mt-6">
