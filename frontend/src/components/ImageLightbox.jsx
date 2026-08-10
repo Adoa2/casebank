@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { API_BASE_URL } from '../config'
 import { authHeaders } from '../api/authToken'
 
@@ -10,6 +10,11 @@ export default function ImageLightbox({ nombreArchivo, onClose }) {
   const [blobUrl, setBlobUrl] = useState(null)
   const [error, setError] = useState(false)
   const [zoom, setZoom] = useState(1)
+  const [pos, setPos] = useState({ x: 0, y: 0 })
+
+  const [arrastrando, setArrastrando] = useState(false)
+  const inicioMouseRef = useRef({ x: 0, y: 0 })
+  const inicioPosRef = useRef({ x: 0, y: 0 })
 
   useEffect(() => {
     let cancelado = false
@@ -36,6 +41,8 @@ export default function ImageLightbox({ nombreArchivo, onClose }) {
     }
 
     cargarImagen()
+    setZoom(1)
+    setPos({ x: 0, y: 0 })
 
     return () => {
       cancelado = true
@@ -51,8 +58,34 @@ export default function ImageLightbox({ nombreArchivo, onClose }) {
     return () => window.removeEventListener('keydown', manejarTecla)
   }, [onClose])
 
-  const acercar = () => setZoom((z) => Math.min(ZOOM_MAX, z + ZOOM_STEP))
-  const alejar = () => setZoom((z) => Math.max(ZOOM_MIN, z - ZOOM_STEP))
+  const acercar = () =>
+    setZoom((z) => Math.min(ZOOM_MAX, z + ZOOM_STEP))
+
+  const alejar = () =>
+    setZoom((z) => {
+      const nuevo = Math.max(ZOOM_MIN, z - ZOOM_STEP)
+      if (nuevo === ZOOM_MIN) setPos({ x: 0, y: 0 })
+      return nuevo
+    })
+
+  const manejarMouseDown = (e) => {
+    if (zoom <= ZOOM_MIN) return
+    e.preventDefault()
+    setArrastrando(true)
+    inicioMouseRef.current = { x: e.clientX, y: e.clientY }
+    inicioPosRef.current = { ...pos }
+  }
+
+  const manejarMouseMove = (e) => {
+    if (!arrastrando) return
+    const dx = e.clientX - inicioMouseRef.current.x
+    const dy = e.clientY - inicioMouseRef.current.y
+    setPos({ x: inicioPosRef.current.x + dx, y: inicioPosRef.current.y + dy })
+  }
+
+  const terminarArrastre = () => {
+    setArrastrando(false)
+  }
 
   return (
     <div
@@ -92,15 +125,27 @@ export default function ImageLightbox({ nombreArchivo, onClose }) {
           </button>
         </div>
 
-        <div className="aspect-square overflow-auto bg-paper flex items-center justify-center p-4">
+        <div
+          className="aspect-square bg-paper flex items-center justify-center p-4 overflow-hidden select-none"
+          style={{ cursor: zoom > ZOOM_MIN ? (arrastrando ? 'grabbing' : 'grab') : 'default' }}
+          onMouseDown={manejarMouseDown}
+          onMouseMove={manejarMouseMove}
+          onMouseUp={terminarArrastre}
+          onMouseLeave={terminarArrastre}
+        >
           {error && <p className="text-sm text-slate">No se pudo cargar la imagen.</p>}
           {!error && !blobUrl && <p className="text-sm text-slate">Cargando imagen...</p>}
           {blobUrl && (
             <img
               src={blobUrl}
               alt={nombreArchivo}
-              style={{ transform: `scale(${zoom})`, transition: 'transform 0.15s ease' }}
-              className="max-w-full max-h-full object-contain"
+              draggable={false}
+              onDragStart={(e) => e.preventDefault()}
+              style={{
+                transform: `translate(${pos.x}px, ${pos.y}px) scale(${zoom})`,
+                transition: arrastrando ? 'none' : 'transform 0.15s ease',
+              }}
+              className="max-w-full max-h-full object-contain pointer-events-none"
             />
           )}
         </div>
