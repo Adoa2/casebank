@@ -1,201 +1,102 @@
-import { useState, useMemo } from 'react'
-import ImageLightbox from './ImageLightbox'
-import AuthImage from './AuthImage'
-import WelcomeCarousel from './WelcomeCarousel'
+import { useEffect, useMemo, useState } from 'react'
+import Header from '../components/Header'
+import ManualSidebar from '../components/ManualSidebar'
+import ManualContent from '../components/ManualContent'
+import ChatPanel from '../components/ChatPanel'
+import { API_BASE_URL } from '../config'
+import { authHeaders } from '../api/authToken'
+import { buildManualTree } from '../utils/manualTree'
+import AuthImage from '../components/AuthImage'
 
-const IMG_MARKER_REGEX = /\[IMG:([^\]]+)\]/g
-const LINEA_NUMERO_REGEX = /^\d{1,4}$/
+export default function DashboardView({ onLogout }) {
+  const [selected, setSelected] = useState({ chapter: null, subchapter: null })
+  const [chapters, setChapters] = useState([])
+  const [manualLoading, setManualLoading] = useState(true)
+  const [manualError, setManualError] = useState(null)
 
-export default function ManualContent({ chapter, subchapter }) {
-  const [imagenActiva, setImagenActiva] = useState(null)
+  useEffect(() => {
+    let cancelado = false
 
-  // partes: version "plana" del contenido, alternando texto, marcadores de
-  // imagen y marcadores de numero de pagina (estos ultimos detectados solo
-  // cuando una linea es UNICAMENTE un numero dentro del rango real de
-  // paginas de la seccion, para no confundir un numero legitimo del texto
-  // con un numero de pagina).
-  const partes = useMemo(() => {
-    if (!subchapter?.contenido) return []
-    const texto = subchapter.contenido
+    async function cargarManual() {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/manual`, {
+          headers: authHeaders(),
+        })
 
-    const segmentos = []
-    let ultimoIndice = 0
-    let match
-
-    IMG_MARKER_REGEX.lastIndex = 0
-    while ((match = IMG_MARKER_REGEX.exec(texto)) !== null) {
-      if (match.index > ultimoIndice) {
-        segmentos.push({ tipo: 'texto', valor: texto.slice(ultimoIndice, match.index) })
-      }
-      segmentos.push({ tipo: 'imagen', valor: match[1] })
-      ultimoIndice = match.index + match[0].length
-    }
-    if (ultimoIndice < texto.length) {
-      segmentos.push({ tipo: 'texto', valor: texto.slice(ultimoIndice) })
-    }
-
-    const paginasValidas = new Set()
-    if (subchapter.paginaInicio != null) {
-      const fin = subchapter.paginaFin || subchapter.paginaInicio
-      for (let p = subchapter.paginaInicio; p <= fin; p++) {
-        paginasValidas.add(String(p))
-      }
-    }
-
-    const resultado = []
-    for (const segmento of segmentos) {
-      if (segmento.tipo !== 'texto') {
-        resultado.push(segmento)
-        continue
-      }
-
-      const lineas = segmento.valor.split('\n')
-      let buffer = []
-      const vaciarBuffer = () => {
-        if (buffer.length > 0) {
-          resultado.push({ tipo: 'texto', valor: buffer.join('\n') })
-          buffer = []
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(data.detail || 'No se pudo cargar el índice del manual.')
         }
-      }
 
-      for (const linea of lineas) {
-        const limpia = linea.trim()
-        if (paginasValidas.size > 0 && LINEA_NUMERO_REGEX.test(limpia) && paginasValidas.has(limpia)) {
-          vaciarBuffer()
-          resultado.push({ tipo: 'pagina', valor: limpia })
-        } else {
-          buffer.push(linea)
+        const secciones = await res.json()
+        const tree = buildManualTree(secciones)
+
+        if (!cancelado) {
+          setChapters(tree)
         }
-      }
-      vaciarBuffer()
-    }
-
-    return resultado
-  }, [subchapter?.contenido, subchapter?.paginaInicio, subchapter?.paginaFin])
-
-  // grupos: el contenido de "partes" agrupado por pagina. Cada vez que
-  // aparece un marcador de pagina, cierra el grupo actual (ese marcador
-  // queda como etiqueta al pie del recuadro). Si una seccion no tiene
-  // marcadores de pagina detectados, queda todo en un unico grupo, igual
-  // que antes.
-  const grupos = useMemo(() => {
-    const resultado = []
-    let actual = []
-
-    for (const parte of partes) {
-      if (parte.tipo === 'pagina') {
-        actual.push(parte)
-        resultado.push(actual)
-        actual = []
-      } else {
-        actual.push(parte)
+      } catch (err) {
+        if (!cancelado) setManualError(err.message)
+      } finally {
+        if (!cancelado) setManualLoading(false)
       }
     }
-    if (actual.length > 0) {
-      resultado.push(actual)
-    }
-    return resultado
-  }, [partes])
 
-  if (!subchapter) {
-    return (
-      <div className="flex-1 min-w-0 overflow-y-auto px-8 py-10 manual-bg">
-        <WelcomeCarousel />
-      </div>
-    )
+    cargarManual()
+    return () => {
+      cancelado = true
+    }
+  }, [])
+
+  // Lista plana de todas las subsecciones, con referencia a su capitulo.
+  const flatSections = useMemo(() => {
+    const flat = []
+    for (const chapter of chapters) {
+      for (const sub of chapter.subchapters) {
+        flat.push({ chapter, subchapter: sub })
+      }
+    }
+    return flat
+  }, [chapters])
+
+  function handleSelect(subchapter, chapter) {
+    setSelected({ chapter, subchapter })
   }
 
-  const mostrarRangoPaginas =
-    subchapter.paginaFin && subchapter.paginaFin !== subchapter.paginaInicio
-      ? `${subchapter.paginaInicio} – ${subchapter.paginaFin}`
-      : subchapter.paginaInicio
+  // Vuelve al carrusel de bienvenida. Se llama al hacer clic en el header.
+  function goHome() {
+    setSelected({ chapter: null, subchapter: null })
+  }
 
-  // Compatibilidad con secciones que aun no tienen marcadores inline
-  // (datos generados antes de este cambio): las imagenes que no aparecen
-  // dentro del texto se siguen mostrando en un bloque aparte al final.
-  const imagenesInline = new Set(partes.filter((p) => p.tipo === 'imagen').map((p) => p.valor))
-  const imagenesSinInline = (subchapter.imagenes || []).filter((nombre) => !imagenesInline.has(nombre))
+  // Llamado cuando el usuario hace clic en una fuente citada por el chat.
+  function handleSelectSource(seccionId) {
+    const targetId = `sec-${seccionId}`
+    const item = flatSections.find(({ subchapter }) => subchapter.id === targetId)
+    if (item) {
+      handleSelect(item.subchapter, item.chapter)
+    }
+  }
 
   return (
-    <div className="flex-1 min-w-0 overflow-y-auto px-8 py-10 manual-bg">
-      <div className="max-w-2xl mx-auto">
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div>
-            <h1 className="font-display text-2xl font-semibold mb-1">{chapter?.title}</h1>
-            <p className="text-base text-brand-blue font-medium">{subchapter.title}</p>
-          </div>
-          {subchapter.paginaInicio != null && (
-            <span className="shrink-0 whitespace-nowrap text-xs text-slate border border-line rounded-md px-2 py-1 mt-1">
-              Página {mostrarRangoPaginas}
-            </span>
-          )}
+    <div className="h-screen flex flex-col">
+      <Header onLogout={onLogout} onGoHome={goHome} />
+
+      <div className="flex-1 flex min-h-0">
+        <div className="hidden md:block w-[280px] flex-shrink-0 border-r border-line min-h-0">
+          <ManualSidebar
+            chapters={chapters}
+            loading={manualLoading}
+            error={manualError}
+            selectedId={selected.subchapter?.id}
+            onSelect={handleSelect}
+          />
         </div>
 
-        {grupos.length > 0 ? (
-          <div className="space-y-4">
-            {grupos.map((grupo, gi) => {
-              const marcadorPagina = grupo.find((p) => p.tipo === 'pagina')
-              const contenidoGrupo = grupo.filter((p) => p.tipo !== 'pagina')
+        <ManualContent chapter={selected.chapter} subchapter={selected.subchapter} />
 
-              return (
-                <div
-                  key={gi}
-                  className="border border-line rounded-xl bg-white text-sm text-slate leading-relaxed overflow-hidden"
-                >
-                  {marcadorPagina && (
-                    <div className="flex justify-center py-1.5 border-b border-brand-blue/25 bg-brand-blue/5">
-                      <span className="text-[11px] font-medium text-brand-blue tracking-wide">
-                        Página {marcadorPagina.valor}
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="p-5">
-                    {contenidoGrupo.map((parte, i) => {
-                      if (parte.tipo === 'texto') {
-                        return (
-                          <span key={i} className="whitespace-pre-line">
-                            {parte.valor}
-                          </span>
-                        )
-                      }
-
-                      return (
-                        <button
-                          key={i}
-                          onClick={() => setImagenActiva(parte.valor)}
-                          className="inline-flex items-center gap-1 mx-1 my-1 px-2 py-0.5 rounded-md border border-brand-blue/30 text-brand-blue text-xs font-medium hover:bg-brand-blue/5 align-middle"
-                        >
-                          Ver referencia
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          <div className="border border-line rounded-xl p-5 bg-white text-sm text-slate leading-relaxed">
-            Esta sección no tiene contenido de texto adicional.
-          </div>
-        )}
-
-        {imagenesSinInline.length > 0 && (
-          <div className="mt-6">
-            <h2 className="font-display text-sm font-semibold text-ink mb-3">Imágenes relacionadas</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {imagenesSinInline.map((nombre) => (
-                <AuthImage key={nombre} nombreArchivo={nombre} alt={nombre} />
-              ))}
-            </div>
-          </div>
-        )}
+        <div className="hidden xl:block w-[340px] flex-shrink-0 border-l border-line min-h-0">
+          <ChatPanel onSelectSource={handleSelectSource} />
+        </div>
       </div>
-
-      {imagenActiva && (
-        <ImageLightbox nombreArchivo={imagenActiva} onClose={() => setImagenActiva(null)} />
-      )}
     </div>
   )
 }
