@@ -3,9 +3,7 @@ build_vector_db.py
 
 Construye la base vectorial en Supabase (Postgres + pgvector) a partir de
 manual_structure.json, usando embeddings generados con la API de Gemini
-(modelo principal gemini-embedding-001, con fallback automatico a
-gemini-embedding-2 cuando se agota la cuota diaria del primero), truncado
-a 768 dimensiones.
+(modelo gemini-embedding-001, truncado a 768 dimensiones).
 
 Uso:
     python build_vector_db.py
@@ -13,7 +11,6 @@ Uso:
 Si el script se interrumpe (por ejemplo, por rate limit del tier gratis de
 Gemini), se puede volver a correr tal cual: usa un checkpoint local
 (embeddings_checkpoint.json) para no volver a pedir embeddings ya generados.
-El checkpoint tambien recuerda que modelo genero cada embedding.
 
 Requisitos previos:
     - Variable de entorno GEMINI_API_KEY (ver app/config.py / .env)
@@ -40,9 +37,11 @@ load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-GEMINI_EMBED_MODEL_PRIMARIO = "gemini-embedding-001"
-GEMINI_EMBED_MODEL_FALLBACK = "gemini-embedding-2"
-
+GEMINI_EMBED_MODEL = "gemini-embedding-001"
+GEMINI_EMBED_URL = (
+    f"https://generativelanguage.googleapis.com/v1beta/models/"
+    f"{GEMINI_EMBED_MODEL}:batchEmbedContents"
+)
 EMBED_DIMENSION = 768
 TASK_TYPE = "RETRIEVAL_DOCUMENT"
 
@@ -68,7 +67,7 @@ def limpiar_marcadores_imagen(texto):
 
 
 def cargar_manual(path):
-    """Lee el manual_structure.json generado"""
+    """Lee el manual_structure.json generado en la Fase 3."""
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -144,19 +143,7 @@ def construir_chunks(secciones):
 def cargar_checkpoint():
     if os.path.exists(CHECKPOINT_PATH):
         with open(CHECKPOINT_PATH, "r", encoding="utf-8") as f:
-            datos = json.load(f)
-        # Compatibilidad con checkpoints viejos, donde el valor era
-        # directamente la lista de floats del embedding.
-        migrado = {}
-        for clave, valor in datos.items():
-            if isinstance(valor, dict) and "embedding" in valor:
-                migrado[clave] = valor
-            else:
-                migrado[clave] = {
-                    "embedding": valor,
-                    "modelo": GEMINI_EMBED_MODEL_PRIMARIO,
-                }
-        return migrado
+            return json.load(f)
     return {}
 
 
@@ -165,11 +152,15 @@ def guardar_checkpoint(checkpoint):
         json.dump(checkpoint, f)
 
 
-def construir_request_body(chunks_lote, modelo):
+def embed_lote(chunks_lote):
+    """
+    Llama a batchEmbedContents de Gemini para un lote de chunks.
+    Reintenta con backoff exponencial si hay error 429 (rate limit) o 5xx.
+    """
     requests_body = []
     for chunk in chunks_lote:
         item = {
-            "model": f"models/{modelo}",
+            "model": f"models/{GEMINI_EMBED_MODEL}",
             "content": {"parts": [{"text": chunk["texto"]}]},
             "taskType": TASK_TYPE,
             "outputDimensionality": EMBED_DIMENSION,
@@ -177,26 +168,10 @@ def construir_request_body(chunks_lote, modelo):
         if chunk["titulo"]:
             item["title"] = chunk["titulo"][:200]
         requests_body.append(item)
-    return requests_body
-
-
-def embed_lote(chunks_lote, modelo):
-    """
-    Llama a batchEmbedContents de Gemini para un lote de chunks, usando el
-    modelo indicado. Reintenta con backoff exponencial si hay error 429
-    (rate limit) o 5xx. Si se agotan los reintentos, devuelve None en vez
-    de levantar una excepcion, para que el llamador pueda decidir si pasa
-    al modelo de respaldo.
-    """
-    url = (
-        f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{modelo}:batchEmbedContents"
-    )
-    requests_body = construir_request_body(chunks_lote, modelo)
 
     for intento in range(MAX_REINTENTOS):
         respuesta = requests.post(
-            url,
+            GEMINI_EMBED_URL,
             headers={
                 "x-goog-api-key": GEMINI_API_KEY,
                 "Content-Type": "application/json",
@@ -206,7 +181,7 @@ def embed_lote(chunks_lote, modelo):
 
         if respuesta.status_code in (429, 500, 503):
             espera = 2 ** intento
-            print(f"  [{modelo}] {respuesta.status_code}, esperando {espera}s antes de reintentar...")
+            print(f"  {respuesta.status_code}, esperando {espera}s antes de reintentar...")
             if respuesta.status_code == 429:
                 print(f"  Detalle del error: {respuesta.text[:500]}")
             time.sleep(espera)
@@ -216,20 +191,18 @@ def embed_lote(chunks_lote, modelo):
         datos = respuesta.json()
         return [e["values"] for e in datos["embeddings"]]
 
-    print(f"  [{modelo}] se agotaron los reintentos, se considera cuota agotada para este modelo.")
-    return None
+    raise RuntimeError(
+        "Se agotaron los reintentos por rate limit de Gemini. "
+        "El progreso hasta ahora quedo guardado en el checkpoint; "
+        "volve a correr el script para continuar donde quedo."
+    )
 
 
 def obtener_embeddings(chunks, batch_size=EMBED_BATCH_SIZE):
     """
-    Genera embeddings en lotes llamando a la API de Gemini. Empieza con el
-    modelo principal; si este agota su cuota diaria (falla incluso despues
-    de los reintentos), pasa automaticamente al modelo de respaldo para el
-    resto de los chunks pendientes.
-
+    Genera embeddings en lotes llamando a la API de Gemini.
     Usa un checkpoint local (embeddings_checkpoint.json) para no volver a
-    pedir embeddings ya generados si el script se corta y se vuelve a correr,
-    y recuerda con que modelo se genero cada uno.
+    pedir embeddings ya generados si el script se corta y se vuelve a correr.
     """
     checkpoint = cargar_checkpoint()
     total = len(chunks)
@@ -238,52 +211,20 @@ def obtener_embeddings(chunks, batch_size=EMBED_BATCH_SIZE):
     if len(pendientes) < total:
         print(f"  {total - len(pendientes)} chunks ya estaban en el checkpoint, se omiten.")
 
-    modelo_actual = GEMINI_EMBED_MODEL_PRIMARIO
-    modelos_usados = set(v["modelo"] for v in checkpoint.values())
-
-    i = 0
-    while i < len(pendientes):
+    for i in range(0, len(pendientes), batch_size):
         lote = pendientes[i:i + batch_size]
-        embeddings_lote = embed_lote(lote, modelo_actual)
-
-        if embeddings_lote is None:
-            if modelo_actual == GEMINI_EMBED_MODEL_PRIMARIO:
-                print(f"  Cuota de {GEMINI_EMBED_MODEL_PRIMARIO} agotada. "
-                      f"Cambiando a {GEMINI_EMBED_MODEL_FALLBACK} para lo que falta...")
-                modelo_actual = GEMINI_EMBED_MODEL_FALLBACK
-                continue  # reintenta el mismo lote con el modelo de respaldo
-            else:
-                raise RuntimeError(
-                    "Se agotaron los reintentos tambien con el modelo de respaldo "
-                    f"({GEMINI_EMBED_MODEL_FALLBACK}). El progreso hasta ahora quedo "
-                    "guardado en el checkpoint; volve a correr el script mas tarde "
-                    "para continuar donde quedo."
-                )
+        embeddings_lote = embed_lote(lote)
 
         for chunk, embedding in zip(lote, embeddings_lote):
-            checkpoint[chunk["chunk_key"]] = {
-                "embedding": embedding,
-                "modelo": modelo_actual,
-            }
+            checkpoint[chunk["chunk_key"]] = embedding
         guardar_checkpoint(checkpoint)
-        modelos_usados.add(modelo_actual)
 
-        print(f"  Embeddings generados: {len(checkpoint)}/{total} (modelo: {modelo_actual})")
+        print(f"  Embeddings generados: {len(checkpoint)}/{total}")
 
-        i += batch_size
-        if i < len(pendientes):
+        if i + batch_size < len(pendientes):
             time.sleep(PAUSA_ENTRE_LOTES_SEG)
 
-    if len(modelos_usados) > 1:
-        print(
-            "\n  ADVERTENCIA: los embeddings se generaron con mas de un modelo "
-            f"({', '.join(sorted(modelos_usados))}). Mezclar modelos distintos en la "
-            "misma tabla puede degradar la calidad del RAG porque cada modelo usa un "
-            "espacio vectorial diferente. Se recomienda, cuando haya cuota disponible, "
-            "borrar el checkpoint y volver a correr el script con un solo modelo."
-        )
-
-    return [checkpoint[c["chunk_key"]]["embedding"] for c in chunks]
+    return [checkpoint[c["chunk_key"]] for c in chunks]
 
 
 def guardar_en_postgres(chunks, embeddings):
