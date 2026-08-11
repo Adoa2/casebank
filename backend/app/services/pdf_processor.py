@@ -4,24 +4,12 @@ import os
 import re
 import json
 
-# --- AJUSTA ESTO ANTES DE CORRER SOBRE LAS 1000 PÁGINAS -------------------
-
-# Verifica este número con la salida de prueba_indice.py: es la primera
-# página real de CONTENIDO (después de portada + índice general).
 PRIMERA_PAGINA_CONTENIDO = 9
-
-# Ignora imágenes decorativas microscópicas (líneas, separadores de 1-2px).
-# Los íconos reales de tu manual (como los de tu imagen de referencia) son
-# bastante más grandes que esto, así que no deberían filtrarse por error.
+# Ignora imágenes decorativas
 MIN_ICON_SIZE = 15  # px
-
-# Si además quieres una captura visual de la página completa (útil como
-# respaldo para páginas con tablas/diseño complejo), pon esto en True.
 RENDER_FULL_PAGE = False
 
 # Patrón para encontrar los marcadores [IMG:nombre_archivo.png] insertados
-# en el texto. Se reutiliza tanto aquí (para armar la lista "imagenes" de
-# cada sección) como en el frontend (para renderizarlos como "Ver imagen").
 IMG_MARKER_PATTERN = re.compile(r"\[IMG:([^\]]+)\]")
 
 # ---------------------------------------------------------------------------
@@ -45,10 +33,6 @@ def extract_page_content(page, page_num, images_dir, min_size=MIN_ICON_SIZE):
     """
     blocks = page.get_text("dict")["blocks"]
 
-    # Orden de lectura aproximado: primero de arriba hacia abajo (Y),
-    # y entre bloques que están a la misma altura, de izquierda a
-    # derecha (X). El redondeo de Y evita que diferencias de sub-píxel
-    # separen bloques que en realidad están en la misma línea visual.
     blocks_ordenados = sorted(
         blocks, key=lambda b: (round(b["bbox"][1], 0), b["bbox"][0])
     )
@@ -63,17 +47,11 @@ def extract_page_content(page, page_num, images_dir, min_size=MIN_ICON_SIZE):
                 texto_linea = ""
                 for span in line.get("spans", []):
                     texto_linea += span.get("text", "")
-                texto_linea = texto_linea.strip()
+                texto_linea = re.sub(r"\s+", " ", texto_linea).strip()
                 if texto_linea:
                     lineas.append(texto_linea)
 
             if lineas:
-                # Las lineas dentro de un mismo bloque casi siempre son el
-                # mismo parrafo partido por el ancho de la pagina, no un
-                # salto de parrafo real, asi que se unen con espacio para
-                # que el texto fluya igual que en el manual original. El
-                # salto de linea real queda para la separacion ENTRE
-                # bloques (parrafos, items de lista, etc.), no dentro de uno.
                 piezas.append(" ".join(lineas))
 
         elif block.get("type") == 1:  # bloque de imagen
@@ -81,7 +59,7 @@ def extract_page_content(page, page_num, images_dir, min_size=MIN_ICON_SIZE):
             width = bbox[2] - bbox[0]
             height = bbox[3] - bbox[1]
             if width < min_size or height < min_size:
-                continue  # descarta ruiditos/decoraciones diminutas
+                continue  # descarta decoraciones diminutas
 
             img_bytes = block.get("image")
             ext = block.get("ext", "png")
@@ -187,10 +165,6 @@ def process_pdf_high_performance(pdf_path: str, output_dir: str):
 
         texto_seccion = texto_seccion.strip()
 
-        # La lista "imagenes" se sigue devolviendo (por compatibilidad con
-        # el resto del sistema y como respaldo), pero ahora se deriva de
-        # los marcadores ya insertados en el texto, en vez de recolectarse
-        # aparte.
         iconos_seccion = []
         for nombre in IMG_MARKER_PATTERN.findall(texto_seccion):
             if nombre not in iconos_seccion:

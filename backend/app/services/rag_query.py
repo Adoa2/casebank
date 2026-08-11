@@ -51,7 +51,6 @@ DISTANCE_FACTOR = 1.3
 MAX_CHUNKS_USADOS = 4 
 
 # Frase fija que se le pide al modelo cuando no encuentra la respuesta en el
-
 FRASE_SIN_INFORMACION = "No cuento con esa información en el manual."
 
 

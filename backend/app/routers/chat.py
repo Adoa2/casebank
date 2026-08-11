@@ -12,12 +12,6 @@ from ..services.rag_query import answer_question
 
 router = APIRouter(prefix="/chat", tags=["Asistente IA"])
 
-
-# --- SCHEMAS ---
-# Se definen aqui, junto al router, para no tocar schemas.py sin verlo primero.
-# Si prefieres tenerlos centralizados junto al resto, se pueden mover a
-# schemas.py sin ningun cambio en su contenido.
-
 class ChatQuery(BaseModel):
     pregunta: str = Field(
         ...,
@@ -68,7 +62,6 @@ def chat_con_manual(
         )
     except requests.exceptions.RequestException:
         # Fallo de red hacia la API de Gemini, o la API respondio con error
-        # (por ejemplo, GEMINI_API_KEY invalida o ausente)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="El asistente de IA no esta disponible en este momento. Verifica la conexion "
