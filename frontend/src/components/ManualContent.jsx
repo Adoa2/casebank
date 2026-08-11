@@ -8,12 +8,6 @@ const LINEA_NUMERO_REGEX = /^\d{1,4}$/
 
 export default function ManualContent({ chapter, subchapter }) {
   const [imagenActiva, setImagenActiva] = useState(null)
-
-  // partes: version "plana" del contenido, alternando texto, marcadores de
-  // imagen y marcadores de numero de pagina (estos ultimos detectados solo
-  // cuando una linea es UNICAMENTE un numero dentro del rango real de
-  // paginas de la seccion, para no confundir un numero legitimo del texto
-  // con un numero de pagina).
   const partes = useMemo(() => {
     if (!subchapter?.contenido) return []
     const texto = subchapter.contenido
@@ -73,11 +67,6 @@ export default function ManualContent({ chapter, subchapter }) {
     return resultado
   }, [subchapter?.contenido, subchapter?.paginaInicio, subchapter?.paginaFin])
 
-  // grupos: el contenido de "partes" agrupado por pagina. Cada vez que
-  // aparece un marcador de pagina, cierra el grupo actual (ese marcador
-  // queda como etiqueta al pie del recuadro). Si una seccion no tiene
-  // marcadores de pagina detectados, queda todo en un unico grupo, igual
-  // que antes.
   const grupos = useMemo(() => {
     const resultado = []
     let actual = []
@@ -110,9 +99,6 @@ export default function ManualContent({ chapter, subchapter }) {
       ? `${subchapter.paginaInicio} – ${subchapter.paginaFin}`
       : subchapter.paginaInicio
 
-  // Compatibilidad con secciones que aun no tienen marcadores inline
-  // (datos generados antes de este cambio): las imagenes que no aparecen
-  // dentro del texto se siguen mostrando en un bloque aparte al final.
   const imagenesInline = new Set(partes.filter((p) => p.tipo === 'imagen').map((p) => p.valor))
   const imagenesSinInline = (subchapter.imagenes || []).filter((nombre) => !imagenesInline.has(nombre))
 
