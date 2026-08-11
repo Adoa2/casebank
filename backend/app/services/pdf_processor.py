@@ -9,6 +9,12 @@ PRIMERA_PAGINA_CONTENIDO = 9
 MIN_ICON_SIZE = 15  # px
 RENDER_FULL_PAGE = False
 
+# Umbral de fusion de parrafos: si un bloque de texto arranca a menos de
+# este porcentaje de la altura de linea del bloque anterior, se considera
+# continuacion del mismo parrafo (y se une con espacio en vez de salto de
+# linea). Ajustar si fusiona de mas o de menos.
+UMBRAL_FUSION_PARRAFO = 0.6
+
 # Patrón para encontrar los marcadores [IMG:nombre_archivo.png] insertados
 IMG_MARKER_PATTERN = re.compile(r"\[IMG:([^\]]+)\]")
 
@@ -22,9 +28,12 @@ def extract_page_content(page, page_num, images_dir, min_size=MIN_ICON_SIZE):
     la página y marcadores [IMG:nombre_archivo.png] insertados exactamente
     en el punto donde aparecía cada imagen incrustada.
 
-    Esto reemplaza el enfoque anterior (texto e imágenes por separado) para
-    poder reconstruir en el frontend la posición real de cada imagen dentro
-    del contenido, en vez de agruparlas todas al final de la sección.
+    Ademas de unir las lineas dentro de un mismo bloque con espacio (y
+    limpiar espacios raros como &nbsp;/\\xa0), fusiona bloques de texto
+    CONSECUTIVOS que estan muy cerca verticalmente entre si, ya que en
+    algunos PDFs (tipicamente los exportados desde Word) cada linea visual
+    de un mismo parrafo queda como un bloque de texto independiente en vez
+    de quedar agrupada como varias "lines" dentro de un unico bloque.
 
     NOTA DE RENDIMIENTO: se usa page.get_text("dict") en vez de
     get_images() + get_image_rects(). Ese segundo método es MUY lento en
@@ -39,6 +48,7 @@ def extract_page_content(page, page_num, images_dir, min_size=MIN_ICON_SIZE):
 
     piezas = []
     idx_icono = 0
+    ultimo_bbox_texto = None  # bbox del ultimo bloque de texto agregado a piezas
 
     for block in blocks_ordenados:
         if block.get("type") == 0:  # bloque de texto
@@ -47,12 +57,41 @@ def extract_page_content(page, page_num, images_dir, min_size=MIN_ICON_SIZE):
                 texto_linea = ""
                 for span in line.get("spans", []):
                     texto_linea += span.get("text", "")
+                # Colapsa cualquier tipo de espacio (incluyendo &nbsp;/\xa0)
+                # a un espacio normal, y quita sobrantes al borde.
                 texto_linea = re.sub(r"\s+", " ", texto_linea).strip()
                 if texto_linea:
                     lineas.append(texto_linea)
 
-            if lineas:
-                piezas.append(" ".join(lineas))
+            if not lineas:
+                continue
+
+            texto_bloque = " ".join(lineas)
+            bbox = block["bbox"]
+
+            # Heuristica de fusion de parrafo: si el bloque anterior en
+            # piezas tambien era texto (no una imagen) y este bloque arranca
+            # muy cerca verticalmente respecto a donde termino el anterior,
+            # se asume que es la misma linea de flujo/parrafo continuando,
+            # y se fusiona con espacio en vez de agregarse como pieza nueva
+            # (lo que generaria un salto de linea de mas al renderizar).
+            fusionar = False
+            if (
+                piezas
+                and ultimo_bbox_texto is not None
+                and not piezas[-1].startswith("[IMG:")
+            ):
+                gap = bbox[1] - ultimo_bbox_texto[3]
+                alto_linea = ultimo_bbox_texto[3] - ultimo_bbox_texto[1]
+                if alto_linea > 0 and gap < alto_linea * UMBRAL_FUSION_PARRAFO:
+                    fusionar = True
+
+            if fusionar:
+                piezas[-1] = piezas[-1] + " " + texto_bloque
+            else:
+                piezas.append(texto_bloque)
+
+            ultimo_bbox_texto = bbox
 
         elif block.get("type") == 1:  # bloque de imagen
             bbox = block["bbox"]
@@ -75,6 +114,11 @@ def extract_page_content(page, page_num, images_dir, min_size=MIN_ICON_SIZE):
                 idx_icono += 1
             except Exception as e:
                 print(f"No se pudo guardar imagen en página {page_num + 1}: {e}")
+
+            # Una imagen corta la continuidad del parrafo: el proximo
+            # bloque de texto no debe fusionarse "a traves" de la imagen
+            # con el texto de antes.
+            ultimo_bbox_texto = None
 
     return "\n".join(piezas)
 
