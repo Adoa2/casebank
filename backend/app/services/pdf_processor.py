@@ -11,25 +11,20 @@ RENDER_FULL_PAGE = False
 
 # Patrón para encontrar los marcadores [IMG:nombre_archivo.png] insertados
 IMG_MARKER_PATTERN = re.compile(r"\[IMG:([^\]]+)\]")
-
-# ---------------------------------------------------------------------------
+NUMERO_PAGINA_PATTERN = re.compile(r"^\d{1,4}$")
 
 
 def extract_page_content(page, page_num, images_dir, min_size=MIN_ICON_SIZE):
     """
-    Recorre los bloques de la página en orden de lectura (de arriba hacia
-    abajo, izquierda a derecha) y devuelve un único string con el texto de
-    la página y marcadores [IMG:nombre_archivo.png] insertados exactamente
-    en el punto donde aparecía cada imagen incrustada.
+    Recorre los bloques de la página en orden de lectura y devuelve un
+    único string con el texto de la página y marcadores [IMG:nombre.png]
+    insertados en el punto donde aparecía cada imagen.
 
-    Esto reemplaza el enfoque anterior (texto e imágenes por separado) para
-    poder reconstruir en el frontend la posición real de cada imagen dentro
-    del contenido, en vez de agruparlas todas al final de la sección.
-
-    NOTA DE RENDIMIENTO: se usa page.get_text("dict") en vez de
-    get_images() + get_image_rects(). Ese segundo método es MUY lento en
-    páginas con capturas grandes; get_text("dict") ya trae la posición
-    (bbox) y los bytes de la imagen listos para guardar.
+    Fusiona bloques de texto consecutivos que estan muy cerca verticalmente
+    (misma linea de flujo partida en bloques separados por el PDF), excepto
+    cuando el bloque es un numero de pagina suelto: esos siempre quedan
+    aislados en su propia pieza, para que el frontend pueda detectarlos como
+    marcador de fin de pagina.
     """
     blocks = page.get_text("dict")["blocks"]
 
@@ -39,6 +34,7 @@ def extract_page_content(page, page_num, images_dir, min_size=MIN_ICON_SIZE):
 
     piezas = []
     idx_icono = 0
+    ultimo_bbox_texto = None
 
     for block in blocks_ordenados:
         if block.get("type") == 0:  # bloque de texto
@@ -51,15 +47,37 @@ def extract_page_content(page, page_num, images_dir, min_size=MIN_ICON_SIZE):
                 if texto_linea:
                     lineas.append(texto_linea)
 
-            if lineas:
-                piezas.append(" ".join(lineas))
+            if not lineas:
+                continue
+
+            texto_bloque = " ".join(lineas)
+            bbox = block["bbox"]
+            es_numero_pagina = bool(NUMERO_PAGINA_PATTERN.match(texto_bloque))
+
+            fusionar = False
+            if (
+                not es_numero_pagina
+                and piezas
+                and ultimo_bbox_texto is not None
+                and not piezas[-1].startswith("[IMG:")
+            ):
+                gap = bbox[1] - ultimo_bbox_texto[3]
+                alto_linea = ultimo_bbox_texto[3] - ultimo_bbox_texto[1]
+                if alto_linea > 0 and gap < alto_linea * 0.6:
+                    fusionar = True
+
+            if fusionar:
+                piezas[-1] = piezas[-1] + " " + texto_bloque
+            else:
+                piezas.append(texto_bloque)
+            ultimo_bbox_texto = None if es_numero_pagina else bbox
 
         elif block.get("type") == 1:  # bloque de imagen
             bbox = block["bbox"]
             width = bbox[2] - bbox[0]
             height = bbox[3] - bbox[1]
             if width < min_size or height < min_size:
-                continue  # descarta decoraciones diminutas
+                continue
 
             img_bytes = block.get("image")
             ext = block.get("ext", "png")
@@ -76,8 +94,9 @@ def extract_page_content(page, page_num, images_dir, min_size=MIN_ICON_SIZE):
             except Exception as e:
                 print(f"No se pudo guardar imagen en página {page_num + 1}: {e}")
 
-    return "\n".join(piezas)
+            ultimo_bbox_texto = None
 
+    return "\n".join(piezas)
 
 def process_pdf_high_performance(pdf_path: str, output_dir: str):
     print(f"Abriendo documento maestro: {pdf_path}")
