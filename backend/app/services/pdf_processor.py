@@ -47,7 +47,6 @@ def extract_page_content(page, page_num, images_dir, min_size=MIN_ICON_SIZE):
                 texto_linea = ""
                 for span in line.get("spans", []):
                     texto_linea += span.get("text", "")
-                texto_linea = texto_linea.replace("&nbsp;", " ")
                 texto_linea = re.sub(r"\s+", " ", texto_linea).strip()
                 if texto_linea:
                     lineas.append(texto_linea)
