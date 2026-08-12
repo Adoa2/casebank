@@ -209,7 +209,7 @@ export default function UsersSection() {
                           title="Editar"
                           className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-brand-blue"
                         >
-                          <svg className="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                             <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19 3 20l1-4Z" />
                           </svg>
                         </button>
@@ -221,7 +221,7 @@ export default function UsersSection() {
                           title={u.is_active ? 'Desactivar' : 'Activar'}
                           className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-brand-blue disabled:opacity-50"
                         >
-                          <svg className="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                             <rect x="4.5" y="10.5" width="15" height="9" rx="2" />
                             <path d="M8 10.5V7.5a4 4 0 0 1 8 0" />
                           </svg>
@@ -234,7 +234,7 @@ export default function UsersSection() {
                           title={isSelf ? 'No puedes eliminar tu propia cuenta' : 'Eliminar'}
                           className="rounded-lg p-1.5 text-slate-500 hover:bg-red-50 hover:text-brand-red disabled:opacity-30"
                         >
-                          <svg className="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                             <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0 1 12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-12" />
                           </svg>
                         </button>
