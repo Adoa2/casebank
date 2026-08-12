@@ -63,7 +63,6 @@ def obtener_imagen(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     # Seguridad: os.path.basename descarta cualquier intento de path traversal
-    # (ej. "../../config.py"), quedandose solo con el nombre de archivo simple.
     nombre_seguro = os.path.basename(nombre_archivo)
     if nombre_seguro != nombre_archivo:
         raise HTTPException(

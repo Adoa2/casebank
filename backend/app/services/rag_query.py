@@ -101,8 +101,8 @@ def search_relevant_chunks(pregunta, n_results=N_RESULTS):
                embedding <=> %s::vector AS distance
         FROM manual_chunks
         UNION ALL
-        SELECT 'error' AS origen, error_id AS seccion_id, NULL AS titulo, NULL AS pagina_inicio,
-               NULL AS pagina_fin, contenido, NULL AS imagenes,
+        SELECT 'error' AS origen, error_id::text AS seccion_id, NULL::text AS titulo, NULL::integer AS pagina_inicio,
+               NULL::integer AS pagina_fin, contenido, NULL::jsonb AS imagenes,
                embedding <=> %s::vector AS distance
         FROM error_chunks
         ORDER BY distance
