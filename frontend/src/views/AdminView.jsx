@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import Header from '../components/Header'
 import AdminSidebar from '../components/AdminSidebar'
+import UsersSection from '../components/UsersSection'
 
 const SECTION_LABELS = {
   dashboard: 'Dashboard',
@@ -26,16 +27,20 @@ export default function AdminView({ onLogout, onGoDashboard }) {
         <AdminSidebar activeSection={activeSection} onSelectSection={setActiveSection} />
 
         <div className="flex-1 min-h-0 overflow-y-auto p-8">
-          <h1 className="mb-1 text-xl font-semibold text-slate-900">
-            {SECTION_LABELS[activeSection]}
-          </h1>
-          <p className="mb-6 text-sm text-slate">
-            Panel administrativo de CaseBank.
-          </p>
+          {activeSection === 'usuarios' ? (
+            <UsersSection />
+          ) : (
+            <>
+              <h1 className="mb-1 text-xl font-semibold text-slate-900">
+                {SECTION_LABELS[activeSection]}
+              </h1>
+              <p className="mb-6 text-sm text-slate">Panel administrativo de CaseBank.</p>
 
-          <div className="rounded-xl border border-dashed border-line bg-blue-50/40 p-10 text-center text-sm text-slate">
-            Esta sección se implementará en una próxima sesión.
-          </div>
+              <div className="rounded-xl border border-dashed border-line bg-blue-50/40 p-10 text-center text-sm text-slate">
+                Esta sección se implementará en una próxima sesión.
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
