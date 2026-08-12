@@ -5,17 +5,14 @@ export default function PageToolbar({ onGoHome }) {
         <button
           type="button"
           onClick={onGoHome}
-          className="text-sm font-medium text-slate border border-line rounded-md px-3 py-1.5 transition-colors hover:text-brand-blue hover:border-brand-blue cursor-pointer"
+          className="text-sm font-medium text-white rounded-md px-3 py-1.5 bg-gradient-to-r from-brand-blue to-sky-cyan transition-opacity hover:opacity-90 cursor-pointer"
         >
           Volver
         </button>
       </div>
 
       <div className="text-center">
-        <h1 className="font-display text-2xl font-semibold text-ink">Manual interactivo de CaseBank</h1>
-        <p className="text-slate text-sm mt-1">
-          Selecciona un capítulo del índice a la izquierda para ver su contenido.
-        </p>
+        <h1 className="font-display text-2xl font-semibold text-ink">Asistente Virtual de CaseBank</h1>
       </div>
 
       <div className="justify-self-end">
