@@ -5,7 +5,7 @@ import psycopg2
 import requests
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-
+from typing import List, Optional
 from . import auth
 from ..database import models
 from ..services.rag_query import answer_question
@@ -23,13 +23,17 @@ class ChatQuery(BaseModel):
 
 
 class FuenteManual(BaseModel):
-    seccion_id: int = Field(
-        ...,
+    seccion_id: Optional[int] = Field(
+        None,
         description="ID de la seccion del manual (coincide con el id devuelto por GET /api/manual), "
-                    "usado por el frontend para enlazar la fuente con el indice lateral.",
+                    "usado por el frontend para enlazar la fuente con el indice lateral. "
+                    "Es None cuando la fuente proviene de un error frecuente aprobado.",
     )
-    titulo: str = Field(..., description="Titulo de la seccion del manual de donde se obtuvo la informacion.")
-    pagina: int = Field(..., description="Numero de pagina donde inicia esa seccion en el manual.")
+    titulo: str = Field(..., description="Titulo de la seccion del manual, o descripcion de la fuente si es un error.")
+    pagina: Optional[int] = Field(
+        None,
+        description="Numero de pagina donde inicia esa seccion en el manual. Es None si la fuente es un error.",
+    )
 
 
 class ChatRespuesta(BaseModel):
