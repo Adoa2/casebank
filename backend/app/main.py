@@ -36,6 +36,8 @@ app = FastAPI(
                 "y asistente de IA (RAG).",
     version="1.0.0",
     openapi_tags=tags_metadata,
+    docs_url="/api/docs",
+    openapi_url="/api/openapi.json",
 )
 
 app.add_middleware(
