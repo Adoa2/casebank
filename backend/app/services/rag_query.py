@@ -55,20 +55,24 @@ MAX_DISTANCE_ABSOLUTE = 0.75
 FRASE_SIN_INFORMACION = "No cuento con esa información en el manual."
 SUPPORT_TICKET_URL = "https://soporte.sinteghn.com/clientes/login.php"
 
-GREETING_PATTERNS = [
-    r"^hola+!?$",
-    r"^(muy )?buen[oa]s?( d[ií]as?| tardes?| noches?)?!?$",
-    r"^hey!?$",
-    r"^hi!?$",
-    r"^(que|qu[ée]) tal!?\??$",
-    r"^como (estas|est[aá]s|andas)!?\??$",
-    r"^gracias!?$",
-    r"^muchas gracias!?$",
-    r"^(ok|okay|vale|listo|entendido)!?$",
-    r"^(adios|adi[oó]s|chao|hasta luego|nos vemos)!?$",
+GREETING_BASES = [
+    r"hola+",
+    r"(muy )?buen[oa]s?( d[ií]as?| tardes?| noches?)?",
+    r"hey",
+    r"hi",
+    r"(que|qu[ée]) tal",
+    r"como (estas|est[aá]s|andas)",
+    r"gracias",
+    r"muchas gracias",
+    r"(ok|okay|vale|listo|entendido)",
+    r"(adios|adi[oó]s|chao|hasta luego|nos vemos)",
 ]
+_SUFIJO_NOMBRE = r"(\s+casey(\s+bot)?)?"
 
-_GREETING_REGEX = re.compile("|".join(GREETING_PATTERNS), re.IGNORECASE)
+_GREETING_REGEX = re.compile(
+    r"^(?:" + "|".join(GREETING_BASES) + r")" + _SUFIJO_NOMBRE + r"[!?.,¡¿\s]*$",
+    re.IGNORECASE,
+)
 
 
 def es_saludo_o_cortesia(texto):
