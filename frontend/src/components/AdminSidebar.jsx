@@ -1,14 +1,6 @@
 const NAV_ITEMS = [
-  { id: 'dashboard', label: 'Dashboard' },
   { id: 'usuarios', label: 'Usuarios' },
-  { id: 'roles', label: 'Roles' },
-  { id: 'manual', label: 'Manual' },
-  { id: 'base-conocimiento', label: 'Base de Conocimiento' },
   { id: 'errores-frecuentes', label: 'Errores Frecuentes' },
-  { id: 'historial-consultas', label: 'Historial de Consultas' },
-  { id: 'configuraciones', label: 'Configuraciones' },
-  { id: 'bitacora', label: 'Bitácora' },
-  { id: 'perfil', label: 'Perfil' },
 ]
 
 export default function AdminSidebar({ activeSection, onSelectSection }) {
