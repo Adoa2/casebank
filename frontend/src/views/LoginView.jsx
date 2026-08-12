@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import AuthField from '../components/AuthField'
 import AuthMessage from '../components/AuthMessage'
 import { login } from '../api/auth'
+import { setAuthData } from '../api/authToken'
 
 export default function LoginView({ notice, onConsumeNotice, onGoRegister, onGoForgot, onLoginSuccess }) {
   const [username, setUsername] = useState('')
@@ -9,7 +10,6 @@ export default function LoginView({ notice, onConsumeNotice, onGoRegister, onGoF
   const [message, setMessage] = useState(null)
   const [loading, setLoading] = useState(false)
 
-  // Un mensaje de éxito puede llegar desde el registro o el reseteo de contraseña.
   useEffect(() => {
     if (notice) {
       setMessage(notice)
@@ -24,9 +24,7 @@ export default function LoginView({ notice, onConsumeNotice, onGoRegister, onGoF
 
     try {
       const data = await login(username, password)
-      if (data.access_token) {
-        localStorage.setItem('casebank_token', data.access_token)
-      }
+      setAuthData(data)
       onLoginSuccess()
     } catch (err) {
       setMessage({ text: err.message || 'No se pudo conectar con el servidor.', type: 'error' })

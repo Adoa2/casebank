@@ -1,9 +1,14 @@
 import logo from '../assets/logo.png'
 
-export default function Header({ onLogout, onGoHome }) {
+export default function Header({ onLogout, onGoHome, isAdmin = false, onGoAdmin }) {
   function handleHomeClick(e) {
     e.stopPropagation()
     onGoHome()
+  }
+
+  function handleAdminClick(e) {
+    e.stopPropagation()
+    onGoAdmin()
   }
 
   function handleLogoutClick(e) {
@@ -31,8 +36,20 @@ export default function Header({ onLogout, onGoHome }) {
           <span className="hidden sm:inline">Inicio</span>
         </button>
 
-        <a
-          href="https://soporte.sinteghn.com/clientes/login.php"
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={handleAdminClick}
+            className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/60 sm:px-3"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <path d="M12 3.5c2.6 1.4 4.4 1.9 6.5 2 .3 4.9-1.3 9.4-6.5 12-5.2-2.6-6.8-7.1-6.5-12 2.1-.1 3.9-.6 6.5-2Z" />
+              <path d="m9.5 12 1.8 1.8 3.2-3.6" />
+            </svg>
+            <span className="hidden sm:inline">Admin</span>
+          </button>
+        )}
+          <a href="https://soporte.sinteghn.com/clientes/login.php"
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}

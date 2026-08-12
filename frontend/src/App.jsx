@@ -5,9 +5,13 @@ import RegisterView from './views/RegisterView'
 import ForgotPasswordView from './views/ForgotPasswordView'
 import ResetPasswordView from './views/ResetPasswordView'
 import DashboardView from './views/DashboardView'
+import AdminView from './views/AdminView'
+import { getRole, clearAuthData } from './api/authToken'
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(() => Boolean(localStorage.getItem('casebank_token')))
+  const [role, setRole] = useState(() => getRole())
+  const [mainView, setMainView] = useState('dashboard') // 'dashboard' | 'admin'
   const [view, setView] = useState('login')
   const [resetEmail, setResetEmail] = useState('')
   const [loginNotice, setLoginNotice] = useState(null)
@@ -22,14 +26,33 @@ export default function App() {
     setView('login')
   }
 
+  function handleLoginSuccess() {
+    setRole(getRole())
+    setAuthenticated(true)
+  }
+
   function handleLogout() {
-    localStorage.removeItem('casebank_token')
+    clearAuthData()
     setAuthenticated(false)
+    setRole(0)
+    setMainView('dashboard')
     setView('login')
   }
 
+  const isAdmin = role >= 1
+
   if (authenticated) {
-    return <DashboardView onLogout={handleLogout} />
+    if (mainView === 'admin' && isAdmin) {
+      return <AdminView onLogout={handleLogout} onGoDashboard={() => setMainView('dashboard')} />
+    }
+
+    return (
+      <DashboardView
+        onLogout={handleLogout}
+        isAdmin={isAdmin}
+        onGoAdmin={() => setMainView('admin')}
+      />
+    )
   }
 
   return (
@@ -44,7 +67,7 @@ export default function App() {
               onConsumeNotice={() => setLoginNotice(null)}
               onGoRegister={() => setView('register')}
               onGoForgot={() => setView('forgot')}
-              onLoginSuccess={() => setAuthenticated(true)}
+              onLoginSuccess={handleLoginSuccess}
             />
           )}
 

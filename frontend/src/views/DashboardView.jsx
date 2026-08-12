@@ -7,7 +7,7 @@ import { API_BASE_URL } from '../config'
 import { authHeaders } from '../api/authToken'
 import { buildManualTree } from '../utils/manualTree'
 
-export default function DashboardView({ onLogout }) {
+export default function DashboardView({ onLogout, isAdmin, onGoAdmin }) {
   const [selected, setSelected] = useState({ chapter: null, subchapter: null })
   const [chapters, setChapters] = useState([])
   const [manualLoading, setManualLoading] = useState(true)
@@ -47,7 +47,6 @@ export default function DashboardView({ onLogout }) {
     }
   }, [])
 
-  // Lista plana de todas las subsecciones, con referencia a su capitulo.
   const flatSections = useMemo(() => {
     const flat = []
     for (const chapter of chapters) {
@@ -62,13 +61,11 @@ export default function DashboardView({ onLogout }) {
     setSelected({ chapter, subchapter })
   }
 
-  // Vuelve al carrusel de bienvenida. Se llama al hacer clic en el header.
   function goHome() {
     setSelected({ chapter: null, subchapter: null })
     setHomeResetSignal((current) => current + 1)
   }
 
-  // Llamado cuando el usuario hace clic en una fuente citada por el chat.
   function handleSelectSource(seccionId) {
     const targetId = `sec-${seccionId}`
     const item = flatSections.find(({ subchapter }) => subchapter.id === targetId)
@@ -79,7 +76,7 @@ export default function DashboardView({ onLogout }) {
 
   return (
     <div className="h-screen flex flex-col">
-      <Header onLogout={onLogout} onGoHome={goHome} />
+      <Header onLogout={onLogout} onGoHome={goHome} isAdmin={isAdmin} onGoAdmin={onGoAdmin} />
 
       <div className="flex-1 flex min-h-0 bg-white">
         <div className="hidden md:block w-[270px] flex-shrink-0 border-r border-line min-h-0">
