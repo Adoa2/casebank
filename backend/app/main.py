@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .database import models
 from .database.db import engine
-from .routers import auth, chat, manual
+from .routers import auth, chat, manual, admin_users, errors
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -18,14 +18,22 @@ tags_metadata = [
     },
     {
         "name": "Asistente IA",
-        "description": "Consultas en lenguaje natural sobre el manual, usando RAG con Ollama y ChromaDB.",
+        "description": "Consultas en lenguaje natural sobre el manual, usando RAG con Gemini y pgvector.",
+    },
+    {
+        "name": "Administración de usuarios",
+        "description": "CRUD de usuarios del sistema. Requiere privilegio de administrador.",
+    },
+    {
+        "name": "Errores frecuentes",
+        "description": "Registro y aprobación de errores frecuentes para que la IA los use al responder.",
     },
 ]
 
 app = FastAPI(
     title="Manual Interactivo CaseBank API",
     description="API para el sistema de manual interactivo con autenticación de usuarios "
-                "y asistente de IA local (RAG).",
+                "y asistente de IA (RAG).",
     version="1.0.0",
     openapi_tags=tags_metadata,
 )
@@ -42,6 +50,8 @@ api_router = APIRouter(prefix="/api")
 api_router.include_router(auth.router)
 api_router.include_router(manual.router)
 api_router.include_router(chat.router)
+api_router.include_router(admin_users.router)
+api_router.include_router(errors.router)
 
 @api_router.get(
     "/",

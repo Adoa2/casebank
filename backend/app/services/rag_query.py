@@ -89,7 +89,7 @@ def embed_query(pregunta):
 
 
 def search_relevant_chunks(pregunta, n_results=N_RESULTS):
-    """Busca en Postgres/pgvector los chunks del manual mas relevantes para la pregunta."""
+    """Busca en Postgres/pgvector los chunks del manual y los errores aprobados mas relevantes."""
     query_embedding = embed_query(pregunta)
     embedding_literal = "[" + ",".join(str(v) for v in query_embedding) + "]"
 
@@ -97,23 +97,29 @@ def search_relevant_chunks(pregunta, n_results=N_RESULTS):
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT seccion_id, titulo, pagina_inicio, pagina_fin, contenido, imagenes,
+        SELECT 'manual' AS origen, seccion_id, titulo, pagina_inicio, pagina_fin, contenido, imagenes,
                embedding <=> %s::vector AS distance
         FROM manual_chunks
+        UNION ALL
+        SELECT 'error' AS origen, error_id AS seccion_id, NULL AS titulo, NULL AS pagina_inicio,
+               NULL AS pagina_fin, contenido, NULL AS imagenes,
+               embedding <=> %s::vector AS distance
+        FROM error_chunks
         ORDER BY distance
         LIMIT %s;
         """,
-        (embedding_literal, n_results),
+        (embedding_literal, embedding_literal, n_results),
     )
     filas = cur.fetchall()
     cur.close()
     conn.close()
 
     chunks = []
-    for seccion_id, titulo, pagina_inicio, pagina_fin, contenido, imagenes, distance in filas:
+    for origen, seccion_id, titulo, pagina_inicio, pagina_fin, contenido, imagenes, distance in filas:
         chunks.append({
             "documento": contenido,
             "metadata": {
+                "origen": origen,
                 "seccion_id": seccion_id,
                 "titulo": titulo,
                 "pagina_inicio": pagina_inicio,
@@ -223,14 +229,21 @@ def answer_question(question):
         fuentes = []
         imagenes = []
     else:
-        fuentes = [
-            {
-                "seccion_id": c["metadata"]["seccion_id"],
-                "titulo": c["metadata"]["titulo"],
-                "pagina": c["metadata"]["pagina_inicio"],
-            }
-            for c in chunks
-        ]
+        fuentes = []
+        for c in chunks:
+            meta = c["metadata"]
+            if meta["origen"] == "error":
+                fuentes.append({
+                    "seccion_id": None,
+                    "titulo": "Solución registrada por soporte",
+                    "pagina": None,
+                })
+            else:
+                fuentes.append({
+                    "seccion_id": meta["seccion_id"],
+                    "titulo": meta["titulo"],
+                    "pagina": meta["pagina_inicio"],
+                })
 
         imagenes_raw = []
         for c in chunks:

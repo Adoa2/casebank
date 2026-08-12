@@ -39,8 +39,6 @@ def create_access_token(data: dict):
     response_description="Usuario creado exitosamente.",
 )
 def register_user(user: schemas.UserCreate, db_session: Session = Depends(db.get_db)):
-    # Comparación case-insensitive: evita crear "Juan" y "juan" como cuentas distintas,
-    # lo que dejaría ambiguo el login (que tambien es case-insensitive).
     user_exists = db_session.query(models.User).filter(
         (func.lower(models.User.email) == user.email.lower())
         | (func.lower(models.User.username) == user.username.lower())
@@ -66,12 +64,10 @@ def register_user(user: schemas.UserCreate, db_session: Session = Depends(db.get
     response_description="Token de acceso generado.",
 )
 def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db_session: Session = Depends(db.get_db)):
-    # 1. Buscar al usuario por su username, sin distinguir mayúsculas/minúsculas
     user = db_session.query(models.User).filter(
         func.lower(models.User.username) == form_data.username.lower()
     ).first()
 
-    # 2. Verificar que exista, esté activo, y que la contraseña coincida
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -86,10 +82,14 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db_session: Ses
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # 3. Generar el Token JWT
     access_token = create_access_token(data={"sub": user.username})
 
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "username": user.username,
+        "role": user.role,
+    }
 
 
 @router.post(
@@ -177,7 +177,6 @@ def get_current_user(token: str = Depends(oauth2_scheme), db_session: Session = 
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    # 1. Se lee el token
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
@@ -186,9 +185,26 @@ def get_current_user(token: str = Depends(oauth2_scheme), db_session: Session = 
     except JWTError:
         raise credentials_exception
 
-    # 2. Buscar si el usuario del token realmente existe en la BD
     user = db_session.query(models.User).filter(models.User.username == username).first()
     if user is None:
         raise credentials_exception
 
     return user
+
+
+def require_role(min_role: int):
+    """Genera una dependencia que exige un nivel minimo de privilegio (role)."""
+    def dependency(current_user: models.User = Depends(get_current_user)):
+        if current_user.role < min_role:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permisos para realizar esta acción",
+            )
+        return current_user
+    return dependency
+
+
+# role >= 1: puede administrar usuarios e ingresar errores frecuentes
+get_current_admin = require_role(1)
+# role >= 2: puede aprobar o rechazar errores frecuentes
+get_current_reviewer = require_role(2)

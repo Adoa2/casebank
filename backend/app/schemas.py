@@ -1,3 +1,6 @@
+from datetime import datetime
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -39,6 +42,8 @@ class Token(BaseModel):
         description="Tipo de token. Siempre es 'bearer'.",
         examples=["bearer"],
     )
+    username: str = Field(..., description="Nombre de usuario autenticado.")
+    role: int = Field(..., description="Nivel de privilegio: 0 usuario, 1 admin, 2 privilegio mayor.")
 
 
 class PasswordResetRequest(BaseModel):
@@ -66,3 +71,74 @@ class PasswordResetVerify(BaseModel):
 class MessageResponse(BaseModel):
     """Respuesta genérica con un mensaje informativo."""
     message: str = Field(..., description="Mensaje descriptivo del resultado de la operación.")
+
+
+# --- Administración de usuarios ---
+
+class UserAdminResponse(BaseModel):
+    """Datos completos de un usuario, para el panel administrativo."""
+    id: int
+    username: str
+    email: str
+    role: int
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class UserAdminCreate(BaseModel):
+    """Datos para crear un usuario desde el panel administrativo."""
+    username: str
+    email: str
+    password: str = Field(..., min_length=8)
+    role: int = Field(0, ge=0, le=2, description="0 usuario, 1 admin, 2 privilegio mayor.")
+    is_active: bool = True
+
+
+class UserAdminUpdate(BaseModel):
+    """Datos editables de un usuario desde el panel administrativo. Todos opcionales."""
+    email: Optional[str] = None
+    role: Optional[int] = Field(None, ge=0, le=2)
+    is_active: Optional[bool] = None
+    password: Optional[str] = Field(None, min_length=8)
+
+
+# --- Errores frecuentes ---
+
+class ErrorReportCreate(BaseModel):
+    """Datos para registrar un nuevo error frecuente (queda en estado 'pendiente')."""
+    titulo: str
+    modulo: str
+    descripcion: str
+    causa: Optional[str] = None
+    solucion: str
+    procedimiento: Optional[str] = None
+    palabras_clave: Optional[str] = None
+    nivel: Optional[str] = None
+
+
+class ErrorReportResponse(BaseModel):
+    id: int
+    titulo: str
+    modulo: str
+    descripcion: str
+    causa: Optional[str]
+    solucion: str
+    procedimiento: Optional[str]
+    palabras_clave: Optional[str]
+    nivel: Optional[str]
+    estado: str
+    created_by: int
+    reviewed_by: Optional[int]
+    created_at: datetime
+    reviewed_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+class ErrorReportReview(BaseModel):
+    """Decisión del revisor sobre un error pendiente."""
+    aprobar: bool = Field(..., description="True para aprobar (se indexa para la IA), False para rechazar.")
