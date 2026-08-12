@@ -118,6 +118,15 @@ class ErrorReportCreate(BaseModel):
     palabras_clave: Optional[str] = None
     nivel: Optional[str] = None
 
+class ErrorReportUpdate(BaseModel):
+    """Datos editables de un error frecuente. Todos opcionales."""
+    titulo: Optional[str] = None
+    modulo: Optional[str] = None
+    descripcion: Optional[str] = None
+    causa: Optional[str] = None
+    solucion: Optional[str] = None
+    procedimiento: Optional[str] = None
+    palabras_clave: Optional[str] = None
 
 class ErrorReportResponse(BaseModel):
     id: int

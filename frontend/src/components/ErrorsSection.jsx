@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { listErrors, createError, reviewError } from '../api/errors'
+import { listErrors, createError, updateError, deleteError, reviewError } from '../api/errors'
 import { getRole } from '../api/authToken'
 import ErrorFormModal from './ErrorFormModal'
 import ErrorDetail from './ErrorDetail'
@@ -37,10 +37,11 @@ export default function ErrorsSection() {
   const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
   const [estadoFilter, setEstadoFilter] = useState('todos')
-  const [showForm, setShowForm] = useState(false)
+  const [modalMode, setModalMode] = useState(null) // null | 'create' | 'edit'
   const [selectedError, setSelectedError] = useState(null)
 
   const canReview = getRole() >= 2
+  const canEdit = getRole() >= 1
 
   async function loadErrors() {
     setLoading(true)
@@ -73,10 +74,28 @@ export default function ErrorsSection() {
     return list
   }, [errors, estadoFilter, search])
 
-  async function handleCreate(payload) {
-    const created = await createError(payload)
-    setErrors((prev) => [created, ...prev])
-    setShowForm(false)
+  function openCreate() {
+    setModalMode('create')
+  }
+
+  function openEdit() {
+    setModalMode('edit')
+  }
+
+  function closeModal() {
+    setModalMode(null)
+  }
+
+  async function handleFormSubmit(payload) {
+    if (modalMode === 'edit') {
+      const updated = await updateError(selectedError.id, payload)
+      setErrors((prev) => prev.map((e) => (e.id === updated.id ? updated : e)))
+      setSelectedError(updated)
+    } else {
+      const created = await createError(payload)
+      setErrors((prev) => [created, ...prev])
+    }
+    closeModal()
   }
 
   async function handleReview(id, aprobar) {
@@ -85,14 +104,34 @@ export default function ErrorsSection() {
     setSelectedError(updated)
   }
 
+  async function handleDelete(id) {
+    await deleteError(id)
+    setErrors((prev) => prev.filter((e) => e.id !== id))
+    setSelectedError(null)
+  }
+
   if (selectedError) {
     return (
-      <ErrorDetail
-        error={selectedError}
-        canReview={canReview}
-        onBack={() => setSelectedError(null)}
-        onReview={handleReview}
-      />
+      <>
+        <ErrorDetail
+          error={selectedError}
+          canReview={canReview}
+          canEdit={canEdit}
+          onBack={() => setSelectedError(null)}
+          onReview={handleReview}
+          onEdit={openEdit}
+          onDelete={handleDelete}
+        />
+
+        {modalMode === 'edit' && (
+          <ErrorFormModal
+            mode="edit"
+            initialData={selectedError}
+            onClose={closeModal}
+            onSubmit={handleFormSubmit}
+          />
+        )}
+      </>
     )
   }
 
@@ -105,7 +144,7 @@ export default function ErrorsSection() {
         </div>
         <button
           type="button"
-          onClick={() => setShowForm(true)}
+          onClick={openCreate}
           className="rounded-lg bg-gradient-to-r from-brand-blue to-sky-cyan px-4 py-2.5 text-sm font-semibold text-white hover:brightness-105"
         >
           + Nuevo Error
@@ -202,8 +241,8 @@ export default function ErrorsSection() {
         </table>
       </div>
 
-      {showForm && (
-        <ErrorFormModal onClose={() => setShowForm(false)} onSubmit={handleCreate} />
+      {modalMode === 'create' && (
+        <ErrorFormModal mode="create" onClose={closeModal} onSubmit={handleFormSubmit} />
       )}
     </div>
   )

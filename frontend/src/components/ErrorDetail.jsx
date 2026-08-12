@@ -27,10 +27,11 @@ function formatDate(iso) {
   }
 }
 
-export default function ErrorDetail({ error, canReview, onBack, onReview }) {
+export default function ErrorDetail({ error, canReview, canEdit, onBack, onReview, onEdit, onDelete }) {
   const [activeTab, setActiveTab] = useState('general')
   const [reviewing, setReviewing] = useState(false)
-  const [reviewError_, setReviewError] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+  const [actionError, setActionError] = useState(null)
 
   const keywords = (error.palabras_clave || '')
     .split(',')
@@ -38,14 +39,28 @@ export default function ErrorDetail({ error, canReview, onBack, onReview }) {
     .filter(Boolean)
 
   async function handleReview(aprobar) {
-    setReviewError(null)
+    setActionError(null)
     setReviewing(true)
     try {
       await onReview(error.id, aprobar)
     } catch (err) {
-      setReviewError(err.message || 'No se pudo revisar el error.')
+      setActionError(err.message || 'No se pudo revisar el error.')
     } finally {
       setReviewing(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!window.confirm(`¿Eliminar el error "${error.titulo}"? Esta acción no se puede deshacer.`)) {
+      return
+    }
+    setActionError(null)
+    setDeleting(true)
+    try {
+      await onDelete(error.id)
+    } catch (err) {
+      setActionError(err.message || 'No se pudo eliminar el error.')
+      setDeleting(false)
     }
   }
 
@@ -70,6 +85,26 @@ export default function ErrorDetail({ error, canReview, onBack, onReview }) {
             {ESTADO_LABEL[error.estado] ?? error.estado}
           </span>
 
+          {canEdit && (
+            <>
+              <button
+                type="button"
+                onClick={() => onEdit(error)}
+                className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              >
+                Editar
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-brand-red hover:bg-red-50 disabled:opacity-50"
+              >
+                {deleting ? 'Eliminando...' : 'Eliminar'}
+              </button>
+            </>
+          )}
+
           {canReview && error.estado === 'pendiente' && (
             <>
               <button
@@ -93,8 +128,8 @@ export default function ErrorDetail({ error, canReview, onBack, onReview }) {
         </div>
       </div>
 
-      {reviewError_ && (
-        <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{reviewError_}</div>
+      {actionError && (
+        <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</div>
       )}
 
       <div className="mb-5 flex gap-1 border-b border-line">
@@ -146,7 +181,7 @@ export default function ErrorDetail({ error, canReview, onBack, onReview }) {
             <p className="text-sm text-slate-600">{error.modulo}</p>
           </div>
 
-          <div className="rounded-xl border border-line p-4">
+          <div className="rounded-xl border border-line p-4 sm:col-span-2">
             <h3 className="mb-2 text-sm font-semibold text-slate-700">Registrado</h3>
             <p className="text-sm text-slate-600">
               {formatDate(error.created_at)}

@@ -50,3 +50,22 @@ export async function reviewError(id, aprobar) {
   if (!res.ok) throw await parseError(res, 'No se pudo revisar el error.')
   return res.json()
 }
+
+export async function updateError(id, data) {
+  const res = await fetch(`${API_BASE_URL}/api/errors/${id}`, {
+    method: 'PUT',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) throw await parseError(res, 'No se pudo actualizar el error.')
+  return res.json()
+}
+
+export async function deleteError(id) {
+  const res = await fetch(`${API_BASE_URL}/api/errors/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+  if (!res.ok) throw await parseError(res, 'No se pudo eliminar el error.')
+  return res.json()
+}

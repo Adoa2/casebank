@@ -152,3 +152,59 @@ def revisar_error(
             )
 
     return error
+
+@router.put(
+    "/{error_id}",
+    response_model=schemas.ErrorReportResponse,
+    summary="Editar error frecuente",
+    description="Edita los datos de un error existente. Si ya estaba aprobado, se regenera "
+                "automaticamente su embedding para que la IA use el contenido actualizado. "
+                "Requiere privilegio de administrador.",
+)
+def editar_error(
+    error_id: int,
+    data: schemas.ErrorReportUpdate,
+    db_session: Session = Depends(db.get_db),
+    current_user: models.User = Depends(auth.get_current_admin),
+):
+    error = db_session.query(models.ErrorReport).filter(models.ErrorReport.id == error_id).first()
+    if not error:
+        raise HTTPException(status_code=404, detail="Error no encontrado")
+
+    for campo, valor in data.model_dump(exclude_unset=True).items():
+        setattr(error, campo, valor)
+
+    db_session.commit()
+    db_session.refresh(error)
+
+    if error.estado == "aprobado":
+        try:
+            _indexar_error(error)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"El error se actualizo pero no se pudo re-indexar para la IA: {exc}",
+            )
+
+    return error
+
+
+@router.delete(
+    "/{error_id}",
+    response_model=schemas.MessageResponse,
+    summary="Eliminar error frecuente",
+    description="Elimina un error frecuente. Si estaba aprobado, su embedding en error_chunks "
+                "se elimina automaticamente (ON DELETE CASCADE). Requiere privilegio de administrador.",
+)
+def eliminar_error(
+    error_id: int,
+    db_session: Session = Depends(db.get_db),
+    current_user: models.User = Depends(auth.get_current_admin),
+):
+    error = db_session.query(models.ErrorReport).filter(models.ErrorReport.id == error_id).first()
+    if not error:
+        raise HTTPException(status_code=404, detail="Error no encontrado")
+
+    db_session.delete(error)
+    db_session.commit()
+    return {"message": "Error eliminado correctamente"}

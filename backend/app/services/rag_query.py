@@ -161,6 +161,11 @@ Usa UNICAMENTE la siguiente informacion extraida del manual para responder. Si l
 respuesta no se encuentra en el contexto, no inventes pasos: responde UNICAMENTE
 con esta frase exacta, sin agregar nada mas: "{FRASE_SIN_INFORMACION}"
 
+Si el contexto incluye tanto la causa de un problema como su solucion o
+procedimiento para resolverlo, incluye SIEMPRE ambas partes en tu respuesta:
+primero la causa (breve) y luego los pasos concretos de la solucion. Nunca
+respondas unicamente con la causa si el contexto tambien contiene la solucion.
+
 Contexto del manual:
 {contexto}
 
@@ -233,17 +238,12 @@ def answer_question(question):
         for c in chunks:
             meta = c["metadata"]
             if meta["origen"] == "error":
-                fuentes.append({
-                    "seccion_id": None,
-                    "titulo": "Solución registrada por soporte",
-                    "pagina": None,
-                })
-            else:
-                fuentes.append({
-                    "seccion_id": meta["seccion_id"],
-                    "titulo": meta["titulo"],
-                    "pagina": meta["pagina_inicio"],
-                })
+                continue  # los errores frecuentes aportan contenido a la respuesta, pero no se citan como fuente
+            fuentes.append({
+                "seccion_id": meta["seccion_id"],
+                "titulo": meta["titulo"],
+                "pagina": meta["pagina_inicio"],
+            })
 
         imagenes_raw = []
         for c in chunks:

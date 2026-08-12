@@ -5,16 +5,17 @@ const TABS = [
   { id: 'solucion', label: 'Solución' },
 ]
 
-export default function ErrorFormModal({ onClose, onSubmit }) {
+export default function ErrorFormModal({ mode = 'create', initialData, onClose, onSubmit }) {
+  const isEdit = mode === 'edit'
   const [activeTab, setActiveTab] = useState('general')
 
-  const [titulo, setTitulo] = useState('')
-  const [modulo, setModulo] = useState('')
-  const [palabrasClave, setPalabrasClave] = useState('')
-  const [descripcion, setDescripcion] = useState('')
-  const [causa, setCausa] = useState('')
-  const [solucion, setSolucion] = useState('')
-  const [procedimiento, setProcedimiento] = useState('')
+  const [titulo, setTitulo] = useState(initialData?.titulo || '')
+  const [modulo, setModulo] = useState(initialData?.modulo || '')
+  const [palabrasClave, setPalabrasClave] = useState(initialData?.palabras_clave || '')
+  const [descripcion, setDescripcion] = useState(initialData?.descripcion || '')
+  const [causa, setCausa] = useState(initialData?.causa || '')
+  const [solucion, setSolucion] = useState(initialData?.solucion || '')
+  const [procedimiento, setProcedimiento] = useState(initialData?.procedimiento || '')
 
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -47,7 +48,6 @@ export default function ErrorFormModal({ onClose, onSubmit }) {
         solucion: solucion.trim(),
         procedimiento: procedimiento.trim() || null,
         palabras_clave: palabrasClave.trim() || null,
-        nivel: null,
       })
     } catch (err) {
       setError(err.message || 'No se pudo guardar el error.')
@@ -59,7 +59,9 @@ export default function ErrorFormModal({ onClose, onSubmit }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
       <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-xl">
         <div className="border-b border-line px-6 pt-5">
-          <h2 className="mb-4 text-lg font-semibold text-slate-900">Nuevo Error</h2>
+          <h2 className="mb-4 text-lg font-semibold text-slate-900">
+            {isEdit ? 'Editar Error' : 'Nuevo Error'}
+          </h2>
           <div className="flex gap-1">
             {TABS.map((tab) => (
               <button
@@ -97,7 +99,7 @@ export default function ErrorFormModal({ onClose, onSubmit }) {
                   />
                 </div>
 
-                <div>
+                <div className="sm:col-span-2">
                   <label className="mb-1 block text-sm font-medium text-slate-700">Módulo relacionado *</label>
                   <input
                     type="text"
@@ -185,7 +187,7 @@ export default function ErrorFormModal({ onClose, onSubmit }) {
               disabled={saving}
               className="rounded-lg bg-gradient-to-r from-brand-blue to-sky-cyan px-5 py-2.5 text-sm font-semibold text-white hover:brightness-105 disabled:opacity-70"
             >
-              {saving ? 'Guardando...' : 'Guardar Error'}
+              {saving ? 'Guardando...' : isEdit ? 'Guardar cambios' : 'Guardar Error'}
             </button>
           </div>
         </form>
