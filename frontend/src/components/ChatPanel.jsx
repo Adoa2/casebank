@@ -13,10 +13,23 @@ const INITIAL_MESSAGES = [
 ]
 
 function renderTextoConNegritas(texto) {
-  const partes = texto.split(/(\*\*[^*]+\*\*)/g)
+  const partes = texto.split(/(\*\*[^*]+\*\*|https?:\/\/[^\s]+)/g)
   return partes.map((parte, idx) => {
     if (parte.startsWith('**') && parte.endsWith('**')) {
       return <strong key={idx}>{parte.slice(2, -2)}</strong>
+    }
+    if (/^https?:\/\//.test(parte)) {
+      return (
+        <a
+          key={idx}
+          href={parte}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-brand-blue underline hover:no-underline break-all"
+        >
+          {parte}
+        </a>
+      )
     }
     return <span key={idx}>{parte}</span>
   })
@@ -106,7 +119,7 @@ export default function ChatPanel({ onSelectSource }) {
                 message.role === 'user' ? 'bg-brand-blue text-white' : 'bg-paper text-ink'
               }`}
             >
-              <p className="whitespace-pre-line">{renderTextoConNegritas(message.text)}</p>
+              <p className="whitespace-pre-line break-words">{renderTextoConNegritas(message.text)}</p>
 
               {message.fuentes && message.fuentes.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-line/60 text-xs space-y-0.5">

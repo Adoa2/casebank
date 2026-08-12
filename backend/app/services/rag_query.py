@@ -177,6 +177,14 @@ encabezados tipo "Causa:" / "Solucion:"). Por ejemplo, en vez de separar
 solucionarlo, sigue estos pasos:" y luego los pasos numerados. Nunca respondas
 unicamente con la causa si el contexto tambien contiene la solucion.
 
+IMPORTANTE: Si el contexto menciona abrir un ticket, contactar a soporte, o
+incluye un enlace al sistema de tickets, NO lo menciones tu mismo ni lo
+incluyas como parte de tus pasos. El sistema agrega ese aviso por separado de
+forma automatica al final de la respuesta cuando corresponde, asi que
+mencionarlo tu tambien lo duplicaria. Si el unico paso de la solucion es
+"abrir un ticket", igual explica brevemente la causa del problema, pero omite
+esa instruccion de tus pasos numerados.
+
 Contexto del manual:
 {contexto}
 
