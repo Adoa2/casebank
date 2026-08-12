@@ -2,8 +2,8 @@
 rag_query.py
 
 Realiza busqueda semantica sobre el manual (indexado por build_vector_db.py
-en Supabase/pgvector) y genera una respuesta en lenguaje natural usando
-la API de Gemini (modelo gemini-2.5-flash).
+en Supabase/pgvector) y sobre los errores frecuentes aprobados, y genera una
+respuesta en lenguaje natural usando la API de Gemini.
 
 Uso desde terminal:
     python rag_query.py "como ingreso un estado financiero de un afiliado?"
@@ -19,6 +19,7 @@ Requisitos previos:
 
 import sys
 import os
+import re
 import time
 import requests
 import psycopg2
@@ -46,13 +47,40 @@ GEMINI_GENERATE_URL = (
 EMBED_DIMENSION = 768  # debe coincidir con el usado en build_vector_db.py
 MAX_REINTENTOS = 5
 
-N_RESULTS = 8          # candidatos iniciales a recuperar de Postgres
-DISTANCE_FACTOR = 1.3 
-MAX_CHUNKS_USADOS = 4 
+N_RESULTS = 8
+DISTANCE_FACTOR = 1.3
+MAX_CHUNKS_USADOS = 4
+MAX_DISTANCE_ABSOLUTE = 0.75
 
-# Frase fija que se le pide al modelo cuando no encuentra la respuesta en el
 FRASE_SIN_INFORMACION = "No cuento con esa información en el manual."
 SUPPORT_TICKET_URL = "https://soporte.sinteghn.com/clientes/login.php"
+
+GREETING_PATTERNS = [
+    r"^hola+!?$",
+    r"^(muy )?buen[oa]s?( d[ií]as?| tardes?| noches?)?!?$",
+    r"^hey!?$",
+    r"^hi!?$",
+    r"^(que|qu[ée]) tal!?\??$",
+    r"^como (estas|est[aá]s|andas)!?\??$",
+    r"^gracias!?$",
+    r"^muchas gracias!?$",
+    r"^(ok|okay|vale|listo|entendido)!?$",
+    r"^(adios|adi[oó]s|chao|hasta luego|nos vemos)!?$",
+]
+
+_GREETING_REGEX = re.compile("|".join(GREETING_PATTERNS), re.IGNORECASE)
+
+
+def es_saludo_o_cortesia(texto):
+    """
+    True si el mensaje es un saludo, agradecimiento o despedida simple, sin
+    contenido tecnico real. Se usa para evitar la busqueda vectorial (y el
+    riesgo de arrastrar fuentes irrelevantes) en mensajes que no son
+    preguntas sobre el manual.
+    """
+    normalizado = texto.strip().lower()
+    return bool(_GREETING_REGEX.match(normalizado))
+
 
 def _post_con_reintentos(url, body):
     """POST con reintentos por rate limit (429), usado tanto para embed como para generar."""
@@ -156,9 +184,38 @@ def filtrar_por_relevancia(chunks, factor=DISTANCE_FACTOR, max_chunks=MAX_CHUNKS
     return relevantes[:max_chunks]
 
 
-def build_prompt(pregunta, chunks):
+def build_prompt(pregunta, chunks, incluir_aviso_ticket):
     """Arma el prompt para el LLM combinando la pregunta con el contexto recuperado."""
+    if not chunks:
+        return f"""Eres Casey, el asistente virtual de CaseBank. Tu tono es calido, cercano
+y servicial, como el de un companero de trabajo.
+
+No se encontro ningun contenido del manual ni de soluciones registradas
+relacionado con este mensaje.
+
+Si el mensaje es un saludo, agradecimiento, despedida o charla casual (no una
+pregunta real sobre el sistema), respondele de forma breve, calida y natural.
+
+Si en cambio es una pregunta real sobre el uso del sistema CaseBank pero no
+hay informacion disponible para responderla, responde UNICAMENTE con esta
+frase exacta, sin agregar nada mas: "{FRASE_SIN_INFORMACION}"
+
+Mensaje del usuario: {pregunta}
+
+Responde en espanol:"""
+
     contexto = "\n\n---\n\n".join(c["documento"] for c in chunks)
+
+    aviso_ticket = ""
+    if incluir_aviso_ticket:
+        aviso_ticket = f"""
+
+IMPORTANTE: El contexto menciona abrir un ticket, contactar a soporte, o un
+enlace al sistema de tickets. NO lo menciones tu mismo ni lo incluyas como
+parte de tus pasos numerados. El sistema agrega ese aviso por separado, de
+forma automatica, al final de la respuesta. Si el unico paso de la solucion
+es "abrir un ticket", igual explica brevemente la causa del problema, pero
+omite esa instruccion de tus pasos."""
 
     prompt = f"""Eres Casey, el asistente virtual de CaseBank. Respondes preguntas sobre el uso
 del sistema con base en el Manual de Usuario y en soluciones registradas por soporte.
@@ -175,15 +232,7 @@ explicacion fluida y conversacional (no como una plantilla rigida con
 encabezados tipo "Causa:" / "Solucion:"). Por ejemplo, en vez de separar
 "Causa: X. Solucion: Y", escribe algo como "Eso pasa porque X. Para
 solucionarlo, sigue estos pasos:" y luego los pasos numerados. Nunca respondas
-unicamente con la causa si el contexto tambien contiene la solucion.
-
-IMPORTANTE: Si el contexto menciona abrir un ticket, contactar a soporte, o
-incluye un enlace al sistema de tickets, NO lo menciones tu mismo ni lo
-incluyas como parte de tus pasos. El sistema agrega ese aviso por separado de
-forma automatica al final de la respuesta cuando corresponde, asi que
-mencionarlo tu tambien lo duplicaria. Si el unico paso de la solucion es
-"abrir un ticket", igual explica brevemente la causa del problema, pero omite
-esa instruccion de tus pasos numerados.
+unicamente con la causa si el contexto tambien contiene la solucion.{aviso_ticket}
 
 Contexto del manual:
 {contexto}
@@ -230,27 +279,24 @@ def answer_question(question):
     relacionadas.
 
     Devuelve un diccionario con las llaves: respuesta, fuentes, imagenes.
-    Esta funcion ya queda lista para ser importada directamente en un
-    endpoint de FastAPI (por ejemplo /api/chat).
     """
-    chunks = search_relevant_chunks(question)
+    if es_saludo_o_cortesia(question):
+        prompt = build_prompt(question, [], incluir_aviso_ticket=False)
+        respuesta = call_gemini_generate(prompt)
+        return {"respuesta": respuesta, "fuentes": [], "imagenes": []}
 
-    if not chunks:
-        return {
-            "respuesta": "No se encontro informacion relevante en el manual para esta pregunta.",
-            "fuentes": [],
-            "imagenes": [],
-        }
+    chunks_crudos = search_relevant_chunks(question)
+    chunks_relevantes = filtrar_por_relevancia(chunks_crudos)
+    chunks = [c for c in chunks_relevantes if c["distance"] <= MAX_DISTANCE_ABSOLUTE]
 
-    chunks = filtrar_por_relevancia(chunks)
+    requiere_ticket = any(c["metadata"].get("requiere_ticket") for c in chunks)
 
-    prompt = build_prompt(question, chunks)
+    prompt = build_prompt(question, chunks, incluir_aviso_ticket=requiere_ticket)
     respuesta = call_gemini_generate(prompt)
 
-    # Si el modelo determino que el contexto no responde la pregunta, no
     sin_informacion = _respuesta_indica_sin_informacion(respuesta)
 
-    if sin_informacion:
+    if sin_informacion or not chunks:
         fuentes = []
         imagenes = []
     else:
@@ -258,7 +304,7 @@ def answer_question(question):
         for c in chunks:
             meta = c["metadata"]
             if meta["origen"] == "error":
-                continue  # los errores frecuentes aportan contenido a la respuesta, pero no se citan como fuente
+                continue  # los errores frecuentes aportan contenido, pero no se citan como fuente
             fuentes.append({
                 "seccion_id": meta["seccion_id"],
                 "titulo": meta["titulo"],
@@ -270,7 +316,6 @@ def answer_question(question):
             imagenes_raw.extend(c["metadata"].get("imagenes") or [])
         imagenes = list(dict.fromkeys(imagenes_raw))  # sin duplicados, conserva el orden
 
-        requiere_ticket = any(c["metadata"].get("requiere_ticket") for c in chunks)
         if requiere_ticket:
             respuesta = (
                 respuesta.rstrip()
