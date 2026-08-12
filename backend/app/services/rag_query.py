@@ -50,7 +50,7 @@ MAX_REINTENTOS = 5
 N_RESULTS = 8
 DISTANCE_FACTOR = 1.3
 MAX_CHUNKS_USADOS = 4
-MAX_DISTANCE_ABSOLUTE = 0.75
+MAX_DISTANCE_ABSOLUTE = 0.55
 
 FRASE_SIN_INFORMACION = "No cuento con esa información en el manual."
 SUPPORT_TICKET_URL = "https://soporte.sinteghn.com/clientes/login.php"
@@ -66,6 +66,11 @@ GREETING_BASES = [
     r"muchas gracias",
     r"(ok|okay|vale|listo|entendido)",
     r"(adios|adi[oó]s|chao|hasta luego|nos vemos)",
+    r"(muy )?bien(,)?\s*(y\s*(tu|usted|vos))?",
+    r"todo bien(,)?\s*(y\s*(tu|usted|vos))?",
+    r"(mas|m[aá]s) o menos",
+    r"por aqui( todo bien)?",
+    r"(y\s*)?(tu|usted|vos)( que tal| como estas| c[oó]mo est[aá]s)?",
 ]
 _SUFIJO_NOMBRE = r"(\s+casey(\s+bot)?)?"
 
