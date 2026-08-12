@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-export default function ManualSidebar({ chapters, loading, error, selectedId, onSelect }) {
+export default function ManualSidebar({ chapters, loading, error, selectedId, resetSignal, onSelect }) {
   const [openChapters, setOpenChapters] = useState(new Set())
   const [query, setQuery] = useState('')
   const itemRefs = useRef({})
+
+  useEffect(() => {
+    setQuery('')
+  }, [resetSignal])
 
   // Al llegar el primer manual cargado, abre el primer capitulo por defecto.
   useEffect(() => {
@@ -80,7 +84,6 @@ export default function ManualSidebar({ chapters, loading, error, selectedId, on
   const canGoNext = currentIndex !== -1 && currentIndex < flatSections.length - 1
 
   // Cada vez que cambia la seccion seleccionada (clic manual, buscador,
-
   useEffect(() => {
     const el = itemRefs.current[selectedId]
     if (el) {
@@ -109,8 +112,8 @@ export default function ManualSidebar({ chapters, loading, error, selectedId, on
       {/* Contenedor fijo: header + buscador. Al quedar sticky en la parte
           superior, nunca lo tapa la lista del indice al desplegarse hacia
           abajo. */}
-      <div className="sticky top-0 z-10 bg-white px-4 py-4 border-b border-line">
-        <h2 className="font-display text-sm font-semibold text-slate uppercase tracking-wide">Índice del manual</h2>
+      <div className="sticky top-0 z-10 bg-white px-5 py-5 border-b border-line">
+        <h2 className="font-display text-sm font-semibold text-blue-950 uppercase tracking-wide">Índice del manual</h2>
 
         <div className="relative mt-3">
           <input
@@ -118,8 +121,12 @@ export default function ManualSidebar({ chapters, loading, error, selectedId, on
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar en el manual..."
-            className="w-full text-sm rounded-lg border border-line px-3 py-2 outline-none focus:border-brand-blue focus:ring-[3px] focus:ring-brand-blue/15 transition"
+            className="w-full text-sm rounded-lg border border-line py-2.5 pl-3 pr-10 outline-none focus:border-brand-blue focus:ring-[3px] focus:ring-brand-blue/15 transition"
           />
+          <svg className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <circle cx="11" cy="11" r="6" />
+            <path d="m16 16 4 4" />
+          </svg>
 
           {query.trim() && (
             <div className="absolute left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-lg border border-line bg-white shadow-lg z-20">
@@ -143,15 +150,15 @@ export default function ManualSidebar({ chapters, loading, error, selectedId, on
         </div>
       </div>
 
-      <ul className="py-2">
+      <ul>
         {chapters.map((chapter) => {
           const isOpen = openChapters.has(chapter.id)
           return (
-            <li key={chapter.id} className="px-2">
+            <li key={chapter.id} className="border-b border-line px-3 py-2">
               <button
                 type="button"
                 onClick={() => toggleChapter(chapter.id)}
-                className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left text-sm font-medium text-ink hover:bg-brand-blue/5 transition cursor-pointer"
+                className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left text-sm font-semibold text-blue-950 hover:bg-brand-blue/5 transition cursor-pointer"
               >
                 <span>{chapter.title}</span>
                 <span className={`text-slate transition-transform ${isOpen ? 'rotate-90' : ''}`}>{'\u203A'}</span>
@@ -190,7 +197,7 @@ export default function ManualSidebar({ chapters, loading, error, selectedId, on
         })}
       </ul>
 
-      <div className="sticky bottom-0 z-10 bg-white border-t border-line px-4 py-3 flex items-center justify-between gap-2 shadow-[0_-4px_10px_-6px_rgba(15,23,42,0.08)]">
+      <div className="sticky bottom-0 z-10 bg-white border-t border-line px-4 py-4 flex items-center justify-between gap-2 shadow-[0_-4px_10px_-6px_rgba(15,23,42,0.08)]">
         <button
           type="button"
           onClick={() => goToIndex(currentIndex - 1)}

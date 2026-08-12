@@ -1,19 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import Header from '../components/Header'
-import PageToolbar from '../components/PageToolbar'
 import ManualSidebar from '../components/ManualSidebar'
 import ManualContent from '../components/ManualContent'
 import ChatPanel from '../components/ChatPanel'
 import { API_BASE_URL } from '../config'
 import { authHeaders } from '../api/authToken'
 import { buildManualTree } from '../utils/manualTree'
-import AuthImage from '../components/AuthImage'
 
 export default function DashboardView({ onLogout }) {
   const [selected, setSelected] = useState({ chapter: null, subchapter: null })
   const [chapters, setChapters] = useState([])
   const [manualLoading, setManualLoading] = useState(true)
   const [manualError, setManualError] = useState(null)
+  const [homeResetSignal, setHomeResetSignal] = useState(0)
 
   useEffect(() => {
     let cancelado = false
@@ -48,6 +47,7 @@ export default function DashboardView({ onLogout }) {
     }
   }, [])
 
+  // Lista plana de todas las subsecciones, con referencia a su capitulo.
   const flatSections = useMemo(() => {
     const flat = []
     for (const chapter of chapters) {
@@ -62,10 +62,13 @@ export default function DashboardView({ onLogout }) {
     setSelected({ chapter, subchapter })
   }
 
+  // Vuelve al carrusel de bienvenida. Se llama al hacer clic en el header.
   function goHome() {
     setSelected({ chapter: null, subchapter: null })
+    setHomeResetSignal((current) => current + 1)
   }
 
+  // Llamado cuando el usuario hace clic en una fuente citada por el chat.
   function handleSelectSource(seccionId) {
     const targetId = `sec-${seccionId}`
     const item = flatSections.find(({ subchapter }) => subchapter.id === targetId)
@@ -78,25 +81,30 @@ export default function DashboardView({ onLogout }) {
     <div className="h-screen flex flex-col">
       <Header onLogout={onLogout} onGoHome={goHome} />
 
-      <div className="flex-1 flex min-h-0">
-        <div className="hidden md:block w-[280px] flex-shrink-0 border-r border-line min-h-0">
+      <div className="flex-1 flex min-h-0 bg-white">
+        <div className="hidden md:block w-[270px] flex-shrink-0 border-r border-line min-h-0">
           <ManualSidebar
             chapters={chapters}
             loading={manualLoading}
             error={manualError}
             selectedId={selected.subchapter?.id}
+            resetSignal={homeResetSignal}
             onSelect={handleSelect}
           />
         </div>
 
-        <div className="flex-1 flex flex-col min-h-0">
-          <PageToolbar onGoHome={goHome} />
-          <ManualContent chapter={selected.chapter} subchapter={selected.subchapter} />
-        </div>
+        <ManualContent chapter={selected.chapter} subchapter={selected.subchapter} />
 
-        <div className="hidden xl:block w-[340px] flex-shrink-0 border-l border-line min-h-0">
+        <div className="hidden xl:block w-[360px] flex-shrink-0 border-l border-line min-h-0">
           <ChatPanel onSelectSource={handleSelectSource} />
         </div>
       </div>
+
+      <footer className="hidden min-h-[54px] flex-shrink-0 items-center gap-3 border-t border-blue-100 bg-blue-50/80 px-7 text-sm text-slate md:flex">
+        <span className="grid h-8 w-8 place-items-center rounded-lg bg-blue-100 text-brand-blue" aria-hidden="true">💡</span>
+        <strong className="text-brand-blue">Consejo:</strong>
+        <span>Puedes buscar en el índice, leer el manual o preguntarle a Casey. Él está aquí para ayudarte.</span>
+      </footer>
     </div>
-  )}
+  )
+}

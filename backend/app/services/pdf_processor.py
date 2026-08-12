@@ -7,24 +7,72 @@ import json
 PRIMERA_PAGINA_CONTENIDO = 9
 # Ignora imágenes decorativas
 MIN_ICON_SIZE = 15  # px
+# Los PDF del manual incluyen iconos cuadrados de 40x40 usados como
+# viñetas/numeración. No aportan información al lector y al ampliarlos se
+# pixelan, por lo que se excluyen sin afectar capturas angostas.
+MAX_DECORATIVE_ICON_PX = 64
 RENDER_FULL_PAGE = False
+
+# Umbral de fusion de parrafos: si un bloque de texto arranca a menos de
+# este porcentaje de la altura de linea del bloque anterior, se considera
+# continuacion del mismo parrafo (y se une con espacio en vez de salto de
+# linea). Ajustar si fusiona de mas o de menos.
+UMBRAL_FUSION_PARRAFO = 0.6
 
 # Patrón para encontrar los marcadores [IMG:nombre_archivo.png] insertados
 IMG_MARKER_PATTERN = re.compile(r"\[IMG:([^\]]+)\]")
-NUMERO_PAGINA_PATTERN = re.compile(r"^\d{1,4}$")
+
+
+def normalizar_espacios(texto):
+    """Convierte espacios PDF (incluido NBSP) en espacios normales."""
+    return re.sub(r"\s+", " ", texto or "").strip()
+
+
+def bloques_forman_mismo_parrafo(anterior, actual):
+    """
+    Determina si dos bloques consecutivos son líneas del mismo párrafo.
+    Compara las últimas/primeras líneas y el tamaño de fuente, evitando
+    fusionar columnas, títulos o bloques con sangrías muy distintas.
+    """
+    if not anterior or not actual:
+        return False
+
+    bbox_anterior = anterior["ultima_linea_bbox"]
+    bbox_actual = actual["primera_linea_bbox"]
+    alto_anterior = max(1, bbox_anterior[3] - bbox_anterior[1])
+    alto_actual = max(1, bbox_actual[3] - bbox_actual[1])
+    alto_linea = max(alto_anterior, alto_actual)
+    gap_vertical = bbox_actual[1] - bbox_anterior[3]
+    diferencia_sangria = abs(bbox_actual[0] - bbox_anterior[0])
+    fuentes_compatibles = abs(actual["font_size"] - anterior["font_size"]) <= 1.0
+
+    return (
+        -alto_linea * 0.25 <= gap_vertical <= alto_linea * UMBRAL_FUSION_PARRAFO
+        and diferencia_sangria <= alto_linea * 1.5
+        and fuentes_compatibles
+    )
+
+# ---------------------------------------------------------------------------
 
 
 def extract_page_content(page, page_num, images_dir, min_size=MIN_ICON_SIZE):
     """
-    Recorre los bloques de la página en orden de lectura y devuelve un
-    único string con el texto de la página y marcadores [IMG:nombre.png]
-    insertados en el punto donde aparecía cada imagen.
+    Recorre los bloques de la página en orden de lectura (de arriba hacia
+    abajo, izquierda a derecha) y devuelve un único string con el texto de
+    la página y marcadores [IMG:nombre_archivo.png] insertados exactamente
+    en el punto donde aparecía cada imagen incrustada.
 
-    Fusiona bloques de texto consecutivos que estan muy cerca verticalmente
-    (misma linea de flujo partida en bloques separados por el PDF), excepto
-    cuando el bloque es un numero de pagina suelto: esos siempre quedan
-    aislados en su propia pieza, para que el frontend pueda detectarlos como
-    marcador de fin de pagina.
+    Ademas de unir las lineas dentro de un mismo bloque con espacio (y
+    limpiar espacios raros como &nbsp;/\\xa0), fusiona bloques de texto
+    CONSECUTIVOS que estan muy cerca verticalmente entre si, ya que en
+    algunos PDFs (tipicamente los exportados desde Word) cada linea visual
+    de un mismo parrafo queda como un bloque de texto independiente en vez
+    de quedar agrupada como varias "lines" dentro de un unico bloque.
+
+    NOTA DE RENDIMIENTO: se usa page.get_text("dict") en vez de
+    get_images() + get_image_rects(). Ese segundo método es MUY lento en
+    páginas con capturas grandes; get_text("dict") ya trae la posición
+    (bbox) y los bytes de la imagen listos para guardar.
     """
     blocks = page.get_text("dict")["blocks"]
 
@@ -34,50 +82,69 @@ def extract_page_content(page, page_num, images_dir, min_size=MIN_ICON_SIZE):
 
     piezas = []
     idx_icono = 0
-    ultimo_bbox_texto = None
+    ultimo_bloque_texto = None
 
     for block in blocks_ordenados:
         if block.get("type") == 0:  # bloque de texto
             lineas = []
+            tamanos_fuente = []
             for line in block.get("lines", []):
                 texto_linea = ""
                 for span in line.get("spans", []):
                     texto_linea += span.get("text", "")
-                texto_linea = re.sub(r"\s+", " ", texto_linea).strip()
+                    if span.get("text", "").strip():
+                        tamanos_fuente.append(float(span.get("size", 0)))
+                # Colapsa cualquier tipo de espacio (incluyendo &nbsp;/\xa0)
+                # a un espacio normal, y quita sobrantes al borde.
+                texto_linea = normalizar_espacios(texto_linea)
                 if texto_linea:
-                    lineas.append(texto_linea)
+                    lineas.append({"texto": texto_linea, "bbox": line["bbox"]})
 
             if not lineas:
                 continue
 
-            texto_bloque = " ".join(lineas)
-            bbox = block["bbox"]
-            es_numero_pagina = bool(NUMERO_PAGINA_PATTERN.match(texto_bloque))
+            texto_bloque = " ".join(linea["texto"] for linea in lineas)
+            bloque_actual = {
+                "texto": texto_bloque,
+                "bbox": block["bbox"],
+                "primera_linea_bbox": lineas[0]["bbox"],
+                "ultima_linea_bbox": lineas[-1]["bbox"],
+                "font_size": sum(tamanos_fuente) / len(tamanos_fuente) if tamanos_fuente else 0,
+            }
 
-            fusionar = False
-            if (
-                not es_numero_pagina
-                and piezas
-                and ultimo_bbox_texto is not None
+            # Heuristica de fusion de parrafo: si el bloque anterior en
+            # piezas tambien era texto (no una imagen) y este bloque arranca
+            # muy cerca verticalmente respecto a donde termino el anterior,
+            # se asume que es la misma linea de flujo/parrafo continuando,
+            # y se fusiona con espacio en vez de agregarse como pieza nueva
+            # (lo que generaria un salto de linea de mas al renderizar).
+            fusionar = (
+                piezas
                 and not piezas[-1].startswith("[IMG:")
-            ):
-                gap = bbox[1] - ultimo_bbox_texto[3]
-                alto_linea = ultimo_bbox_texto[3] - ultimo_bbox_texto[1]
-                if alto_linea > 0 and gap < alto_linea * 0.6:
-                    fusionar = True
+                and bloques_forman_mismo_parrafo(ultimo_bloque_texto, bloque_actual)
+            )
 
             if fusionar:
                 piezas[-1] = piezas[-1] + " " + texto_bloque
             else:
                 piezas.append(texto_bloque)
-            ultimo_bbox_texto = None if es_numero_pagina else bbox
+
+            ultimo_bloque_texto = bloque_actual
 
         elif block.get("type") == 1:  # bloque de imagen
             bbox = block["bbox"]
             width = bbox[2] - bbox[0]
             height = bbox[3] - bbox[1]
             if width < min_size or height < min_size:
-                continue
+                continue  # descarta decoraciones diminutas
+
+            pixel_width = block.get("width", width)
+            pixel_height = block.get("height", height)
+            if (
+                pixel_width <= MAX_DECORATIVE_ICON_PX
+                and pixel_height <= MAX_DECORATIVE_ICON_PX
+            ):
+                continue  # descarta iconos de viñetas o numeración
 
             img_bytes = block.get("image")
             ext = block.get("ext", "png")
@@ -94,9 +161,16 @@ def extract_page_content(page, page_num, images_dir, min_size=MIN_ICON_SIZE):
             except Exception as e:
                 print(f"No se pudo guardar imagen en página {page_num + 1}: {e}")
 
-            ultimo_bbox_texto = None
+            # Una imagen corta la continuidad del parrafo: el proximo
+            # bloque de texto no debe fusionarse "a traves" de la imagen
+            # con el texto de antes.
+            ultimo_bloque_texto = None
 
-    return "\n".join(piezas)
+    # El doble salto representa exclusivamente un límite real entre
+    # párrafos o una imagen. El frontend puede renderizarlo sin reproducir
+    # los saltos visuales internos que trae el PDF.
+    return "\n\n".join(piezas)
+
 
 def process_pdf_high_performance(pdf_path: str, output_dir: str):
     print(f"Abriendo documento maestro: {pdf_path}")
@@ -178,7 +252,9 @@ def process_pdf_high_performance(pdf_path: str, output_dir: str):
 
         for p in range(pagina_inicio, pagina_fin + 1):
             if p in pages_content:
-                texto_seccion += pages_content[p] + "\n\n"
+                contenido_pagina = pages_content[p].strip()
+                if contenido_pagina:
+                    texto_seccion += contenido_pagina + "\n\n"
             if RENDER_FULL_PAGE and pages_full_render.get(p):
                 capturas_seccion.append(pages_full_render[p])
 

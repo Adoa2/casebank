@@ -1,15 +1,5 @@
 // frontend/src/utils/manualTree.js
 
-/**
- * Convierte la lista plana de secciones (tal como viene de GET /api/manual)
- * en un arbol de 2 niveles: capitulos (nivel 1) -> subcapitulos.
- *
- * El manual real tiene hasta 4 niveles de jerarquia (nivel 1 a 4), pero el
- * sidebar actual solo maneja 2 (capitulo con lista de subcapitulos). En vez
- * de reescribir el sidebar como arbol recursivo, se aplanan los niveles 2/3/4
- * dentro del capitulo correspondiente, conservando el numero de nivel real
- * en cada subcapitulo para poder indentarlo visualmente.
- */
 export function buildManualTree(secciones) {
   const chapters = []
   let currentChapter = null
