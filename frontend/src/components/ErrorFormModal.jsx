@@ -5,14 +5,11 @@ const TABS = [
   { id: 'solucion', label: 'Solución' },
 ]
 
-const NIVEL_OPTIONS = ['Básico', 'Intermedio', 'Avanzado']
-
 export default function ErrorFormModal({ onClose, onSubmit }) {
   const [activeTab, setActiveTab] = useState('general')
 
   const [titulo, setTitulo] = useState('')
   const [modulo, setModulo] = useState('')
-  const [nivel, setNivel] = useState('')
   const [palabrasClave, setPalabrasClave] = useState('')
   const [descripcion, setDescripcion] = useState('')
   const [causa, setCausa] = useState('')
@@ -50,7 +47,7 @@ export default function ErrorFormModal({ onClose, onSubmit }) {
         solucion: solucion.trim(),
         procedimiento: procedimiento.trim() || null,
         palabras_clave: palabrasClave.trim() || null,
-        nivel: nivel || null,
+        nivel: null,
       })
     } catch (err) {
       setError(err.message || 'No se pudo guardar el error.')
@@ -109,22 +106,6 @@ export default function ErrorFormModal({ onClose, onSubmit }) {
                     placeholder="Ej. Créditos"
                     className="w-full rounded-lg border border-line px-3 py-2.5 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                   />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Nivel</label>
-                  <select
-                    value={nivel}
-                    onChange={(e) => setNivel(e.target.value)}
-                    className="w-full rounded-lg border border-line px-3 py-2.5 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-                  >
-                    <option value="">Sin especificar</option>
-                    {NIVEL_OPTIONS.map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
                 </div>
 
                 <div className="sm:col-span-2">

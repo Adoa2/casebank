@@ -147,11 +147,6 @@ export default function ErrorDetail({ error, canReview, onBack, onReview }) {
           </div>
 
           <div className="rounded-xl border border-line p-4">
-            <h3 className="mb-2 text-sm font-semibold text-slate-700">Nivel</h3>
-            <p className="text-sm text-slate-600">{error.nivel || 'No especificado.'}</p>
-          </div>
-
-          <div className="rounded-xl border border-line p-4">
             <h3 className="mb-2 text-sm font-semibold text-slate-700">Registrado</h3>
             <p className="text-sm text-slate-600">
               {formatDate(error.created_at)}
