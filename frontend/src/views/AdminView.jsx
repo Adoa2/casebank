@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Header from '../components/Header'
 import AdminSidebar from '../components/AdminSidebar'
 import UsersSection from '../components/UsersSection'
+import ErrorsSection from '../components/ErrorsSection'
 
 const SECTION_LABELS = {
   dashboard: 'Dashboard',
@@ -27,9 +28,10 @@ export default function AdminView({ onLogout, onGoDashboard }) {
         <AdminSidebar activeSection={activeSection} onSelectSection={setActiveSection} />
 
         <div className="flex-1 min-h-0 overflow-y-auto p-8">
-          {activeSection === 'usuarios' ? (
-            <UsersSection />
-          ) : (
+          {activeSection === 'usuarios' && <UsersSection />}
+          {activeSection === 'errores-frecuentes' && <ErrorsSection />}
+
+          {activeSection !== 'usuarios' && activeSection !== 'errores-frecuentes' && (
             <>
               <h1 className="mb-1 text-xl font-semibold text-slate-900">
                 {SECTION_LABELS[activeSection]}
