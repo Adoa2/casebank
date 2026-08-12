@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import Header from '../components/Header'
+import PageToolbar from '../components/PageToolbar'
 import ManualSidebar from '../components/ManualSidebar'
 import ManualContent from '../components/ManualContent'
 import ChatPanel from '../components/ChatPanel'
@@ -47,7 +48,6 @@ export default function DashboardView({ onLogout }) {
     }
   }, [])
 
-  // Lista plana de todas las subsecciones, con referencia a su capitulo.
   const flatSections = useMemo(() => {
     const flat = []
     for (const chapter of chapters) {
@@ -62,12 +62,10 @@ export default function DashboardView({ onLogout }) {
     setSelected({ chapter, subchapter })
   }
 
-  // Vuelve al carrusel de bienvenida. Se llama al hacer clic en el header.
   function goHome() {
     setSelected({ chapter: null, subchapter: null })
   }
 
-  // Llamado cuando el usuario hace clic en una fuente citada por el chat.
   function handleSelectSource(seccionId) {
     const targetId = `sec-${seccionId}`
     const item = flatSections.find(({ subchapter }) => subchapter.id === targetId)
@@ -79,6 +77,7 @@ export default function DashboardView({ onLogout }) {
   return (
     <div className="h-screen flex flex-col">
       <Header onLogout={onLogout} onGoHome={goHome} />
+      <PageToolbar onGoHome={goHome} />
 
       <div className="flex-1 flex min-h-0">
         <div className="hidden md:block w-[280px] flex-shrink-0 border-r border-line min-h-0">
