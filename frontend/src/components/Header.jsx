@@ -1,6 +1,6 @@
 import logo from '../assets/logo.png'
 
-export default function Header({ onLogout, onGoHome, isAdmin = false, onGoAdmin }) {
+export default function Header({ onLogout, onGoHome, isAdmin = false, onGoAdmin, showSupport = true }) {
   function handleHomeClick(e) {
     e.stopPropagation()
     onGoHome()
@@ -15,6 +15,8 @@ export default function Header({ onLogout, onGoHome, isAdmin = false, onGoAdmin 
     e.stopPropagation()
     onLogout()
   }
+
+  
 
   return (
     <header
@@ -49,18 +51,22 @@ export default function Header({ onLogout, onGoHome, isAdmin = false, onGoAdmin 
             <span className="hidden sm:inline">Admin</span>
           </button>
         )}
-          <a href="https://soporte.sinteghn.com/clientes/login.php"
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/60 sm:px-3"
-        >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" />
-            <path d="M8.5 9a3.5 3.5 0 1 1 5.7 2.7c-1.3 1-2.2 1.5-2.2 3M12 18h.01" />
-          </svg>
-          <span className="hidden sm:inline">Soporte</span>
-        </a>
+        
+        {showSupport && (
+          
+          <a  href="https://soporte.sinteghn.com/clientes/login.php"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/60 sm:px-3"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M8.5 9a3.5 3.5 0 1 1 5.7 2.7c-1.3 1-2.2 1.5-2.2 3M12 18h.01" />
+            </svg>
+            <span className="hidden sm:inline">Soporte</span>
+          </a>
+        )}
 
         <button
           type="button"

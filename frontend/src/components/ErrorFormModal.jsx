@@ -16,6 +16,7 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
   const [causa, setCausa] = useState(initialData?.causa || '')
   const [solucion, setSolucion] = useState(initialData?.solucion || '')
   const [procedimiento, setProcedimiento] = useState(initialData?.procedimiento || '')
+  const [requiereTicket, setRequiereTicket] = useState(initialData?.requiere_ticket || false)
 
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -48,6 +49,7 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
         solucion: solucion.trim(),
         procedimiento: procedimiento.trim() || null,
         palabras_clave: palabrasClave.trim() || null,
+        requiere_ticket: requiereTicket,
       })
     } catch (err) {
       setError(err.message || 'No se pudo guardar el error.')
@@ -169,6 +171,20 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
                     placeholder="Procedimiento detallado, si aplica..."
                     className="w-full resize-none rounded-lg border border-line px-3 py-2.5 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                   />
+                </div>
+                <div className="flex items-start gap-2 rounded-lg border border-line bg-slate-50 px-3 py-3">
+                  <input
+                    id="requiereTicket"
+                    type="checkbox"
+                    checked={requiereTicket}
+                    onChange={(e) => setRequiereTicket(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-line text-brand-blue focus:ring-brand-blue/20"
+                  />
+                  <label htmlFor="requiereTicket" className="text-sm text-slate-600">
+                    <span className="font-medium text-slate-700">Requiere ticket de soporte</span>
+                    <br />
+                    Cuando el asistente use esta solución para responder, agregará automáticamente el enlace para abrir un ticket.
+                  </label>
                 </div>
               </div>
             )}

@@ -22,7 +22,7 @@ export default function AdminView({ onLogout, onGoDashboard }) {
 
   return (
     <div className="h-screen flex flex-col">
-      <Header onLogout={onLogout} onGoHome={onGoDashboard} />
+      <Header onLogout={onLogout} onGoHome={onGoDashboard} showSupport={false} />
 
       <div className="flex-1 flex min-h-0 bg-white">
         <AdminSidebar activeSection={activeSection} onSelectSection={setActiveSection} />

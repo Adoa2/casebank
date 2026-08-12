@@ -53,6 +53,7 @@ class ErrorReport(Base):
     procedimiento = Column(String, nullable=True)
     palabras_clave = Column(String, nullable=True)
     nivel = Column(String, nullable=True)
+    requiere_ticket = Column(Boolean, default=False, nullable=False)
     estado = Column(String, default="pendiente", nullable=False)  # pendiente | aprobado | rechazado
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)

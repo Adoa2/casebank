@@ -98,7 +98,7 @@ export default function ErrorDetail({ error, canReview, canEdit, onBack, onRevie
                 type="button"
                 onClick={handleDelete}
                 disabled={deleting}
-                className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-brand-red hover:bg-red-50 disabled:opacity-50"
+                className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
               >
                 {deleting ? 'Eliminando...' : 'Eliminar'}
               </button>
@@ -111,7 +111,7 @@ export default function ErrorDetail({ error, canReview, canEdit, onBack, onRevie
                 type="button"
                 onClick={() => handleReview(false)}
                 disabled={reviewing}
-                className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
               >
                 Rechazar
               </button>
@@ -192,9 +192,20 @@ export default function ErrorDetail({ error, canReview, canEdit, onBack, onRevie
       )}
 
       {activeTab === 'solucion' && (
-        <div className="rounded-xl border border-line p-4">
-          <h3 className="mb-2 text-sm font-semibold text-slate-700">Solución</h3>
-          <p className="whitespace-pre-wrap text-sm text-slate-600">{error.solucion}</p>
+        <div className="space-y-4">
+          <div className="rounded-xl border border-line p-4">
+            <h3 className="mb-2 text-sm font-semibold text-slate-700">Solución</h3>
+            <p className="whitespace-pre-wrap text-sm text-slate-600">{error.solucion}</p>
+          </div>
+
+          {error.requiere_ticket && (
+            <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-brand-blue">
+              <svg className="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M9 12h6m-6 4h6M9 8h1M5 20V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v14l-3-2-2 2-2-2-2 2-2-2-3 2Z" />
+              </svg>
+              Este error requiere que el usuario abra un ticket de soporte. El asistente incluirá el enlace automáticamente al responder.
+            </div>
+          )}
         </div>
       )}
 

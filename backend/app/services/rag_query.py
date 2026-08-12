@@ -52,7 +52,7 @@ MAX_CHUNKS_USADOS = 4
 
 # Frase fija que se le pide al modelo cuando no encuentra la respuesta en el
 FRASE_SIN_INFORMACION = "No cuento con esa información en el manual."
-
+SUPPORT_TICKET_URL = "https://soporte.sinteghn.com/clientes/login.php"
 
 def _post_con_reintentos(url, body):
     """POST con reintentos por rate limit (429), usado tanto para embed como para generar."""
@@ -98,13 +98,16 @@ def search_relevant_chunks(pregunta, n_results=N_RESULTS):
     cur.execute(
         """
         SELECT 'manual' AS origen, seccion_id, titulo, pagina_inicio, pagina_fin, contenido, imagenes,
+               FALSE AS requiere_ticket,
                embedding <=> %s::vector AS distance
         FROM manual_chunks
         UNION ALL
-        SELECT 'error' AS origen, error_id::text AS seccion_id, NULL::text AS titulo, NULL::integer AS pagina_inicio,
-               NULL::integer AS pagina_fin, contenido, NULL::jsonb AS imagenes,
-               embedding <=> %s::vector AS distance
-        FROM error_chunks
+        SELECT 'error' AS origen, ec.error_id::text AS seccion_id, NULL::text AS titulo, NULL::integer AS pagina_inicio,
+               NULL::integer AS pagina_fin, ec.contenido, NULL::jsonb AS imagenes,
+               er.requiere_ticket,
+               ec.embedding <=> %s::vector AS distance
+        FROM error_chunks ec
+        JOIN error_reports er ON er.id = ec.error_id
         ORDER BY distance
         LIMIT %s;
         """,
@@ -115,7 +118,7 @@ def search_relevant_chunks(pregunta, n_results=N_RESULTS):
     conn.close()
 
     chunks = []
-    for origen, seccion_id, titulo, pagina_inicio, pagina_fin, contenido, imagenes, distance in filas:
+    for origen, seccion_id, titulo, pagina_inicio, pagina_fin, contenido, imagenes, requiere_ticket, distance in filas:
         chunks.append({
             "documento": contenido,
             "metadata": {
@@ -125,6 +128,7 @@ def search_relevant_chunks(pregunta, n_results=N_RESULTS):
                 "pagina_inicio": pagina_inicio,
                 "pagina_fin": pagina_fin,
                 "imagenes": imagenes or [],
+                "requiere_ticket": bool(requiere_ticket),
             },
             "distance": float(distance),
         })
@@ -257,6 +261,13 @@ def answer_question(question):
         for c in chunks:
             imagenes_raw.extend(c["metadata"].get("imagenes") or [])
         imagenes = list(dict.fromkeys(imagenes_raw))  # sin duplicados, conserva el orden
+
+        requiere_ticket = any(c["metadata"].get("requiere_ticket") for c in chunks)
+        if requiere_ticket:
+            respuesta = (
+                respuesta.rstrip()
+                + f"\n\nSi necesitas que se corrija directamente, abre un ticket de soporte aquí: {SUPPORT_TICKET_URL}"
+            )
 
     return {
         "respuesta": respuesta,

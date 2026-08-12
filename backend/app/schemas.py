@@ -117,6 +117,11 @@ class ErrorReportCreate(BaseModel):
     procedimiento: Optional[str] = None
     palabras_clave: Optional[str] = None
     nivel: Optional[str] = None
+    requiere_ticket: bool = Field(
+        False,
+        description="Si es True, el asistente de IA agrega automaticamente el enlace "
+                    "al sistema de tickets cuando use esta solucion para responder.",
+    )
 
 class ErrorReportUpdate(BaseModel):
     """Datos editables de un error frecuente. Todos opcionales."""
@@ -127,6 +132,7 @@ class ErrorReportUpdate(BaseModel):
     solucion: Optional[str] = None
     procedimiento: Optional[str] = None
     palabras_clave: Optional[str] = None
+    requiere_ticket: Optional[bool] = None
 
 class ErrorReportResponse(BaseModel):
     id: int
@@ -138,6 +144,7 @@ class ErrorReportResponse(BaseModel):
     procedimiento: Optional[str]
     palabras_clave: Optional[str]
     nivel: Optional[str]
+    requiere_ticket: bool
     estado: str
     created_by: int
     reviewed_by: Optional[int]
