@@ -10,7 +10,7 @@ export default function Header({ onLogout, onGoHome }) {
   return (
     <header
       onClick={onGoHome}
-      className="h-16 flex-shrink-0 flex items-center justify-between px-6 border-b border-white/10 bg-[#6a6e73] cursor-pointer"
+      className="h-16 flex-shrink-0 flex items-center justify-between px-6 border-b border-white/10 bg-[#393d42] cursor-pointer"
     >
       <div className="flex items-center gap-2.5">
         <img src={logo} alt="CaseBank" className="h-12 w-auto" />

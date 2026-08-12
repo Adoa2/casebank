@@ -77,7 +77,6 @@ export default function DashboardView({ onLogout }) {
   return (
     <div className="h-screen flex flex-col">
       <Header onLogout={onLogout} onGoHome={goHome} />
-      <PageToolbar onGoHome={goHome} />
 
       <div className="flex-1 flex min-h-0">
         <div className="hidden md:block w-[280px] flex-shrink-0 border-r border-line min-h-0">
@@ -90,12 +89,14 @@ export default function DashboardView({ onLogout }) {
           />
         </div>
 
-        <ManualContent chapter={selected.chapter} subchapter={selected.subchapter} />
+        <div className="flex-1 flex flex-col min-h-0">
+          <PageToolbar onGoHome={goHome} />
+          <ManualContent chapter={selected.chapter} subchapter={selected.subchapter} />
+        </div>
 
         <div className="hidden xl:block w-[340px] flex-shrink-0 border-l border-line min-h-0">
           <ChatPanel onSelectSource={handleSelectSource} />
         </div>
       </div>
     </div>
-  )
-}
+  )}
