@@ -3,6 +3,9 @@ import Header from '../components/Header'
 import ManualSidebar from '../components/ManualSidebar'
 import ManualContent from '../components/ManualContent'
 import ChatPanel from '../components/ChatPanel'
+import TipsCarousel from '../components/TipsCarousel'
+import caseyChatImage from '../assets/casey_chat.png'
+import caseyReadingImage from '../assets/casey_lee.png'
 import { API_BASE_URL } from '../config'
 import { authHeaders } from '../api/authToken'
 import { buildManualTree } from '../utils/manualTree'
@@ -13,6 +16,9 @@ export default function DashboardView({ onLogout, isAdmin, onGoAdmin }) {
   const [manualLoading, setManualLoading] = useState(true)
   const [manualError, setManualError] = useState(null)
   const [homeResetSignal, setHomeResetSignal] = useState(0)
+  const [manualCollapsed, setManualCollapsed] = useState(false)
+  const [chatCollapsed, setChatCollapsed] = useState(false)
+  const [mobilePanel, setMobilePanel] = useState(null)
 
   useEffect(() => {
     let cancelado = false
@@ -61,6 +67,11 @@ export default function DashboardView({ onLogout, isAdmin, onGoAdmin }) {
     setSelected({ chapter, subchapter })
   }
 
+  function handleMobileSelect(subchapter, chapter) {
+    handleSelect(subchapter, chapter)
+    setMobilePanel(null)
+  }
+
   function goHome() {
     setSelected({ chapter: null, subchapter: null })
     setHomeResetSignal((current) => current + 1)
@@ -71,37 +82,137 @@ export default function DashboardView({ onLogout, isAdmin, onGoAdmin }) {
     const item = flatSections.find(({ subchapter }) => subchapter.id === targetId)
     if (item) {
       handleSelect(item.subchapter, item.chapter)
+      setMobilePanel(null)
     }
   }
 
   return (
-    <div className="h-screen flex flex-col">
-      <Header onLogout={onLogout} onGoHome={goHome} isAdmin={isAdmin} onGoAdmin={onGoAdmin} />
+    <div className="flex h-screen h-dvh flex-col">
+      <Header onLogout={onLogout} isAdmin={isAdmin} onGoAdmin={onGoAdmin} />
 
       <div className="flex-1 flex min-h-0 bg-white">
-        <div className="hidden md:block w-[270px] flex-shrink-0 border-r border-line min-h-0">
-          <ManualSidebar
-            chapters={chapters}
-            loading={manualLoading}
-            error={manualError}
-            selectedId={selected.subchapter?.id}
-            resetSignal={homeResetSignal}
-            onSelect={handleSelect}
-          />
+        <div
+          className={`hidden min-h-0 flex-shrink-0 border-r border-line transition-[width] duration-300 md:block ${
+            manualCollapsed ? 'w-[64px]' : 'w-[360px]'
+          }`}
+        >
+          {manualCollapsed ? (
+            <div className="flex h-full items-end justify-center bg-white pb-5">
+              <div className="group relative">
+                <button
+                  type="button"
+                  onClick={() => setManualCollapsed(false)}
+                  aria-label="Mostrar menú del manual"
+                  className="h-14 w-14 overflow-hidden rounded-full border-2 border-brand-blue bg-blue-50 shadow-lg transition hover:scale-105 hover:shadow-xl focus:outline-none focus:ring-[4px] focus:ring-brand-blue/20"
+                >
+                  <img src={caseyReadingImage} alt="Casey leyendo el manual" className="h-full w-full object-cover" />
+                </button>
+                <span
+                  role="tooltip"
+                  className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 whitespace-nowrap rounded-md bg-blue-950 px-2 py-1 text-xs text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                >
+                  Mostrar menú del manual
+                </span>
+              </div>
+            </div>
+          ) : (
+            <ManualSidebar
+              chapters={chapters}
+              loading={manualLoading}
+              error={manualError}
+              selectedId={selected.subchapter?.id}
+              resetSignal={homeResetSignal}
+              onSelect={handleSelect}
+              onCollapse={() => setManualCollapsed(true)}
+            />
+          )}
         </div>
 
-        <ManualContent chapter={selected.chapter} subchapter={selected.subchapter} />
+        <ManualContent chapter={selected.chapter} subchapter={selected.subchapter} onGoHome={goHome} />
 
-        <div className="hidden xl:block w-[360px] flex-shrink-0 border-l border-line min-h-0">
-          <ChatPanel onSelectSource={handleSelectSource} />
+        <div
+          className={`hidden min-h-0 flex-shrink-0 border-l border-line transition-[width] duration-300 xl:block ${
+            chatCollapsed ? 'w-[76px]' : 'w-[360px]'
+          }`}
+        >
+          {chatCollapsed ? (
+            <div className="flex h-full items-end justify-center bg-white pb-5">
+              <div className="group relative">
+                <button
+                  type="button"
+                  onClick={() => setChatCollapsed(false)}
+                  aria-label="Abrir chat con Casey"
+                  className="relative h-14 w-14 overflow-hidden rounded-full border-2 border-brand-blue bg-blue-950 shadow-lg transition hover:scale-105 hover:shadow-xl focus:outline-none focus:ring-[4px] focus:ring-brand-blue/20"
+                >
+                  <img src={caseyChatImage} alt="Casey en el chat" className="h-full w-full object-cover" />
+                  <span className="absolute bottom-0.5 right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" aria-hidden="true" />
+                </button>
+                <span
+                  role="tooltip"
+                  className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 whitespace-nowrap rounded-md bg-blue-950 px-2 py-1 text-xs text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                >
+                  Abrir chat con Casey
+                </span>
+              </div>
+            </div>
+          ) : (
+            <ChatPanel onSelectSource={handleSelectSource} onCollapse={() => setChatCollapsed(true)} />
+          )}
         </div>
       </div>
 
-      <footer className="hidden min-h-[54px] flex-shrink-0 items-center gap-3 border-t border-blue-100 bg-blue-50/80 px-7 text-sm text-slate md:flex">
-        <span className="grid h-8 w-8 place-items-center rounded-lg bg-blue-100 text-brand-blue" aria-hidden="true">💡</span>
-        <strong className="text-brand-blue">Consejo:</strong>
-        <span>Puedes buscar en el índice, leer el manual o preguntarle a Casey. Él está aquí para ayudarte.</span>
-      </footer>
+      <div className="flex shrink-0 border-t border-blue-100 bg-white p-2 shadow-[0_-5px_16px_-10px_rgba(15,23,42,0.35)] xl:hidden">
+        <button
+          type="button"
+          onClick={() => setMobilePanel('manual')}
+          className="flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-brand-blue transition hover:bg-blue-50 md:hidden"
+        >
+          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+            <path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H11v17H7.5A3.5 3.5 0 0 0 4 22V5.5ZM20 5.5A3.5 3.5 0 0 0 16.5 2H13v17h3.5A3.5 3.5 0 0 1 20 22V5.5Z" />
+          </svg>
+          Índice del manual
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobilePanel('chat')}
+          className="flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-brand-blue transition hover:bg-blue-50"
+        >
+          <img src={caseyChatImage} alt="" className="h-7 w-7 rounded-full object-cover" />
+          Preguntar a Casey
+        </button>
+      </div>
+
+      {mobilePanel && (
+        <div
+          className="fixed inset-0 z-50 bg-blue-950/35 backdrop-blur-[1px] xl:hidden"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setMobilePanel(null)}
+        >
+          <div
+            className={`absolute inset-y-0 flex w-full max-w-[390px] flex-col bg-white shadow-2xl ${
+              mobilePanel === 'manual' ? 'left-0' : 'right-0'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {mobilePanel === 'manual' ? (
+              <ManualSidebar
+                chapters={chapters}
+                loading={manualLoading}
+                error={manualError}
+                selectedId={selected.subchapter?.id}
+                resetSignal={homeResetSignal}
+                onSelect={handleMobileSelect}
+                onCollapse={() => setMobilePanel(null)}
+              />
+            ) : (
+              <ChatPanel onSelectSource={handleSelectSource} onCollapse={() => setMobilePanel(null)} />
+            )}
+          </div>
+        </div>
+      )}
+
+      <TipsCarousel />
     </div>
   )
 }

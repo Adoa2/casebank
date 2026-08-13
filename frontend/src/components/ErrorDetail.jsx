@@ -77,10 +77,10 @@ export default function ErrorDetail({ error, canReview, canEdit, onBack, onRevie
         Errores Frecuentes
       </button>
 
-      <div className="mb-5 flex items-start justify-between">
+      <div className="mb-5 flex flex-col items-start justify-between gap-3 lg:flex-row">
         <h1 className="text-xl font-semibold text-slate-900">Error: {error.titulo}</h1>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className={`rounded-full px-3 py-1 text-xs font-medium ${ESTADO_BADGE[error.estado]}`}>
             {ESTADO_LABEL[error.estado] ?? error.estado}
           </span>
@@ -132,13 +132,13 @@ export default function ErrorDetail({ error, canReview, canEdit, onBack, onRevie
         <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</div>
       )}
 
-      <div className="mb-5 flex gap-1 border-b border-line">
+      <div className="mb-5 flex gap-1 overflow-x-auto border-b border-line">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${
+            className={`whitespace-nowrap px-4 py-2 text-sm font-medium transition-colors ${
               activeTab === tab.id
                 ? 'border-b-2 border-brand-blue text-brand-blue'
                 : 'text-slate-500 hover:text-slate-700'

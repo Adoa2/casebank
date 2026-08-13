@@ -89,11 +89,11 @@ export default function ImageLightbox({ nombreArchivo, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-ink/70 flex items-center justify-center p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/70 p-2 sm:p-6"
       onClick={onClose}
     >
       <div
-        className="relative bg-white rounded-xl shadow-xl w-full max-w-xl flex flex-col overflow-hidden"
+        className="relative flex max-h-[calc(100dvh-1rem)] w-full max-w-xl flex-col overflow-hidden rounded-xl bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-2 border-b border-line">
@@ -126,7 +126,7 @@ export default function ImageLightbox({ nombreArchivo, onClose }) {
         </div>
 
         <div
-          className="aspect-square bg-paper flex items-center justify-center p-4 overflow-hidden select-none"
+          className="flex min-h-0 flex-1 aspect-square items-center justify-center overflow-hidden bg-paper p-2 select-none sm:p-4"
           style={{ cursor: zoom > ZOOM_MIN ? (arrastrando ? 'grabbing' : 'grab') : 'default' }}
           onMouseDown={manejarMouseDown}
           onMouseMove={manejarMouseMove}

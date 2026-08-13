@@ -56,10 +56,12 @@ export default function App() {
   }
 
   return (
-    <div className="grid md:grid-cols-2 min-h-screen">
-      <BrandPanel />
+    <div className="grid min-h-screen min-h-dvh grid-cols-1 md:grid-cols-[1.5fr_1fr]">
+      <div className="hidden md:block">
+        <BrandPanel />
+      </div>
 
-      <div className="flex items-center justify-center px-6 py-10 bg-paper">
+      <div className="flex items-center justify-center bg-paper px-4 py-8 sm:px-6 sm:py-10 md:px-8">
         <div className="w-full max-w-[380px]">
           {view === 'login' && (
             <LoginView

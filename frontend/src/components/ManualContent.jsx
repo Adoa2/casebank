@@ -165,7 +165,7 @@ function ImagenManual({ nombre, titulo, onZoom, integrada = false }) {
   )
 }
 
-export default function ManualContent({ chapter, subchapter }) {
+export default function ManualContent({ chapter, subchapter, onGoHome }) {
   const [imagenActiva, setImagenActiva] = useState(null)
 
   const partes = useMemo(
@@ -182,7 +182,7 @@ export default function ManualContent({ chapter, subchapter }) {
 
   if (!subchapter) {
     return (
-      <div className="flex-1 min-w-0 overflow-y-auto px-6 py-7 manual-bg">
+      <div className="flex-1 min-w-0 overflow-y-auto px-3 py-4 manual-bg sm:px-6">
         <WelcomeCarousel />
       </div>
     )
@@ -197,18 +197,32 @@ export default function ManualContent({ chapter, subchapter }) {
   const imagenesSinInline = (subchapter.imagenes || []).filter((nombre) => !imagenesInline.has(nombre))
 
   return (
-    <main className="flex-1 min-w-0 overflow-y-auto px-5 py-7 manual-bg sm:px-8 sm:py-10">
+    <main className="flex-1 min-w-0 overflow-y-auto px-3 py-4 manual-bg sm:px-8 sm:py-8">
       <div className="mx-auto max-w-4xl">
-        <header className="mb-5 flex items-start justify-between gap-4 rounded-xl border border-line bg-white px-5 py-4 shadow-sm">
+        <header className="mb-5 flex flex-col items-start justify-between gap-4 rounded-xl border border-line bg-white px-4 py-4 shadow-sm sm:flex-row sm:px-5">
           <div>
             <h1 className="font-display text-2xl font-semibold text-ink">{chapter?.title}</h1>
             <p className="mt-1 text-base font-medium text-brand-blue">{subchapter.title}</p>
           </div>
-          {subchapter.paginaInicio != null && (
-            <span className="mt-1 shrink-0 whitespace-nowrap rounded-md border border-line px-2 py-1 text-xs text-slate">
-              Página {mostrarRangoPaginas}
-            </span>
-          )}
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={onGoHome}
+              title="Volver al inicio y limpiar la selección"
+              className="flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-medium text-brand-blue transition hover:border-brand-blue/30 hover:bg-blue-100 focus:outline-none focus:ring-[3px] focus:ring-brand-blue/15"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                <path d="m3 11 9-8 9 8" />
+                <path d="M5.5 9.5V21h13V9.5M9.5 21v-7h5v7" />
+              </svg>
+              Inicio
+            </button>
+            {subchapter.paginaInicio != null && (
+              <span className="shrink-0 whitespace-nowrap rounded-md border border-line px-2 py-1 text-xs text-slate">
+                Página {mostrarRangoPaginas}
+              </span>
+            )}
+          </div>
         </header>
 
         {bloques.length > 0 ? (

@@ -53,8 +53,8 @@ export default function UserFormModal({ mode, initialData, onClose, onSubmit }) 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-2 sm:p-4">
+      <div className="max-h-[calc(100dvh-1rem)] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-4 shadow-xl sm:p-6">
         <h2 className="mb-5 text-lg font-semibold text-slate-900">
           {isEdit ? 'Editar Usuario' : 'Nuevo Usuario'}
         </h2>
@@ -153,7 +153,7 @@ export default function UserFormModal({ mode, initialData, onClose, onSubmit }) 
             </div>
           </div>
 
-          <div className="mt-6 flex justify-end gap-3">
+          <div className="mt-6 flex flex-col-reverse justify-end gap-2 sm:flex-row sm:gap-3">
             <button
               type="button"
               onClick={onClose}

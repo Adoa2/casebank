@@ -1,111 +1,166 @@
 import { useEffect, useState } from 'react'
-import flecha1 from '../assets/flecha1.png'
-import flecha2 from '../assets/flecha2.png'
-const SLIDE_DURATION_MS = 4000
+import caseyDer from '../assets/casey_der.png'
+import caseyIzq from '../assets/casey_izq.png'
+import caseyCar1 from '../assets/casey_car1.png'
+import caseyCar2 from '../assets/casey_car2.png'
 
 const SLIDES = [
   {
-    title: 'Visualiza nuestro manual',
-    description:
-      'A tu izquierda encontrarás el manual completo CASEBANK, organizado por capítulos y secciones. Ahí encontrarás cada capítulo y sección con la información necesaria para resolver tus dudas.',
-    image: flecha1,
+    image: caseyDer,
+    alt: 'Casey presenta la inteligencia artificial disponible en el panel derecho',
+    duration: 6000,
   },
   {
-    title: 'La IA a tu disposición',
-    description:
-      'A tu derecha encontrarás nuestra IA, diseñada para responder todas tus dudas relacionadas con el manual. No solo te indicará los pasos necesarios para realizar cada procedimiento, sino que también te proporcionará referencias específicas del manual para que puedas consultar la información de manera rápida y sencilla.',
-    image: flecha2,
+    image: caseyIzq,
+    alt: 'Casey presenta el manual completo disponible en el panel izquierdo',
+    duration: 6000,
   },
   {
-    title: 'Manejo de Cartera',
-    description:
-      'Manejo de cuentas de Aportaciones, Ahorros retirables, etc. y fácil parametrización de nuevos productos financieros.',
-    image: 'https://coopvinci.com/wp-content/uploads/2019/06/aportaciones-coopvinci.png',
+    image: caseyCar1,
+    alt: 'Casey explica cómo encontrar respuestas rápidamente en el manual',
+    duration: 6000,
   },
   {
-    title: 'Conexión con la banca',
-    description:
-      'Nuestros clientes pueden conectar con los servicios de la banca mediante nuestro software CASEBANK.',
-    image: 'https://media.istockphoto.com/id/962095876/es/foto/hombre-usando-banca-en-l%C3%ADnea-con-tarjeta-de-cr%C3%A9dito-en-el-dispositivo-de-pantalla-t%C3%A1ctil-banca.jpg?s=612x612&w=0&k=20&c=9Ec7VNswKfgl9Kpyw4_0GqBS9roLEhFz_RiFvrq7KsE=',
-  },
-  {
-    title: 'La solución de tus problemas es nuestra prioridad',
-    description:
-      'Nuestros sistemas son 100% personalizables, lo que significa que nos adaptamos a tu negocio de una manera fluida y permanente.',
-    image: 'https://www.holded.com/_next/image?url=%2Fimages%2Fblog%2Ferp-para-contabilidad.jpeg&w=1920&q=75&dpl=dpl_3DiuAxxubguXgZmaRbBza42NE9io',
-  },
-  {
-    title: '¿Por qué elegir CaseBank?',
-    bullets: [
-      'Diseñado para que los usuarios puedan operar sin necesidad de conocimientos técnicos avanzados.',
-      'Automatiza tareas repetitivas, reduce errores humanos y mejora la eficiencia del personal, generando ahorros significativos.',
-      'Incluye asistencia especializada y actualizaciones regulares para garantizar mejoras continuas y seguridad de la información.',
-      'Garantiza el cumplimiento de normativas contables y regulatorias con auditorías automáticas y encriptación de datos.',
-    ],
-    image: 'https://img.magnific.com/foto-gratis/hombre-expresivo-barba-camisa_273609-5928.jpg?semt=ais_test_b&w=740&q=80',
+    image: caseyCar2,
+    alt: 'Casey explica cómo solicitar soporte cuando aparece un error en el sistema',
+    duration: 6000,
   },
 ]
 
-export default function WelcomeCarousel() {
-  const [index, setIndex] = useState(0)
-  const [paused, setPaused] = useState(false)
+const STEPS = [
+  {
+    title: 'Busca en el manual',
+    description: 'Encuentra lo que necesitas fácilmente.',
+    icon: 'search',
+  },
+  {
+    title: 'Consulta el contenido',
+    description: 'Explora capítulos y procedimientos.',
+    icon: 'book',
+  },
+  {
+    title: 'Pregúntale a Casey',
+    description: 'Obtén ayuda rápida y precisa.',
+    icon: 'chat',
+  },
+]
 
-  useEffect(() => {
-    if (paused) return
+function StepIcon({ icon }) {
+  if (icon === 'search') {
+    return (
+      <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <circle cx="10.5" cy="10.5" r="6.5" />
+        <path d="m15.5 15.5 5 5" />
+      </svg>
+    )
+  }
 
-    const timer = setInterval(() => {
-      setIndex((prev) => (prev + 1) % SLIDES.length)
-    }, SLIDE_DURATION_MS)
-
-    return () => clearInterval(timer)
-  }, [paused])
-
-  const slide = SLIDES[index]
+  if (icon === 'book') {
+    return (
+      <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H11v17H7.5A3.5 3.5 0 0 0 4 22V5.5ZM20 5.5A3.5 3.5 0 0 0 16.5 2H13v17h3.5A3.5 3.5 0 0 1 20 22V5.5Z" />
+      </svg>
+    )
+  }
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div
-        className="relative border border-line rounded-xl overflow-hidden bg-white"
-        onMouseEnter={() => setPaused(true)}
-        onMouseLeave={() => setPaused(false)}
+    <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="14" rx="5" />
+      <path d="M8 11h.01M16 11h.01M9 15h6M12 2v3" />
+    </svg>
+  )
+}
+
+export default function WelcomeCarousel() {
+  const [index, setIndex] = useState(0)
+  const [isPaused, setIsPaused] = useState(false)
+  const slide = SLIDES[index]
+
+  useEffect(() => {
+    if (isPaused) return undefined
+
+    const timer = window.setTimeout(() => {
+      setIndex((current) => (current + 1) % SLIDES.length)
+    }, slide.duration)
+
+    return () => window.clearTimeout(timer)
+  }, [index, isPaused, slide.duration])
+
+  function move(direction) {
+    setIndex((current) => (current + direction + SLIDES.length) % SLIDES.length)
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-5xl">
+      <h1 className="font-display text-xl font-bold text-blue-950 sm:text-3xl">¡Bienvenido a CaseBank!</h1>
+      <p className="mt-1 text-sm text-slate sm:text-base">
+        Consulta el manual o pregúntale a Casey.
+      </p>
+
+      <section className="mt-4 grid overflow-hidden rounded-2xl border border-blue-100 bg-white px-3 py-3 shadow-sm sm:grid-cols-3 sm:px-4">
+        {STEPS.map((step, stepIndex) => (
+          <div
+            key={step.title}
+            className="relative flex items-center gap-3 px-3 py-3 sm:px-4 sm:py-1 [&:not(:last-child)]:border-b [&:not(:last-child)]:border-blue-100 sm:[&:not(:last-child)]:border-b-0 sm:[&:not(:last-child)]:border-r"
+          >
+            <span className="absolute left-3 top-1 grid h-6 w-6 place-items-center rounded-full bg-gradient-to-br from-sky-cyan to-brand-blue text-xs font-bold text-white shadow-sm sm:left-4 sm:-top-1">
+              {stepIndex + 1}
+            </span>
+            <span className="mt-3 grid h-14 w-14 shrink-0 place-items-center rounded-full bg-gradient-to-br from-sky-cyan to-blue-700 text-white shadow-md">
+              <StepIcon icon={step.icon} />
+            </span>
+            <div className="min-w-0 flex-1 pt-2">
+              <h2 className="text-sm font-bold leading-snug text-blue-950">{step.title}</h2>
+              <p className="mt-1 text-xs leading-relaxed text-slate">{step.description}</p>
+            </div>
+            {stepIndex < STEPS.length - 1 && (
+              <span className="hidden text-3xl font-light text-brand-blue sm:block" aria-hidden="true">›</span>
+            )}
+          </div>
+        ))}
+      </section>
+
+      <section
+        className="relative mx-auto mt-4 max-w-[720px] overflow-hidden rounded-2xl border border-blue-100 bg-blue-50 shadow-sm"
+        onMouseEnter={() => setIsPaused(true)}
+        onMouseLeave={() => setIsPaused(false)}
       >
-        <img src={slide.image} alt={slide.title} className="w-full h-80 object-cover" />
+        <button
+          type="button"
+          onClick={() => move(-1)}
+          aria-label="Diapositiva anterior"
+          className="absolute left-2 top-1/2 z-20 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white text-2xl text-brand-blue shadow-md transition hover:scale-105 sm:left-3 sm:h-10 sm:w-10"
+        >
+          ‹
+        </button>
 
-        <div className="p-6 min-h-[9.5rem]">
-          <h2 className="font-display text-lg font-semibold mb-2">{slide.title}</h2>
+        <img src={slide.image} alt={slide.alt} className="aspect-[3/2] w-full object-cover" />
 
-          {slide.description && <p className="text-lg text-slate leading-relaxed">{slide.description}</p>}
-
-          {slide.bullets && (
-            <ul className="text-base text-slate leading-relaxed list-disc pl-5 space-y-1">
-              {slide.bullets.map((bullet, i) => (
-                <li key={i}>{bullet}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="flex items-center justify-center gap-1.5 pb-4">
-          {SLIDES.map((_, i) => (
+        <div className="absolute bottom-2 left-1/2 z-20 flex -translate-x-1/2 gap-2 rounded-full bg-white/85 px-3 py-1.5 shadow-sm backdrop-blur-sm sm:bottom-4 sm:py-2">
+          {SLIDES.map((_, dotIndex) => (
             <button
-              key={i}
+              key={dotIndex}
               type="button"
-              onClick={() => setIndex(i)}
-              aria-label={`Ir a la diapositiva ${i + 1}`}
-              className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                i === index ? 'w-5 bg-brand-blue' : 'w-1.5 bg-line'
+              onClick={() => setIndex(dotIndex)}
+              aria-label={`Ir a la diapositiva ${dotIndex + 1}`}
+              className={`h-2 rounded-full transition-all ${
+                dotIndex === index ? 'w-5 bg-brand-blue' : 'w-2 bg-slate/40'
               }`}
             />
           ))}
         </div>
-      </div>
-
-      <div className="mt-5 border border-line rounded-xl p-5 bg-paper">
-        <p className="text-base text-slate leading-relaxed">
-          Sistema diseñado específicamente para las necesidades del sector financiero y cooperativista, con más de
-          30 años de existir, asegurando cumplimiento con regulaciones y mejores prácticas.
-        </p>
-      </div>
+        <button
+          type="button"
+          onClick={() => move(1)}
+          aria-label="Siguiente diapositiva"
+          className="absolute right-2 top-1/2 z-20 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white text-2xl text-brand-blue shadow-md transition hover:scale-105 sm:right-3 sm:h-10 sm:w-10"
+        >
+          ›
+        </button>
+      </section>
+      <p className="mx-auto mt-1.5 max-w-[720px] text-center text-xs text-slate">
+        Mantén el cursor sobre la imagen para pausar el carrusel y leerla con calma.
+      </p>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 export default function PageToolbar({ onGoHome }) {
   return (
-    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 border-b border-line bg-white px-6 py-4">
+    <div className="grid grid-cols-2 items-center gap-3 border-b border-line bg-white px-3 py-3 sm:grid-cols-[1fr_auto_1fr] sm:px-6 sm:py-4">
       <div className="justify-self-start">
         <button
           type="button"
@@ -11,8 +11,8 @@ export default function PageToolbar({ onGoHome }) {
         </button>
       </div>
 
-      <div className="text-center">
-        <h1 className="font-display text-2xl font-semibold text-ink">Asistente Virtual de CaseBank</h1>
+      <div className="col-span-2 row-start-1 text-center sm:col-span-1 sm:col-start-2">
+        <h1 className="font-display text-lg font-semibold text-ink sm:text-2xl">Asistente Virtual de CaseBank</h1>
       </div>
 
       <div className="justify-self-end">

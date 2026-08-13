@@ -29,6 +29,10 @@
     background: linear-gradient(150deg, var(--indigo) 0%, var(--brand-blue) 34%, var(--sky-cyan) 66%, var(--teal) 100%);
   }
 
+  .header-gradient {
+    background: linear-gradient(105deg, #2575d8 0%, #20b9d0 52%, #28c7ae 100%);
+  }
+
   .brand-dots::before {
     content: '';
     position: absolute;

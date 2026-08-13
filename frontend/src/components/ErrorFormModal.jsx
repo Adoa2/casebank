@@ -58,9 +58,9 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-xl">
-        <div className="border-b border-line px-6 pt-5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-2 sm:p-4">
+      <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-xl sm:max-h-[90vh]">
+        <div className="border-b border-line px-4 pt-4 sm:px-6 sm:pt-5">
           <h2 className="mb-4 text-lg font-semibold text-slate-900">
             {isEdit ? 'Editar Error' : 'Nuevo Error'}
           </h2>
@@ -83,7 +83,7 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-1 flex-col overflow-hidden" noValidate>
-          <div className="flex-1 overflow-y-auto px-6 py-5">
+          <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
             {error && (
               <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
             )}
@@ -190,7 +190,7 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
             )}
           </div>
 
-          <div className="flex justify-end gap-3 border-t border-line px-6 py-4">
+          <div className="flex flex-col-reverse justify-end gap-2 border-t border-line px-4 py-3 sm:flex-row sm:gap-3 sm:px-6 sm:py-4">
             <button
               type="button"
               onClick={onClose}

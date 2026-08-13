@@ -112,7 +112,7 @@ export default function UsersSection() {
 
   return (
     <div>
-      <div className="mb-5 flex items-center justify-between">
+      <div className="mb-5 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-xl font-semibold text-slate-900">Usuarios</h1>
           <p className="text-sm text-slate">Gestiona los usuarios del sistema</p>
@@ -140,8 +140,8 @@ export default function UsersSection() {
         <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-line">
-        <table className="w-full text-left text-sm">
+      <div className="overflow-x-auto rounded-xl border border-line">
+        <table className="min-w-[760px] w-full text-left text-sm">
           <thead className="bg-blue-50/60 text-slate-600">
             <tr>
               <th className="px-4 py-3 font-medium">Usuario</th>

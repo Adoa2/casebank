@@ -137,7 +137,7 @@ export default function ErrorsSection() {
 
   return (
     <div>
-      <div className="mb-5 flex items-center justify-between">
+      <div className="mb-5 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-xl font-semibold text-slate-900">Errores Frecuentes</h1>
           <p className="text-sm text-slate">Base de errores conocidos y sus soluciones</p>
@@ -160,7 +160,7 @@ export default function ErrorsSection() {
           className="w-full max-w-sm rounded-lg border border-line px-3 py-2.5 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
         />
 
-        <div className="flex gap-1">
+        <div className="flex max-w-full gap-1 overflow-x-auto pb-1">
           {ESTADO_FILTERS.map((f) => (
             <button
               key={f.id}
@@ -178,8 +178,8 @@ export default function ErrorsSection() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-line">
-        <table className="w-full text-left text-sm">
+      <div className="overflow-x-auto rounded-xl border border-line">
+        <table className="min-w-[680px] w-full text-left text-sm">
           <thead className="bg-blue-50/60 text-slate-600">
             <tr>
               <th className="px-4 py-3 font-medium">Título</th>
