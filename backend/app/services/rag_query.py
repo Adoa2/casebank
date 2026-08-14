@@ -53,17 +53,9 @@ N_RESULTS = 8
 DISTANCE_FACTOR = 1.3
 MAX_CHUNKS_USADOS = 5
 MAX_DISTANCE_ABSOLUTE = 0.55
-# Umbral mas estricto solo para los chunks de errores frecuentes (origen
-# "error"). Sugerir un ticket de soporte por una coincidencia semantica
-# suelta/casual (ej. un mensaje como "te quiero" matcheando por casualidad
-# con algun error registrado) es peor que no sugerirlo, asi que estos
-# chunks necesitan una cercania mucho mayor que los del manual para
-# considerarse relevantes.
 MAX_DISTANCE_ERROR = 0.35
 
-# Interruptor para el logging de diagnostico agregado mientras depuramos la
-# busqueda semantica. Poner en False (o borrar los prints marcados con
-# [DEBUG]) una vez que todo funcione como se espera.
+
 DEBUG_RAG = True
 
 FRASE_SIN_INFORMACION = "No cuento con esa información en el manual."
@@ -93,10 +85,6 @@ _GREETING_REGEX = re.compile(
     re.IGNORECASE,
 )
 
-# Preguntas sobre el asistente mismo (que hace, quien es, cuales son sus
-# funciones) en vez de sobre un tema del manual. Se detectan por separado
-# para responderlas directo, sin pasar por la busqueda semantica (que nunca
-# va a encontrar nada relevante en el manual para este tipo de preguntas).
 ABOUT_ASSISTANT_PATTERNS = [
     r"(que|qu[ée]) (haces|puedes hacer|sabes hacer|funciones tienes)(\s+(tu|vos|casey))?",
     r"quien(es)? (eres|sos)(\s+(tu|vos|casey))?",
@@ -158,9 +146,7 @@ def es_pregunta_sobre_el_asistente(texto):
     normalizado = texto.strip().lower()
     return bool(_ABOUT_ASSISTANT_REGEX.search(normalizado))
 
-# Sinonimos fijos de respaldo (gratuitos, no dependen de la API). Se combinan
-# con los terminos clave que genera Gemini en analizar_pregunta(); si esa
-# llamada falla por cualquier motivo, esta lista sigue dando algo de cobertura.
+
 SINONIMOS_DOMINIO = {
     "catalogo": ["definición", "definicion"],
     "catálogo": ["definición", "definicion"],
@@ -195,17 +181,41 @@ def es_saludo_o_cortesia(texto):
     return bool(_GREETING_REGEX.match(normalizado))
 
 
+REQUEST_TIMEOUT_SEGUNDOS = 20
+
+
 def _post_con_reintentos(url, body):
-    """POST con reintentos por rate limit (429), usado tanto para embed como para generar."""
+    """
+    POST con reintentos, usado tanto para embed como para generar. Reintenta
+    ante:
+      - Rate limit (HTTP 429), con backoff exponencial.
+      - Timeout o error de conexion: sin un timeout explicito, una conexion
+        que se cuelga (algo mas frecuente en entornos serverless como
+        Vercel que en un entorno local) puede dejar la llamada esperando
+        indefinidamente sin loguear nada, lo cual se vio en produccion como
+        una demora de ~50s en una sola llamada sin ningun mensaje de rate
+        limit de por medio. Con el timeout, ese escenario ahora falla rapido
+        y reintenta (o termina en un error claro) en vez de colgarse.
+    """
+    ultimo_error = None
     for intento in range(MAX_REINTENTOS):
-        respuesta = requests.post(
-            url,
-            headers={
-                "x-goog-api-key": GEMINI_API_KEY,
-                "Content-Type": "application/json",
-            },
-            json=body,
-        )
+        try:
+            respuesta = requests.post(
+                url,
+                headers={
+                    "x-goog-api-key": GEMINI_API_KEY,
+                    "Content-Type": "application/json",
+                },
+                json=body,
+                timeout=REQUEST_TIMEOUT_SEGUNDOS,
+            )
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            ultimo_error = e
+            espera = 2 ** intento
+            print(f"  Timeout/error de conexion con Gemini ({type(e).__name__}), reintentando en {espera}s...")
+            time.sleep(espera)
+            continue
+
         if respuesta.status_code == 429:
             espera = 2 ** intento
             print(f"  Rate limit alcanzado, esperando {espera}s...")
@@ -218,7 +228,10 @@ def _post_con_reintentos(url, body):
         respuesta.raise_for_status()
         return respuesta.json()
 
-    raise RuntimeError("Se agotaron los reintentos por rate limit de Gemini.")
+    raise RuntimeError(
+        f"Se agotaron los reintentos hacia Gemini (rate limit o timeout de red). "
+        f"Ultimo error: {ultimo_error}"
+    )
 
 
 def analizar_pregunta(pregunta):
@@ -786,32 +799,20 @@ def answer_question(question):
 
     if es_pregunta_sobre_el_asistente(question):
         return {"respuesta": RESPUESTA_SOBRE_ASISTENTE, "fuentes": [], "imagenes": []}
-
-    # analizar_pregunta (correccion ortografica + terminos clave) y la
-    # busqueda semantica no dependen una de la otra -- ambas solo necesitan
-    # la pregunta original -- asi que se corren en paralelo para no sumar
-    # sus tiempos de red. La busqueda usa el texto original (sin corregir):
-    # una correccion ortografica solo aplica en casos raros de tipeo, y los
-    # embeddings ya son razonablemente tolerantes a errores menores.
+    
+    _t_inicio = time.time()
     with ThreadPoolExecutor(max_workers=2) as executor:
         futuro_analisis = executor.submit(analizar_pregunta, question)
         futuro_chunks = executor.submit(search_relevant_chunks, question)
         analisis = futuro_analisis.result()
         chunks_crudos = futuro_chunks.result()
+    _debug(f"tiempo analisis+busqueda_base: {time.time() - _t_inicio:.2f}s")
 
     correccion = analisis["correccion"]
     terminos_clave = analisis["terminos_clave"]
 
-    # Si hubo correccion ortografica, se usa la version corregida para
-    # generar la respuesta (el usuario ya vera el aviso de "si quisiste
-    # decir..." antepuesto al final). La busqueda ya se hizo arriba.
     pregunta_efectiva = correccion or question
 
-    # Si el texto corregido resulta ser un saludo, agradecimiento o despedida
-    # (ej. "komo estas" -> "como estas", "graciasss" -> "gracias"), no tiene
-    # sentido tratarlo como una pregunta real sobre el manual ni mostrar el
-    # aviso de "si quisiste decir...": se responde directo como cortesia,
-    # igual que si se hubiera escrito bien desde el principio.
     if correccion and es_saludo_o_cortesia(correccion):
         prompt = build_prompt(correccion, [], incluir_aviso_ticket=False)
         respuesta = call_gemini_generate(prompt)
@@ -820,18 +821,12 @@ def answer_question(question):
 
     terminos_para_aviso = list(dict.fromkeys(list(terminos_clave) + _sinonimos_fijos(question)))
 
-    # La busqueda con la pregunta "pelada" a veces no alcanza a ubicar la
-    # seccion correcta cuando el usuario usa un termino distinto al del
-    # manual (ej. "catalogo" vs "definicion"): el embedding por si solo no
-    # siempre los asocia lo suficientemente cerca. Por eso se hace una
-    # segunda busqueda con los terminos clave/sinonimos agregados, y se
-    # fusionan ambos resultados quedandose con la mejor distancia de cada
-    # seccion. Esto es un segundo llamado a embeddings (no a generacion),
-    # asi que no afecta la cuota mas restringida del modelo de texto.
     if terminos_para_aviso:
+        _t_expandida = time.time()
         texto_expandido = question + " (" + ", ".join(terminos_para_aviso) + ")"
         chunks_expandidos = search_relevant_chunks(texto_expandido)
         chunks_crudos = _fusionar_chunks(chunks_crudos, chunks_expandidos)
+        _debug(f"tiempo busqueda expandida: {time.time() - _t_expandida:.2f}s")
         _debug(
             "answer_question: resultados fusionados (base + expandida) -> "
             + str([(c["metadata"]["seccion_id"], c["metadata"]["titulo"], round(c["distance"], 4)) for c in chunks_crudos])
@@ -860,7 +855,9 @@ def answer_question(question):
         terminos_clave=terminos_para_aviso,
         omitir_saludo=bool(correccion),
     )
+    _t_generacion = time.time()
     respuesta = call_gemini_generate(prompt)
+    _debug(f"tiempo generacion final: {time.time() - _t_generacion:.2f}s")
 
     respuesta, indices_usados = _extraer_fuentes_usadas(respuesta, len(chunks))
     respuesta = _sanitizar_formato(respuesta)
@@ -872,10 +869,6 @@ def answer_question(question):
         fuentes = []
         imagenes = []
     else:
-        # Solo se citan las fuentes que el modelo declaro haber usado
-        # realmente (via el marcador FUENTES_USADAS). Si no se pudo
-        # determinar (marcador ausente), se usan todos los chunks como
-        # respaldo, igual que antes de este cambio.
         if indices_usados is None:
             chunks_para_citar = chunks
         else:
@@ -901,6 +894,8 @@ def answer_question(question):
 
     if correccion:
         respuesta = f'Si quisiste decir **"{correccion}"**, esto es lo que necesitas saber:\n\n' + respuesta
+
+    _debug(f"tiempo TOTAL answer_question: {time.time() - _t_inicio:.2f}s")
 
     return {
         "respuesta": respuesta,
