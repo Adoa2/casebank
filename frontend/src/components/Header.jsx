@@ -1,9 +1,14 @@
 import logo from '../assets/logo.png'
 
-export default function Header({ onLogout, isAdmin = false, onGoAdmin, showSupport = true }) {
+export default function Header({ onLogout, isAdmin = false, onGoAdmin, onGoHome, showSupport = true }) {
   function handleAdminClick(e) {
     e.stopPropagation()
     onGoAdmin()
+  }
+
+  function handleHomeClick(e) {
+    e.stopPropagation()
+    onGoHome()
   }
 
   function handleLogoutClick(e) {
@@ -11,13 +16,25 @@ export default function Header({ onLogout, isAdmin = false, onGoAdmin, showSuppo
     onLogout()
   }
 
-  
-
   return (
     <header className="header-gradient h-16 flex-shrink-0 flex items-center justify-between gap-2 px-3 shadow-sm sm:px-7">
       <img src={logo} alt="CaseBank" className="h-9 w-auto max-w-[145px] object-contain object-left sm:h-11 sm:max-w-none" />
 
       <div className="flex items-center gap-1 sm:gap-2">
+        {onGoHome && (
+          <button
+            type="button"
+            onClick={handleHomeClick}
+            className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/60 sm:px-3"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <path d="m3 11 9-8 9 8" />
+              <path d="M5.5 9.5V21h13V9.5M9.5 21v-7h5v7" />
+            </svg>
+            <span className="hidden sm:inline">Inicio</span>
+          </button>
+        )}
+
         {isAdmin && (
           <button
             type="button"
@@ -31,10 +48,11 @@ export default function Header({ onLogout, isAdmin = false, onGoAdmin, showSuppo
             <span className="hidden sm:inline">Admin</span>
           </button>
         )}
-        
+
         {showSupport && (
           
-          <a  href="https://soporte.sinteghn.com/clientes/login.php"
+          <a
+            href="https://soporte.sinteghn.com/clientes/login.php"
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}

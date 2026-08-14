@@ -158,3 +158,39 @@ class ErrorReportResponse(BaseModel):
 class ErrorReportReview(BaseModel):
     """Decisión del revisor sobre un error pendiente."""
     aprobar: bool = Field(..., description="True para aprobar (se indexa para la IA), False para rechazar.")
+
+    # --- Videos formativos ---
+
+class VideoCreate(BaseModel):
+    """Datos para registrar un nuevo video formativo, vinculado a una seccion del manual."""
+    titulo: str
+    url: str
+    seccion_id: int = Field(..., description="ID de la seccion del manual (SeccionManual.id) a la que se vincula el video.")
+    capitulo: str = Field(..., description="Titulo del capitulo, tal como aparece en el manual al momento de crear el video.")
+    seccion: Optional[str] = None
+    subseccion: Optional[str] = None
+
+
+class VideoUpdate(BaseModel):
+    """Datos editables de un video formativo. Todos opcionales."""
+    titulo: Optional[str] = None
+    url: Optional[str] = None
+    seccion_id: Optional[int] = None
+    capitulo: Optional[str] = None
+    seccion: Optional[str] = None
+    subseccion: Optional[str] = None
+
+
+class VideoResponse(BaseModel):
+    id: int
+    titulo: str
+    url: str
+    seccion_id: int
+    capitulo: str
+    seccion: Optional[str]
+    subseccion: Optional[str]
+    created_by: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

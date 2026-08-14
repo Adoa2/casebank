@@ -20,9 +20,11 @@ Requisitos previos:
 import sys
 import os
 import re
+import json
 import time
 import requests
 import psycopg2
+from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -49,8 +51,9 @@ MAX_REINTENTOS = 5
 
 N_RESULTS = 8
 DISTANCE_FACTOR = 1.3
-MAX_CHUNKS_USADOS = 4
+MAX_CHUNKS_USADOS = 5
 MAX_DISTANCE_ABSOLUTE = 0.55
+DEBUG_RAG = True
 
 FRASE_SIN_INFORMACION = "No cuento con esa información en el manual."
 SUPPORT_TICKET_URL = "https://soporte.sinteghn.com/clientes/login.php"
@@ -78,6 +81,29 @@ _GREETING_REGEX = re.compile(
     r"^(?:" + "|".join(GREETING_BASES) + r")" + _SUFIJO_NOMBRE + r"[!?.,¡¿\s]*$",
     re.IGNORECASE,
 )
+
+
+SINONIMOS_DOMINIO = {
+    "catalogo": ["definición", "definicion"],
+    "catálogo": ["definición", "definicion"],
+    "catalogo de cuentas": ["definición de cuentas", "definicion de cuentas"],
+    "plan de cuentas": ["definición de cuentas", "definicion de cuentas"],
+    "crear cuenta": ["definir cuenta", "definición de cuentas"],
+    "afiliado": ["socio", "asociado"],
+    "socio": ["afiliado", "asociado"],
+    "prestamo": ["credito", "préstamo"],
+    "préstamo": ["credito", "prestamo"],
+    "credito": ["prestamo", "préstamo"],
+    "borrar": ["eliminar"],
+    "eliminar": ["borrar"],
+    "modificar": ["editar", "actualizar"],
+    "editar": ["modificar", "actualizar"],
+}
+
+
+def _debug(mensaje):
+    if DEBUG_RAG:
+        print(f"[DEBUG RAG] {mensaje}")
 
 
 def es_saludo_o_cortesia(texto):
@@ -108,10 +134,118 @@ def _post_con_reintentos(url, body):
             time.sleep(espera)
             continue
 
+        if respuesta.status_code >= 400:
+            _debug(f"HTTP {respuesta.status_code} de Gemini: {respuesta.text[:500]}")
+
         respuesta.raise_for_status()
         return respuesta.json()
 
     raise RuntimeError("Se agotaron los reintentos por rate limit de Gemini.")
+
+
+def analizar_pregunta(pregunta):
+    """
+    Una sola llamada a Gemini Flash Lite (modelo de generacion, no de
+    embeddings) que hace dos cosas a la vez para no duplicar costos:
+
+    1. Detecta si el mensaje tiene errores ortograficos o de tipeo reales
+       (ej. "cmo agreg un usuARIO") y, de ser asi, devuelve la version
+       corregida. Si el mensaje esta bien escrito pero usa palabras
+       distintas a las del manual (sinonimos), eso NO cuenta como error y
+       "correccion" queda en None.
+    2. Genera hasta 5 terminos clave / sinonimos tecnicos relacionados con
+       el vocabulario de un manual bancario/cooperativo, para reforzar la
+       busqueda semantica sin depender solo del diccionario fijo.
+
+    Devuelve {"correccion": str | None, "terminos_clave": list[str]}.
+    Si algo falla (red, JSON invalido, etc.), devuelve valores vacios y el
+    flujo normal continua sin este enriquecimiento.
+    """
+    prompt_analisis = f"""Analiza el siguiente mensaje de un usuario, escrito para un asistente
+de un sistema bancario/financiero cooperativo llamado CaseBank.
+
+Mensaje: "{pregunta}"
+
+Responde UNICAMENTE con un objeto JSON valido, sin texto adicional ni markdown,
+con esta forma exacta:
+
+{{"correccion": "...", "terminos_clave": ["...", "..."]}}
+
+Reglas para "correccion":
+- Si el mensaje tiene errores ortograficos, de tipeo, letras faltantes o
+  palabras mal escritas (ej. "cmo agreg un usuARIO" -> "como agrego un
+  usuario"), pon aqui la version corregida arreglando SOLO la
+  ortografia/tipeo, sin cambiar el significado, sin agregar palabras nuevas
+  ni parafrasear.
+- Si el mensaje ya esta bien escrito (aunque sea informal, corto, o use
+  palabras distintas a las del manual), pon aqui exactamente null.
+- NUNCA marques como error ortografico el uso de una palabra valida pero
+  distinta (ej. "catalogo" en vez de "definicion" NO es un error ortografico,
+  es un sinonimo).
+
+Reglas para "terminos_clave":
+- Lista de 0 a 5 palabras o frases clave, en espanol, que ayuden a encontrar
+  informacion relacionada en un manual de un sistema financiero cooperativo
+  (cuentas, afiliados/socios, prestamos/creditos, contabilidad, tesoreria,
+  reportes, usuarios, permisos, etc). Incluye sinonimos tecnicos relevantes.
+- Si el mensaje no tiene relacion con el sistema (saludo, charla casual),
+  deja la lista vacia.
+
+Responde solo el JSON."""
+
+    try:
+        datos = _post_con_reintentos(GEMINI_GENERATE_URL, {
+            "contents": [{"parts": [{"text": prompt_analisis}]}],
+            "generationConfig": {"response_mime_type": "application/json"},
+        })
+
+        candidatos = datos.get("candidates") or []
+        if not candidatos:
+            _debug("analizar_pregunta: Gemini no devolvio candidatos")
+            return {"correccion": None, "terminos_clave": []}
+
+        partes = candidatos[0].get("content", {}).get("parts", [])
+        if not partes:
+            _debug("analizar_pregunta: candidato sin parts (posible respuesta bloqueada)")
+            _debug(f"candidato completo: {candidatos[0]}")
+            return {"correccion": None, "terminos_clave": []}
+
+        texto_json = partes[0].get("text", "").strip()
+        _debug(f"analizar_pregunta: JSON crudo devuelto -> {texto_json!r}")
+
+        resultado = json.loads(texto_json)
+
+        correccion = resultado.get("correccion")
+        if not isinstance(correccion, str) or not correccion.strip() or correccion.strip().lower() == "null":
+            correccion = None
+        else:
+            correccion = correccion.strip()
+            # Si el modelo "corrige" pero el resultado es identico (ignorando
+            # mayusculas/espacios), no es una correccion real.
+            if correccion.lower() == pregunta.strip().lower():
+                correccion = None
+
+        terminos = resultado.get("terminos_clave") or []
+        if not isinstance(terminos, list):
+            terminos = []
+        terminos = [str(t).strip() for t in terminos if str(t).strip()]
+
+        _debug(f"analizar_pregunta: correccion={correccion!r} terminos_clave={terminos!r}")
+
+        return {"correccion": correccion, "terminos_clave": terminos}
+    except Exception as e:
+        _debug(f"analizar_pregunta: EXCEPCION {type(e).__name__}: {e}")
+        return {"correccion": None, "terminos_clave": []}
+
+
+def _sinonimos_fijos(texto):
+    """Extras del diccionario fijo (respaldo gratuito) segun el texto dado."""
+    normalizado = texto.lower()
+    extras = []
+    for termino, sinonimos in SINONIMOS_DOMINIO.items():
+        if termino in normalizado:
+            extras.extend(sinonimos)
+    return extras
 
 
 def embed_query(pregunta):
@@ -127,6 +261,8 @@ def embed_query(pregunta):
 
 def search_relevant_chunks(pregunta, n_results=N_RESULTS):
     """Busca en Postgres/pgvector los chunks del manual y los errores aprobados mas relevantes."""
+    _debug(f"search_relevant_chunks: texto enviado a embed_query -> {pregunta!r}")
+
     query_embedding = embed_query(pregunta)
     embedding_literal = "[" + ",".join(str(v) for v in query_embedding) + "]"
 
@@ -136,13 +272,15 @@ def search_relevant_chunks(pregunta, n_results=N_RESULTS):
         """
         SELECT 'manual' AS origen, seccion_id, titulo, pagina_inicio, pagina_fin, contenido, imagenes,
                FALSE AS requiere_ticket,
-               embedding <=> %s::vector AS distance
+               embedding <=> %s::vector AS distance,
+               ctid::text AS row_id
         FROM manual_chunks
         UNION ALL
         SELECT 'error' AS origen, ec.error_id::text AS seccion_id, NULL::text AS titulo, NULL::integer AS pagina_inicio,
                NULL::integer AS pagina_fin, ec.contenido, NULL::jsonb AS imagenes,
                er.requiere_ticket,
-               ec.embedding <=> %s::vector AS distance
+               ec.embedding <=> %s::vector AS distance,
+               ec.ctid::text AS row_id
         FROM error_chunks ec
         JOIN error_reports er ON er.id = ec.error_id
         ORDER BY distance
@@ -155,7 +293,7 @@ def search_relevant_chunks(pregunta, n_results=N_RESULTS):
     conn.close()
 
     chunks = []
-    for origen, seccion_id, titulo, pagina_inicio, pagina_fin, contenido, imagenes, requiere_ticket, distance in filas:
+    for origen, seccion_id, titulo, pagina_inicio, pagina_fin, contenido, imagenes, requiere_ticket, distance, row_id in filas:
         chunks.append({
             "documento": contenido,
             "metadata": {
@@ -166,11 +304,75 @@ def search_relevant_chunks(pregunta, n_results=N_RESULTS):
                 "pagina_fin": pagina_fin,
                 "imagenes": imagenes or [],
                 "requiere_ticket": bool(requiere_ticket),
+                "row_id": row_id,
             },
             "distance": float(distance),
         })
 
+    _debug(
+        "search_relevant_chunks: resultados crudos -> "
+        + str([(c["metadata"]["origen"], c["metadata"]["seccion_id"], c["metadata"]["titulo"], round(c["distance"], 4)) for c in chunks])
+    )
+
     return chunks
+
+
+def _fusionar_chunks(*listas_chunks):
+    """
+    Combina varias listas de chunks (por ejemplo, una busqueda con la
+    pregunta tal cual y otra con terminos clave expandidos) eliminando
+    duplicados por (origen, seccion_id) y quedandose con la menor distancia
+    encontrada para cada uno en cualquiera de las listas. Asi se aprovechan
+    ambas senales de busqueda sin que una misma seccion aparezca repetida.
+    """
+    mejores = {}
+    for lista in listas_chunks:
+        for c in lista:
+            clave = (c["metadata"]["origen"], c["metadata"]["row_id"])
+            actual = mejores.get(clave)
+            if actual is None or c["distance"] < actual["distance"]:
+                mejores[clave] = c
+    return sorted(mejores.values(), key=lambda c: c["distance"])
+
+
+BOOST_SINONIMO_TITULO = 0.05
+
+
+def _aplicar_boost_sinonimos(chunks, pregunta):
+    """
+    Re-rankea los chunks usando el diccionario fijo de sinonimos de dominio
+    (SINONIMOS_DOMINIO) como señal determinística, independiente de que tan
+    bien (o mal) haya distinguido el embedding entre secciones parecidas.
+
+    Muchas secciones del manual comparten un mismo parrafo de navegacion
+    generico al inicio ("... debera entrar primero a Administracion en la
+    pantalla principal del sistema"), lo que hace que el embedding las
+    acerque entre si aunque traten temas distintos. Si el titulo de un chunk
+    contiene un sinonimo conocido de un termino presente en la pregunta (ej.
+    pregunta con "catalogo de cuentas" y titulo con "definicion"), se le
+    resta un poco de distancia para que compita mejor en el ranking, en vez
+    de depender unicamente de la cercania vectorial.
+    """
+    normalizado = pregunta.lower()
+    terminos_relevantes = set()
+    for termino, sinonimos in SINONIMOS_DOMINIO.items():
+        if termino in normalizado:
+            terminos_relevantes.add(termino.lower())
+            terminos_relevantes.update(s.lower() for s in sinonimos)
+
+    if not terminos_relevantes:
+        return chunks
+
+    ajustados = []
+    for c in chunks:
+        titulo = (c["metadata"].get("titulo") or "").lower()
+        distance = c["distance"]
+        if titulo and any(t in titulo for t in terminos_relevantes):
+            distance = max(0.0, distance - BOOST_SINONIMO_TITULO)
+        ajustados.append({**c, "distance": distance})
+
+    ajustados.sort(key=lambda c: c["distance"])
+    return ajustados
 
 
 def filtrar_por_relevancia(chunks, factor=DISTANCE_FACTOR, max_chunks=MAX_CHUNKS_USADOS):
@@ -190,10 +392,75 @@ def filtrar_por_relevancia(chunks, factor=DISTANCE_FACTOR, max_chunks=MAX_CHUNKS
     if not relevantes:
         relevantes = chunks_ordenados[:1]
 
-    return relevantes[:max_chunks]
+    resultado = relevantes[:max_chunks]
+    _debug(
+        f"filtrar_por_relevancia: mejor_distancia={mejor_distancia:.4f} limite={limite:.4f} -> "
+        + str([(c["metadata"]["seccion_id"], round(c["distance"], 4)) for c in resultado])
+    )
+    return resultado
 
 
-def build_prompt(pregunta, chunks, incluir_aviso_ticket):
+def _fuentes_unicas(chunks_citados, chunks_disponibles=None):
+    """
+    Arma la lista de fuentes citadas a partir de los chunks que el modelo
+    declaro haber usado realmente (chunks_citados, via FUENTES_USADAS).
+
+    El rango de paginas de cada seccion (pagina_inicio - pagina_fin) se
+    calcula tomando el minimo y el maximo entre TODOS los fragmentos
+    disponibles de esa seccion (chunks_disponibles), no solo el fragmento
+    puntual que el modelo cito para responder. Esto es necesario porque una
+    seccion larga se puede partir en varios chunks al indexar (ej. paginas
+    762-763 en un fragmento y 764-767 en otro), y cada fila de la base solo
+    conoce el sub-rango de paginas que cubre su propio texto; el rango real
+    de la seccion completa solo se puede reconstruir combinando todos los
+    fragmentos que se recuperaron de ella.
+
+    Si no se pasa chunks_disponibles, se usan los mismos chunks_citados
+    (comportamiento anterior, por compatibilidad).
+    """
+    disponibles = chunks_disponibles if chunks_disponibles is not None else chunks_citados
+
+    rangos = {}
+    for c in disponibles:
+        meta = c["metadata"]
+        if meta["origen"] == "error":
+            continue
+
+        clave = meta["seccion_id"]
+        actual = rangos.setdefault(clave, {"pagina_inicio": None, "pagina_fin": None})
+
+        if meta["pagina_inicio"] is not None:
+            if actual["pagina_inicio"] is None or meta["pagina_inicio"] < actual["pagina_inicio"]:
+                actual["pagina_inicio"] = meta["pagina_inicio"]
+        if meta["pagina_fin"] is not None:
+            if actual["pagina_fin"] is None or meta["pagina_fin"] > actual["pagina_fin"]:
+                actual["pagina_fin"] = meta["pagina_fin"]
+
+    vistas = set()
+    fuentes = []
+    for c in chunks_citados:
+        meta = c["metadata"]
+        if meta["origen"] == "error":
+            continue  # los errores frecuentes aportan contenido, pero no se citan como fuente
+
+        clave = meta["seccion_id"]
+        if clave in vistas:
+            continue
+        vistas.add(clave)
+
+        rango = rangos.get(clave, {})
+
+        fuentes.append({
+            "seccion_id": clave,
+            "titulo": meta["titulo"],
+            "pagina": rango.get("pagina_inicio", meta["pagina_inicio"]),
+            "pagina_fin": rango.get("pagina_fin", meta["pagina_fin"]),
+        })
+
+    return fuentes
+
+
+def build_prompt(pregunta, chunks, incluir_aviso_ticket, terminos_clave=None, omitir_saludo=False):
     """Arma el prompt para el LLM combinando la pregunta con el contexto recuperado."""
     if not chunks:
         return f"""Eres Casey, el asistente virtual de CaseBank. Tu tono es calido, cercano
@@ -213,7 +480,46 @@ Mensaje del usuario: {pregunta}
 
 Responde en espanol:"""
 
-    contexto = "\n\n---\n\n".join(c["documento"] for c in chunks)
+    bloques = [f"[FUENTE {i}]\n{c['documento']}" for i, c in enumerate(chunks, start=1)]
+    contexto = "\n\n---\n\n".join(bloques)
+
+    aviso_sinonimos = ""
+    if terminos_clave:
+        lista_terminos = ", ".join(terminos_clave)
+        aviso_sinonimos = f"""
+
+IMPORTANTE sobre vocabulario: el usuario pudo haber usado palabras distintas
+a las que aparecen textualmente en el manual (por ejemplo "catalogo de
+cuentas" en vez de "definicion de cuentas"). Estos terminos se consideraron
+equivalentes o relacionados al preparar el contexto: {lista_terminos}. Si el
+contexto responde a la intencion de la pregunta usando estas variantes o
+sinonimos, trata esa informacion como valida y responde con ella; NO
+respondas que no tienes informacion solo porque el termino exacto que uso el
+usuario no aparece literalmente en el contexto."""
+
+    aviso_citas = """
+
+Cada bloque de contexto esta etiquetado como [FUENTE N]. Al terminar tu
+respuesta para el usuario, agrega una linea nueva y separada con exactamente
+este formato: "FUENTES_USADAS: " seguido de los numeros de las fuentes que
+realmente usaste para construir tu respuesta, separados por comas (ejemplo:
+FUENTES_USADAS: 1,3). Usa SOLO los numeros de las fuentes cuyo contenido
+efectivamente aparece reflejado en tu respuesta; no incluyas una fuente solo
+porque estaba disponible si no la usaste. Si no llegaste a usar ninguna
+fuente en particular, escribe "FUENTES_USADAS: ninguna". No menciones las
+etiquetas [FUENTE N] dentro del texto de tu respuesta al usuario, son solo
+una referencia interna; la linea final "FUENTES_USADAS:" si debe incluirse
+siempre."""
+
+    aviso_saludo = ""
+    if omitir_saludo:
+        aviso_saludo = """
+
+IMPORTANTE: justo antes de tu respuesta, el usuario ya vio un aviso indicando
+que se interpreto su pregunta con la ortografia corregida (algo como 'Si
+quisiste decir "..."'). Por lo tanto, NO comiences tu respuesta con un saludo
+como "¡Hola!", "¡Con gusto!" u otra frase de apertura; ve directo a explicar
+la respuesta, ya que el saludo ahi resulta repetitivo e innecesario."""
 
     aviso_ticket = ""
     if incluir_aviso_ticket:
@@ -231,6 +537,26 @@ del sistema con base en el Manual de Usuario y en soluciones registradas por sop
 Tu tono es calido, cercano y servicial, como el de un companero de trabajo que
 explica algo con gusto, nunca como un documento tecnico o un formulario.
 
+Formato: cuando menciones el nombre exacto de un menu, boton, pantalla u opcion
+del sistema (los que en el contexto aparecen entre comillas, ej. "Administración",
+"Menú de Contabilidad", "Definición de cuentas"), escribelo en **negrita markdown**
+ademas de las comillas, por ejemplo: **"Definición de cuentas"**. Esto ayuda a que
+el usuario distinga rapidamente que elementos debe buscar en la pantalla.
+
+IMPORTANTE sobre listas: el chat donde se muestra tu respuesta NO renderiza
+vinetas de markdown. Por lo tanto:
+- Para pasos secuenciales, usa SIEMPRE numeracion "1.", "2.", "3." (esto si se
+  ve bien en el chat).
+- NUNCA uses asterisco (*) ni guion (-) al inicio de linea como vineta de
+  lista; si necesitas presentar varias opciones o casos dentro de una misma
+  respuesta (por ejemplo, "para agregar una cuenta..." / "para buscarla..."),
+  redactalos como un parrafo separado que empiece con la frase en negrita del
+  caso, por ejemplo: **Para ingresar una nueva cuenta:** seguido del texto
+  explicativo en la misma linea o en un parrafo aparte, en vez de una lista
+  con vinetas.
+- Los unicos asteriscos permitidos en tu respuesta son los dobles **para
+  negrita**; nunca un asterisco o guion suelto al inicio de una linea.
+
 Usa UNICAMENTE la siguiente informacion extraida del manual para responder. Si la
 respuesta no se encuentra en el contexto, no inventes pasos: responde UNICAMENTE
 con esta frase exacta, sin agregar nada mas: "{FRASE_SIN_INFORMACION}"
@@ -241,7 +567,7 @@ explicacion fluida y conversacional (no como una plantilla rigida con
 encabezados tipo "Causa:" / "Solucion:"). Por ejemplo, en vez de separar
 "Causa: X. Solucion: Y", escribe algo como "Eso pasa porque X. Para
 solucionarlo, sigue estos pasos:" y luego los pasos numerados. Nunca respondas
-unicamente con la causa si el contexto tambien contiene la solucion.{aviso_ticket}
+unicamente con la causa si el contexto tambien contiene la solucion.{aviso_sinonimos}{aviso_citas}{aviso_saludo}{aviso_ticket}
 
 Contexto del manual:
 {contexto}
@@ -281,6 +607,62 @@ def _respuesta_indica_sin_informacion(respuesta):
     return FRASE_SIN_INFORMACION.lower() in normalizado
 
 
+_FUENTES_USADAS_REGEX = re.compile(r"\n?[ \t]*\**FUENTES[_ ]USADAS\**\s*:\s*([^\n]*)\s*$", re.IGNORECASE)
+
+
+_VINETA_REGEX = re.compile(r"(?m)^[ \t]*[*\-][ \t]+")
+
+
+def _sanitizar_formato(respuesta):
+    """
+    Red de seguridad por si el modelo, a pesar de la instruccion del prompt,
+    igual emite vinetas de markdown con "*" o "-" al inicio de linea (el chat
+    no las renderiza como lista, y quedarian como asteriscos/guiones sueltos
+    visibles para el usuario). Se les quita el marcador, dejando el texto de
+    la vineta como parrafo normal. No afecta al "**negrita**", que usa dos
+    asteriscos pegados sin espacio y por lo tanto no matchea este patron.
+    """
+    return _VINETA_REGEX.sub("", respuesta)
+
+
+def _extraer_fuentes_usadas(respuesta, total_chunks):
+    """
+    Busca al final de la respuesta el marcador FUENTES_USADAS que el prompt le
+    pidio al modelo agregar, indicando cuales de las [FUENTE N] numeradas en
+    el contexto realmente uso para responder. Esto evita citar en el chat
+    fuentes que se le pasaron al modelo pero que no tuvieron nada que ver con
+    la respuesta final (ej. secciones parecidas por titulo pero no usadas).
+
+    Devuelve (respuesta_limpia, indices_usados):
+      - respuesta_limpia: el texto sin la linea del marcador.
+      - indices_usados: set de indices 1-based realmente usados, set() vacio
+        si el modelo dijo explicitamente que no uso ninguna, o None si no se
+        encontro el marcador (en cuyo caso el llamador debe usar todos los
+        chunks como respaldo, igual que antes).
+    """
+    match = _FUENTES_USADAS_REGEX.search(respuesta)
+    if not match:
+        _debug("_extraer_fuentes_usadas: no se encontro el marcador FUENTES_USADAS, se usan todos los chunks como respaldo")
+        return respuesta, None
+
+    respuesta_limpia = respuesta[:match.start()].rstrip()
+    crudo = match.group(1).strip().lower()
+
+    if not crudo or crudo in ("ninguna", "ninguno", "none", "n/a", "-"):
+        return respuesta_limpia, set()
+
+    indices = set()
+    for parte in re.split(r"[,\s]+", crudo):
+        parte = parte.strip()
+        if parte.isdigit():
+            n = int(parte)
+            if 1 <= n <= total_chunks:
+                indices.add(n)
+
+    _debug(f"_extraer_fuentes_usadas: marcador crudo={crudo!r} -> indices={indices}")
+    return respuesta_limpia, indices
+
+
 def answer_question(question):
     """
     Funcion principal del RAG: busca contexto relevante, genera la respuesta
@@ -294,34 +676,72 @@ def answer_question(question):
         respuesta = call_gemini_generate(prompt)
         return {"respuesta": respuesta, "fuentes": [], "imagenes": []}
 
-    chunks_crudos = search_relevant_chunks(question)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futuro_analisis = executor.submit(analizar_pregunta, question)
+        futuro_chunks = executor.submit(search_relevant_chunks, question)
+        analisis = futuro_analisis.result()
+        chunks_crudos = futuro_chunks.result()
+
+    correccion = analisis["correccion"]
+    terminos_clave = analisis["terminos_clave"]
+    pregunta_efectiva = correccion or question
+
+    terminos_para_aviso = list(dict.fromkeys(list(terminos_clave) + _sinonimos_fijos(question)))
+    if terminos_para_aviso:
+        texto_expandido = question + " (" + ", ".join(terminos_para_aviso) + ")"
+        chunks_expandidos = search_relevant_chunks(texto_expandido)
+        chunks_crudos = _fusionar_chunks(chunks_crudos, chunks_expandidos)
+        _debug(
+            "answer_question: resultados fusionados (base + expandida) -> "
+            + str([(c["metadata"]["seccion_id"], c["metadata"]["titulo"], round(c["distance"], 4)) for c in chunks_crudos])
+        )
+
+    chunks_crudos = _aplicar_boost_sinonimos(chunks_crudos, question)
+    _debug(
+        "answer_question: resultados tras boost por sinonimos -> "
+        + str([(c["metadata"]["seccion_id"], c["metadata"]["titulo"], round(c["distance"], 4)) for c in chunks_crudos])
+    )
+
     chunks_relevantes = filtrar_por_relevancia(chunks_crudos)
     chunks = [c for c in chunks_relevantes if c["distance"] <= MAX_DISTANCE_ABSOLUTE]
 
+    _debug(f"answer_question: chunks tras umbral MAX_DISTANCE_ABSOLUTE={MAX_DISTANCE_ABSOLUTE} -> {len(chunks)} chunk(s)")
+
     requiere_ticket = any(c["metadata"].get("requiere_ticket") for c in chunks)
 
-    prompt = build_prompt(question, chunks, incluir_aviso_ticket=requiere_ticket)
+    prompt = build_prompt(
+        pregunta_efectiva,
+        chunks,
+        incluir_aviso_ticket=requiere_ticket,
+        terminos_clave=terminos_para_aviso,
+        omitir_saludo=bool(correccion),
+    )
     respuesta = call_gemini_generate(prompt)
 
+    respuesta, indices_usados = _extraer_fuentes_usadas(respuesta, len(chunks))
+    respuesta = _sanitizar_formato(respuesta)
+
     sin_informacion = _respuesta_indica_sin_informacion(respuesta)
+    _debug(f"answer_question: sin_informacion={sin_informacion}")
 
     if sin_informacion or not chunks:
         fuentes = []
         imagenes = []
     else:
-        fuentes = []
-        for c in chunks:
-            meta = c["metadata"]
-            if meta["origen"] == "error":
-                continue  # los errores frecuentes aportan contenido, pero no se citan como fuente
-            fuentes.append({
-                "seccion_id": meta["seccion_id"],
-                "titulo": meta["titulo"],
-                "pagina": meta["pagina_inicio"],
-            })
+        if indices_usados is None:
+            chunks_para_citar = chunks
+        else:
+            chunks_para_citar = [chunks[i - 1] for i in sorted(indices_usados)]
+
+        _debug(
+            "answer_question: chunks citados -> "
+            + str([(c["metadata"]["seccion_id"], c["metadata"]["titulo"]) for c in chunks_para_citar])
+        )
+
+        fuentes = _fuentes_unicas(chunks_para_citar, chunks_disponibles=chunks)
 
         imagenes_raw = []
-        for c in chunks:
+        for c in chunks_para_citar:
             imagenes_raw.extend(c["metadata"].get("imagenes") or [])
         imagenes = list(dict.fromkeys(imagenes_raw))  # sin duplicados, conserva el orden
 
@@ -330,6 +750,9 @@ def answer_question(question):
                 respuesta.rstrip()
                 + f"\n\nSi necesitas que se corrija directamente, abre un ticket de soporte aquí: {SUPPORT_TICKET_URL}"
             )
+
+    if correccion:
+        respuesta = f'Si quisiste decir **"{correccion}"**, esto es lo que necesitas saber:\n\n' + respuesta
 
     return {
         "respuesta": respuesta,

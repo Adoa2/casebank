@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .database import models
 from .database.db import engine
-from .routers import auth, chat, manual, admin_users, errors
+from .routers import auth, chat, manual, admin_users, errors, videos
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -27,6 +27,10 @@ tags_metadata = [
     {
         "name": "Errores frecuentes",
         "description": "Registro y aprobación de errores frecuentes para que la IA los use al responder.",
+    },
+    {
+        "name": "Videos formativos",
+        "description": "CRUD de videos formativos vinculados a secciones del manual. Requiere privilegio mayor.",
     },
 ]
 
@@ -54,6 +58,7 @@ api_router.include_router(manual.router)
 api_router.include_router(chat.router)
 api_router.include_router(admin_users.router)
 api_router.include_router(errors.router)
+api_router.include_router(videos.router)
 
 @api_router.get(
     "/",

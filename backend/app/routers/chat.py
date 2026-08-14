@@ -34,6 +34,11 @@ class FuenteManual(BaseModel):
         None,
         description="Numero de pagina donde inicia esa seccion en el manual. Es None si la fuente es un error.",
     )
+    pagina_fin: Optional[int] = Field(
+        None,
+        description="Numero de pagina donde termina esa seccion en el manual. Es None si la fuente es un error "
+                    "o si la seccion ocupa una sola pagina.",
+    )
 
 
 class ChatRespuesta(BaseModel):

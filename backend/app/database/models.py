@@ -62,3 +62,19 @@ class ErrorReport(Base):
 
     creator = relationship("User", foreign_keys=[created_by])
     reviewer = relationship("User", foreign_keys=[reviewed_by])
+
+
+class Video(Base):
+    __tablename__ = "videos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    titulo = Column(String, nullable=False)
+    url = Column(String, nullable=False)
+    seccion_id = Column(Integer, nullable=False, index=True)
+    capitulo = Column(String, nullable=False)
+    seccion = Column(String, nullable=True)
+    subseccion = Column(String, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    creator = relationship("User", foreign_keys=[created_by])

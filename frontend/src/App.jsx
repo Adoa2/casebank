@@ -43,7 +43,7 @@ export default function App() {
 
   if (authenticated) {
     if (mainView === 'admin' && isAdmin) {
-      return <AdminView onLogout={handleLogout} onGoDashboard={() => setMainView('dashboard')} />
+      return <AdminView onLogout={handleLogout} onGoDashboard={() => setMainView('dashboard')} role={role} />
     }
 
     return (
