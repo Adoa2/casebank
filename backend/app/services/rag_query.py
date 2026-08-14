@@ -751,22 +751,15 @@ def answer_question(question):
 
     correccion = analisis["correccion"]
     terminos_clave = analisis["terminos_clave"]
-
-    # Si hubo correccion ortografica, se usa la version corregida para
-    # generar la respuesta (el usuario ya vera el aviso de "si quisiste
-    # decir..." antepuesto al final). La busqueda ya se hizo arriba.
     pregunta_efectiva = correccion or question
+    if correccion and es_saludo_o_cortesia(correccion):
+        prompt = build_prompt(correccion, [], incluir_aviso_ticket=False)
+        respuesta = call_gemini_generate(prompt)
+        respuesta = _sanitizar_formato(respuesta)
+        return {"respuesta": respuesta, "fuentes": [], "imagenes": []}
 
     terminos_para_aviso = list(dict.fromkeys(list(terminos_clave) + _sinonimos_fijos(question)))
 
-    # La busqueda con la pregunta "pelada" a veces no alcanza a ubicar la
-    # seccion correcta cuando el usuario usa un termino distinto al del
-    # manual (ej. "catalogo" vs "definicion"): el embedding por si solo no
-    # siempre los asocia lo suficientemente cerca. Por eso se hace una
-    # segunda busqueda con los terminos clave/sinonimos agregados, y se
-    # fusionan ambos resultados quedandose con la mejor distancia de cada
-    # seccion. Esto es un segundo llamado a embeddings (no a generacion),
-    # asi que no afecta la cuota mas restringida del modelo de texto.
     if terminos_para_aviso:
         texto_expandido = question + " (" + ", ".join(terminos_para_aviso) + ")"
         chunks_expandidos = search_relevant_chunks(texto_expandido)
