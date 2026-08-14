@@ -7,6 +7,7 @@ import ResetPasswordView from './views/ResetPasswordView'
 import DashboardView from './views/DashboardView'
 import AdminView from './views/AdminView'
 import { getRole, clearAuthData } from './api/authToken'
+import logoImage from './assets/logo_black.png'
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(() => Boolean(localStorage.getItem('casebank_token')))
@@ -43,7 +44,7 @@ export default function App() {
 
   if (authenticated) {
     if (mainView === 'admin' && isAdmin) {
-      return <AdminView onLogout={handleLogout} onGoDashboard={() => setMainView('dashboard')} role={role} />
+      return <AdminView onLogout={handleLogout} onGoDashboard={() => setMainView('dashboard')} />
     }
 
     return (
@@ -56,13 +57,14 @@ export default function App() {
   }
 
   return (
-    <div className="grid min-h-screen min-h-dvh grid-cols-1 md:grid-cols-[1.5fr_1fr]">
-      <div className="hidden md:block">
+    <div className="grid min-h-screen min-h-dvh grid-cols-1 lg:grid-cols-[57%_43%]">
+      <div className="hidden lg:block">
         <BrandPanel />
       </div>
 
-      <div className="flex items-center justify-center bg-paper px-4 py-8 sm:px-6 sm:py-10 md:px-8">
-        <div className="w-full max-w-[380px]">
+      <div className="auth-stage relative flex min-h-screen min-h-dvh items-center justify-center px-4 py-6 sm:px-8 sm:py-10 lg:px-[clamp(2rem,4vw,4.5rem)]">
+        <img src={logoImage} alt="CaseBank" className="absolute left-6 top-6 w-[138px] lg:hidden" />
+        <div className={`auth-card w-full ${view === 'login' ? 'max-w-[510px] lg:min-h-[650px]' : 'max-w-[510px]'}`}>
           {view === 'login' && (
             <LoginView
               notice={loginNotice}
