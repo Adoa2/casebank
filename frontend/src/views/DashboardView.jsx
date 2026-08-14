@@ -6,8 +6,7 @@ import ChatPanel from '../components/ChatPanel'
 import TipsCarousel from '../components/TipsCarousel'
 import caseyChatImage from '../assets/casey_chat.png'
 import caseyReadingImage from '../assets/casey_lee.png'
-import { API_BASE_URL } from '../config'
-import { authHeaders } from '../api/authToken'
+import { fetchManualStructure } from '../api/manual'
 import { buildManualTree } from '../utils/manualTree'
 
 export default function DashboardView({ onLogout, isAdmin, onGoAdmin }) {
@@ -25,16 +24,7 @@ export default function DashboardView({ onLogout, isAdmin, onGoAdmin }) {
 
     async function cargarManual() {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/manual`, {
-          headers: authHeaders(),
-        })
-
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}))
-          throw new Error(data.detail || 'No se pudo cargar el índice del manual.')
-        }
-
-        const secciones = await res.json()
+        const secciones = await fetchManualStructure()
         const tree = buildManualTree(secciones)
 
         if (!cancelado) {
