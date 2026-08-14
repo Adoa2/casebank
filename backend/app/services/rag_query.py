@@ -53,6 +53,13 @@ N_RESULTS = 8
 DISTANCE_FACTOR = 1.3
 MAX_CHUNKS_USADOS = 5
 MAX_DISTANCE_ABSOLUTE = 0.55
+# Umbral mas estricto solo para los chunks de errores frecuentes (origen
+# "error"). Sugerir un ticket de soporte por una coincidencia semantica
+# suelta/casual (ej. un mensaje como "te quiero" matcheando por casualidad
+# con algun error registrado) es peor que no sugerirlo, asi que estos
+# chunks necesitan una cercania mucho mayor que los del manual para
+# considerarse relevantes.
+MAX_DISTANCE_ERROR = 0.35
 
 # Interruptor para el logging de diagnostico agregado mientras depuramos la
 # busqueda semantica. Poner en False (o borrar los prints marcados con
@@ -109,6 +116,36 @@ _ABOUT_ASSISTANT_REGEX = re.compile(
     r"(?:" + "|".join(ABOUT_ASSISTANT_PATTERNS) + r")",
     re.IGNORECASE,
 )
+
+
+_REPETIDO_REGEX = re.compile(r"(.)\1{3,}")  # el mismo caracter 4+ veces seguidas
+_VOCALES = set("aeiouáéíóúü")
+
+
+def es_mensaje_sin_sentido(texto):
+    """
+    Deteccion rapida (sin llamar a Gemini) de mensajes que claramente no son
+    una pregunta real: muy cortos, sin vocales (tipico de apretar teclas al
+    azar, ej. "svvvvvvvvvvvvvvvvv"), o dominados por un mismo caracter
+    repetido. Sirve para evitar correr todo el pipeline (analisis + busqueda
+    doble + generacion, ~20s) en mensajes que de entrada no tienen sentido.
+    """
+    normalizado = texto.strip().lower()
+    if len(normalizado) < 3:
+        return True
+
+    solo_letras = re.sub(r"[^a-záéíóúñü]", "", normalizado)
+    if not solo_letras:
+        return True
+
+    vocales = sum(1 for c in solo_letras if c in _VOCALES)
+    if len(solo_letras) >= 5 and vocales == 0:
+        return True
+
+    if _REPETIDO_REGEX.search(normalizado) and len(set(solo_letras)) <= 3:
+        return True
+
+    return False
 
 
 def es_pregunta_sobre_el_asistente(texto):
@@ -223,6 +260,12 @@ Reglas para "correccion":
 - NUNCA marques como error ortografico el uso de una palabra valida pero
   distinta (ej. "catalogo" en vez de "definicion" NO es un error ortografico,
   es un sinonimo).
+- NUNCA marques como error ortografico la simple falta de tildes/acentos
+  (ej. "amortizacion" en vez de "amortización", o "como" en vez de "cómo").
+  Eso es muy comun al escribir rapido y NO amerita el aviso de correccion.
+  Solo corrige errores de tipeo reales: letras faltantes, de mas, cambiadas
+  de lugar, o palabras mal escritas (ej. "cmo" -> "como", "usuARIO" ->
+  "usuario", "ccon" -> "con").
 
 Reglas para "terminos_clave":
 - Lista de 0 a 5 palabras o frases clave, en espanol, que ayuden a encontrar
@@ -729,6 +772,13 @@ def answer_question(question):
 
     Devuelve un diccionario con las llaves: respuesta, fuentes, imagenes.
     """
+    if es_mensaje_sin_sentido(question):
+        return {
+            "respuesta": "Disculpa, ¿podrías darme un poco más de contexto sobre tu consulta?",
+            "fuentes": [],
+            "imagenes": [],
+        }
+
     if es_saludo_o_cortesia(question):
         prompt = build_prompt(question, [], incluir_aviso_ticket=False)
         respuesta = call_gemini_generate(prompt)
@@ -751,7 +801,17 @@ def answer_question(question):
 
     correccion = analisis["correccion"]
     terminos_clave = analisis["terminos_clave"]
+
+    # Si hubo correccion ortografica, se usa la version corregida para
+    # generar la respuesta (el usuario ya vera el aviso de "si quisiste
+    # decir..." antepuesto al final). La busqueda ya se hizo arriba.
     pregunta_efectiva = correccion or question
+
+    # Si el texto corregido resulta ser un saludo, agradecimiento o despedida
+    # (ej. "komo estas" -> "como estas", "graciasss" -> "gracias"), no tiene
+    # sentido tratarlo como una pregunta real sobre el manual ni mostrar el
+    # aviso de "si quisiste decir...": se responde directo como cortesia,
+    # igual que si se hubiera escrito bien desde el principio.
     if correccion and es_saludo_o_cortesia(correccion):
         prompt = build_prompt(correccion, [], incluir_aviso_ticket=False)
         respuesta = call_gemini_generate(prompt)
@@ -760,6 +820,14 @@ def answer_question(question):
 
     terminos_para_aviso = list(dict.fromkeys(list(terminos_clave) + _sinonimos_fijos(question)))
 
+    # La busqueda con la pregunta "pelada" a veces no alcanza a ubicar la
+    # seccion correcta cuando el usuario usa un termino distinto al del
+    # manual (ej. "catalogo" vs "definicion"): el embedding por si solo no
+    # siempre los asocia lo suficientemente cerca. Por eso se hace una
+    # segunda busqueda con los terminos clave/sinonimos agregados, y se
+    # fusionan ambos resultados quedandose con la mejor distancia de cada
+    # seccion. Esto es un segundo llamado a embeddings (no a generacion),
+    # asi que no afecta la cuota mas restringida del modelo de texto.
     if terminos_para_aviso:
         texto_expandido = question + " (" + ", ".join(terminos_para_aviso) + ")"
         chunks_expandidos = search_relevant_chunks(texto_expandido)
@@ -776,7 +844,10 @@ def answer_question(question):
     )
 
     chunks_relevantes = filtrar_por_relevancia(chunks_crudos)
-    chunks = [c for c in chunks_relevantes if c["distance"] <= MAX_DISTANCE_ABSOLUTE]
+    def _umbral_para(chunk):
+        return MAX_DISTANCE_ERROR if chunk["metadata"]["origen"] == "error" else MAX_DISTANCE_ABSOLUTE
+
+    chunks = [c for c in chunks_relevantes if c["distance"] <= _umbral_para(c)]
 
     _debug(f"answer_question: chunks tras umbral MAX_DISTANCE_ABSOLUTE={MAX_DISTANCE_ABSOLUTE} -> {len(chunks)} chunk(s)")
 
