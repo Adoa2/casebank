@@ -53,8 +53,8 @@ N_RESULTS = 8
 DISTANCE_FACTOR = 1.3
 MAX_CHUNKS_USADOS = 5
 MAX_DISTANCE_ABSOLUTE = 0.55
-MAX_DISTANCE_ERROR = 0.35
 
+MAX_DISTANCE_ERROR = 0.35
 
 DEBUG_RAG = True
 
@@ -84,6 +84,7 @@ _GREETING_REGEX = re.compile(
     r"^(?:" + "|".join(GREETING_BASES) + r")" + _SUFIJO_NOMBRE + r"[!?.,¡¿\s]*$",
     re.IGNORECASE,
 )
+
 
 ABOUT_ASSISTANT_PATTERNS = [
     r"(que|qu[ée]) (haces|puedes hacer|sabes hacer|funciones tienes)(\s+(tu|vos|casey))?",
@@ -146,7 +147,6 @@ def es_pregunta_sobre_el_asistente(texto):
     normalizado = texto.strip().lower()
     return bool(_ABOUT_ASSISTANT_REGEX.search(normalizado))
 
-
 SINONIMOS_DOMINIO = {
     "catalogo": ["definición", "definicion"],
     "catálogo": ["definición", "definicion"],
@@ -182,9 +182,11 @@ def es_saludo_o_cortesia(texto):
 
 
 REQUEST_TIMEOUT_SEGUNDOS = 20
+TIMEOUT_BEST_EFFORT_SEGUNDOS = 8
+REINTENTOS_BEST_EFFORT = 2
 
 
-def _post_con_reintentos(url, body):
+def _post_con_reintentos(url, body, max_reintentos=MAX_REINTENTOS, timeout=REQUEST_TIMEOUT_SEGUNDOS):
     """
     POST con reintentos, usado tanto para embed como para generar. Reintenta
     ante:
@@ -192,13 +194,19 @@ def _post_con_reintentos(url, body):
       - Timeout o error de conexion: sin un timeout explicito, una conexion
         que se cuelga (algo mas frecuente en entornos serverless como
         Vercel que en un entorno local) puede dejar la llamada esperando
-        indefinidamente sin loguear nada, lo cual se vio en produccion como
-        una demora de ~50s en una sola llamada sin ningun mensaje de rate
-        limit de por medio. Con el timeout, ese escenario ahora falla rapido
-        y reintenta (o termina en un error claro) en vez de colgarse.
+        indefinidamente sin loguear nada. Con el timeout, ese escenario
+        ahora falla rapido y reintenta (o termina en un error claro) en vez
+        de colgarse.
+
+    max_reintentos y timeout son ajustables por llamada: las llamadas
+    criticas (ej. la generacion final de la respuesta) usan los valores por
+    defecto, mas persistentes. Las llamadas "best-effort" (ej. el analisis
+    de correccion/sinonimos, que ya tiene un fallback gracioso si falla) se
+    llaman con valores mas bajos, para que ante una demora de red no
+    arrastren toda la respuesta del usuario innecesariamente.
     """
     ultimo_error = None
-    for intento in range(MAX_REINTENTOS):
+    for intento in range(max_reintentos):
         try:
             respuesta = requests.post(
                 url,
@@ -207,7 +215,7 @@ def _post_con_reintentos(url, body):
                     "Content-Type": "application/json",
                 },
                 json=body,
-                timeout=REQUEST_TIMEOUT_SEGUNDOS,
+                timeout=timeout,
             )
         except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
             ultimo_error = e
@@ -291,10 +299,15 @@ Reglas para "terminos_clave":
 Responde solo el JSON."""
 
     try:
-        datos = _post_con_reintentos(GEMINI_GENERATE_URL, {
-            "contents": [{"parts": [{"text": prompt_analisis}]}],
-            "generationConfig": {"response_mime_type": "application/json"},
-        })
+        datos = _post_con_reintentos(
+            GEMINI_GENERATE_URL,
+            {
+                "contents": [{"parts": [{"text": prompt_analisis}]}],
+                "generationConfig": {"response_mime_type": "application/json"},
+            },
+            max_reintentos=REINTENTOS_BEST_EFFORT,
+            timeout=TIMEOUT_BEST_EFFORT_SEGUNDOS,
+        )
 
         candidatos = datos.get("candidates") or []
         if not candidatos:
@@ -345,22 +358,27 @@ def _sinonimos_fijos(texto):
     return extras
 
 
-def embed_query(pregunta):
+def embed_query(pregunta, max_reintentos=MAX_REINTENTOS, timeout=REQUEST_TIMEOUT_SEGUNDOS):
     """Genera el embedding de la pregunta del usuario usando Gemini (RETRIEVAL_QUERY)."""
-    datos = _post_con_reintentos(GEMINI_EMBED_URL, {
-        "model": f"models/{GEMINI_EMBED_MODEL}",
-        "content": {"parts": [{"text": pregunta}]},
-        "taskType": "RETRIEVAL_QUERY",
-        "outputDimensionality": EMBED_DIMENSION,
-    })
+    datos = _post_con_reintentos(
+        GEMINI_EMBED_URL,
+        {
+            "model": f"models/{GEMINI_EMBED_MODEL}",
+            "content": {"parts": [{"text": pregunta}]},
+            "taskType": "RETRIEVAL_QUERY",
+            "outputDimensionality": EMBED_DIMENSION,
+        },
+        max_reintentos=max_reintentos,
+        timeout=timeout,
+    )
     return datos["embedding"]["values"]
 
 
-def search_relevant_chunks(pregunta, n_results=N_RESULTS):
+def search_relevant_chunks(pregunta, n_results=N_RESULTS, max_reintentos=MAX_REINTENTOS, timeout=REQUEST_TIMEOUT_SEGUNDOS):
     """Busca en Postgres/pgvector los chunks del manual y los errores aprobados mas relevantes."""
     _debug(f"search_relevant_chunks: texto enviado a embed_query -> {pregunta!r}")
 
-    query_embedding = embed_query(pregunta)
+    query_embedding = embed_query(pregunta, max_reintentos=max_reintentos, timeout=timeout)
     embedding_literal = "[" + ",".join(str(v) for v in query_embedding) + "]"
 
     conn = psycopg2.connect(DATABASE_URL)
@@ -489,13 +507,6 @@ def filtrar_por_relevancia(chunks, factor=DISTANCE_FACTOR, max_chunks=MAX_CHUNKS
     if not relevantes:
         relevantes = chunks_ordenados[:1]
 
-    # Antes se forzaba un chunk por seccion como maximo para no citar temas
-    # repetidos, pero eso podia cortar a la mitad el contenido de la seccion
-    # mas relevante cuando esta viene dividida en varios chunks (ej. pasos de
-    # agregar en un chunk y de buscar/modificar/eliminar en otro). Ahora que
-    # las citas finales se filtran con el marcador FUENTES_USADAS (solo se
-    # cita lo que el modelo realmente uso), no hace falta forzar diversidad
-    # aca: se prioriza dar contexto completo de las secciones mas relevantes.
     resultado = relevantes[:max_chunks]
     _debug(
         f"filtrar_por_relevancia: mejor_distancia={mejor_distancia:.4f} limite={limite:.4f} -> "
@@ -799,7 +810,8 @@ def answer_question(question):
 
     if es_pregunta_sobre_el_asistente(question):
         return {"respuesta": RESPUESTA_SOBRE_ASISTENTE, "fuentes": [], "imagenes": []}
-    
+
+
     _t_inicio = time.time()
     with ThreadPoolExecutor(max_workers=2) as executor:
         futuro_analisis = executor.submit(analizar_pregunta, question)
@@ -811,8 +823,8 @@ def answer_question(question):
     correccion = analisis["correccion"]
     terminos_clave = analisis["terminos_clave"]
 
-    pregunta_efectiva = correccion or question
 
+    pregunta_efectiva = correccion or question
     if correccion and es_saludo_o_cortesia(correccion):
         prompt = build_prompt(correccion, [], incluir_aviso_ticket=False)
         respuesta = call_gemini_generate(prompt)
@@ -820,12 +832,18 @@ def answer_question(question):
         return {"respuesta": respuesta, "fuentes": [], "imagenes": []}
 
     terminos_para_aviso = list(dict.fromkeys(list(terminos_clave) + _sinonimos_fijos(question)))
-
     if terminos_para_aviso:
         _t_expandida = time.time()
         texto_expandido = question + " (" + ", ".join(terminos_para_aviso) + ")"
-        chunks_expandidos = search_relevant_chunks(texto_expandido)
-        chunks_crudos = _fusionar_chunks(chunks_crudos, chunks_expandidos)
+        try:
+            chunks_expandidos = search_relevant_chunks(
+                texto_expandido,
+                max_reintentos=REINTENTOS_BEST_EFFORT,
+                timeout=TIMEOUT_BEST_EFFORT_SEGUNDOS,
+            )
+            chunks_crudos = _fusionar_chunks(chunks_crudos, chunks_expandidos)
+        except (RuntimeError, requests.exceptions.RequestException) as e:
+            _debug(f"busqueda expandida fallo, se continua solo con la busqueda base: {e}")
         _debug(f"tiempo busqueda expandida: {time.time() - _t_expandida:.2f}s")
         _debug(
             "answer_question: resultados fusionados (base + expandida) -> "
