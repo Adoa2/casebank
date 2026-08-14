@@ -79,16 +79,10 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(false)
   const messagesEndRef = useRef(null)
-  const latestAnswerRef = useRef(null)
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      if (loading) {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-        return
-      }
-
-      latestAnswerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
     })
 
     return () => cancelAnimationFrame(frame)
@@ -185,10 +179,9 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-5 space-y-4">
-        {messages.map((message, index) => (
+        {messages.map((message) => (
           <div
             key={message.id}
-            ref={message.role === 'assistant' && index === messages.length - 1 ? latestAnswerRef : null}
             className={`flex scroll-mt-4 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
