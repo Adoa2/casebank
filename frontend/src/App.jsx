@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import BrandPanel from './components/BrandPanel'
 import LoginView from './views/LoginView'
 import RegisterView from './views/RegisterView'
@@ -6,7 +6,7 @@ import ForgotPasswordView from './views/ForgotPasswordView'
 import ResetPasswordView from './views/ResetPasswordView'
 import DashboardView from './views/DashboardView'
 import AdminView from './views/AdminView'
-import { getRole, clearAuthData } from './api/authToken'
+import { getRole, clearAuthData, UNAUTHORIZED_EVENT } from './api/authToken'
 import logoImage from './assets/logo_black.png'
 
 export default function App() {
@@ -40,11 +40,30 @@ export default function App() {
     setView('login')
   }
 
+  // Si cualquier peticion a la API devuelve 401 (token vencido o invalido),
+  // authToken.js dispara este evento global. En vez de dejar que el error
+  // crudo del backend quede renderizado en pantalla, se cierra la sesion
+  // localmente y se vuelve al login con un aviso claro.
+  useEffect(() => {
+    function onUnauthorized() {
+      setAuthenticated(false)
+      setRole(0)
+      setMainView('dashboard')
+      goToLoginWithNotice({
+        text: 'Tu sesión expiró. Por favor, inicia sesión nuevamente.',
+        type: 'error',
+      })
+    }
+
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized)
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized)
+  }, [])
+
   const isAdmin = role >= 1
 
   if (authenticated) {
     if (mainView === 'admin' && isAdmin) {
-      return <AdminView onLogout={handleLogout} onGoDashboard={() => setMainView('dashboard')} />
+      return <AdminView onLogout={handleLogout} onGoDashboard={() => setMainView('dashboard')} role={role} />
     }
 
     return (

@@ -29,7 +29,7 @@ export default function AdminView({ onLogout, onGoDashboard, role = 0 }) {
             <span aria-hidden="true">‹</span> Volver al manual
           </button>
           {activeSection === 'usuarios' && role >= 2 && <UsersSection />}
-          {activeSection === 'errores-frecuentes' && <ErrorsSection />}
+          {activeSection === 'errores-frecuentes' && role >= 1 && <ErrorsSection />}
           {activeSection === 'videos' && role >= 2 && <VideosSection />}
         </div>
       </div>
