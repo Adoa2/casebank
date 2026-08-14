@@ -53,6 +53,10 @@ N_RESULTS = 8
 DISTANCE_FACTOR = 1.3
 MAX_CHUNKS_USADOS = 5
 MAX_DISTANCE_ABSOLUTE = 0.55
+
+# Interruptor para el logging de diagnostico agregado mientras depuramos la
+# busqueda semantica. Poner en False (o borrar los prints marcados con
+# [DEBUG]) una vez que todo funcione como se espera.
 DEBUG_RAG = True
 
 FRASE_SIN_INFORMACION = "No cuento con esa información en el manual."
@@ -82,7 +86,44 @@ _GREETING_REGEX = re.compile(
     re.IGNORECASE,
 )
 
+# Preguntas sobre el asistente mismo (que hace, quien es, cuales son sus
+# funciones) en vez de sobre un tema del manual. Se detectan por separado
+# para responderlas directo, sin pasar por la busqueda semantica (que nunca
+# va a encontrar nada relevante en el manual para este tipo de preguntas).
+ABOUT_ASSISTANT_PATTERNS = [
+    r"(que|qu[ée]) (haces|puedes hacer|sabes hacer|funciones tienes)(\s+(tu|vos|casey))?",
+    r"quien(es)? (eres|sos)(\s+(tu|vos|casey))?",
+    r"que (eres|sos)(\s+(tu|vos|casey))?",
+    r"cual(es)? (es|son) tu(s)? funci[oó]n(es)?",
+    r"(en|de) que (me puedes|podes|puedes) ayudar",
+    r"como (me puedes|podes|puedes) ayudar(me)?",
+    r"para que (sirves|te uso|eres|te puedo usar|sos)",
+    r"que tipo de (preguntas|cosas|temas) (puedo hacerte|me puedes ayudar|puedo preguntarte)",
+    r"que es casey",
+    r"h[aá]blame de ti",
+    r"cu[eé]ntame (sobre ti|de ti|sobre vos|de vos)",
+    r"que (informacion|informaci[oó]n) (tienes|manejas|tenes)",
+]
 
+_ABOUT_ASSISTANT_REGEX = re.compile(
+    r"(?:" + "|".join(ABOUT_ASSISTANT_PATTERNS) + r")",
+    re.IGNORECASE,
+)
+
+
+def es_pregunta_sobre_el_asistente(texto):
+    """
+    True si el mensaje pregunta sobre el asistente mismo (que hace, cuales
+    son sus funciones, quien es, etc.) en vez de sobre un tema puntual del
+    manual. Estas preguntas se responden directo, describiendo las
+    capacidades reales de Casey, sin pasar por la busqueda semantica.
+    """
+    normalizado = texto.strip().lower()
+    return bool(_ABOUT_ASSISTANT_REGEX.search(normalizado))
+
+# Sinonimos fijos de respaldo (gratuitos, no dependen de la API). Se combinan
+# con los terminos clave que genera Gemini en analizar_pregunta(); si esa
+# llamada falla por cualquier motivo, esta lista sigue dando algo de cobertura.
 SINONIMOS_DOMINIO = {
     "catalogo": ["definición", "definicion"],
     "catálogo": ["definición", "definicion"],
@@ -392,6 +433,13 @@ def filtrar_por_relevancia(chunks, factor=DISTANCE_FACTOR, max_chunks=MAX_CHUNKS
     if not relevantes:
         relevantes = chunks_ordenados[:1]
 
+    # Antes se forzaba un chunk por seccion como maximo para no citar temas
+    # repetidos, pero eso podia cortar a la mitad el contenido de la seccion
+    # mas relevante cuando esta viene dividida en varios chunks (ej. pasos de
+    # agregar en un chunk y de buscar/modificar/eliminar en otro). Ahora que
+    # las citas finales se filtran con el marcador FUENTES_USADAS (solo se
+    # cita lo que el modelo realmente uso), no hace falta forzar diversidad
+    # aca: se prioriza dar contexto completo de las secciones mas relevantes.
     resultado = relevantes[:max_chunks]
     _debug(
         f"filtrar_por_relevancia: mejor_distancia={mejor_distancia:.4f} limite={limite:.4f} -> "
@@ -458,6 +506,16 @@ def _fuentes_unicas(chunks_citados, chunks_disponibles=None):
         })
 
     return fuentes
+
+
+RESPUESTA_SOBRE_ASISTENTE = (
+    "Soy Casey, el asistente virtual de CaseBank. Te oriento con base en el "
+    "Manual de Usuario del sistema, explico paso a paso los distintos "
+    "procedimientos y te ayudo a interpretar mensajes de error frecuentes. "
+    "En cada respuesta incluyo la sección y página del manual en la que me "
+    "baso, y puedes consultarme en lenguaje natural, sin necesidad de "
+    "conocer términos técnicos."
+)
 
 
 def build_prompt(pregunta, chunks, incluir_aviso_ticket, terminos_clave=None, omitir_saludo=False):
@@ -676,6 +734,15 @@ def answer_question(question):
         respuesta = call_gemini_generate(prompt)
         return {"respuesta": respuesta, "fuentes": [], "imagenes": []}
 
+    if es_pregunta_sobre_el_asistente(question):
+        return {"respuesta": RESPUESTA_SOBRE_ASISTENTE, "fuentes": [], "imagenes": []}
+
+    # analizar_pregunta (correccion ortografica + terminos clave) y la
+    # busqueda semantica no dependen una de la otra -- ambas solo necesitan
+    # la pregunta original -- asi que se corren en paralelo para no sumar
+    # sus tiempos de red. La busqueda usa el texto original (sin corregir):
+    # una correccion ortografica solo aplica en casos raros de tipeo, y los
+    # embeddings ya son razonablemente tolerantes a errores menores.
     with ThreadPoolExecutor(max_workers=2) as executor:
         futuro_analisis = executor.submit(analizar_pregunta, question)
         futuro_chunks = executor.submit(search_relevant_chunks, question)
@@ -684,9 +751,22 @@ def answer_question(question):
 
     correccion = analisis["correccion"]
     terminos_clave = analisis["terminos_clave"]
+
+    # Si hubo correccion ortografica, se usa la version corregida para
+    # generar la respuesta (el usuario ya vera el aviso de "si quisiste
+    # decir..." antepuesto al final). La busqueda ya se hizo arriba.
     pregunta_efectiva = correccion or question
 
     terminos_para_aviso = list(dict.fromkeys(list(terminos_clave) + _sinonimos_fijos(question)))
+
+    # La busqueda con la pregunta "pelada" a veces no alcanza a ubicar la
+    # seccion correcta cuando el usuario usa un termino distinto al del
+    # manual (ej. "catalogo" vs "definicion"): el embedding por si solo no
+    # siempre los asocia lo suficientemente cerca. Por eso se hace una
+    # segunda busqueda con los terminos clave/sinonimos agregados, y se
+    # fusionan ambos resultados quedandose con la mejor distancia de cada
+    # seccion. Esto es un segundo llamado a embeddings (no a generacion),
+    # asi que no afecta la cuota mas restringida del modelo de texto.
     if terminos_para_aviso:
         texto_expandido = question + " (" + ", ".join(terminos_para_aviso) + ")"
         chunks_expandidos = search_relevant_chunks(texto_expandido)
@@ -728,6 +808,10 @@ def answer_question(question):
         fuentes = []
         imagenes = []
     else:
+        # Solo se citan las fuentes que el modelo declaro haber usado
+        # realmente (via el marcador FUENTES_USADAS). Si no se pudo
+        # determinar (marcador ausente), se usan todos los chunks como
+        # respaldo, igual que antes de este cambio.
         if indices_usados is None:
             chunks_para_citar = chunks
         else:

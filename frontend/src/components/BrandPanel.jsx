@@ -20,7 +20,7 @@ const team = [
 ]
 
 function findProfile(name) {
-  const entry = Object.entries(profileAssets).find(([path]) => path.match(new RegExp(`/${name}\\.(png|jpe?g|webp)$`, 'i')))
+  const entry = Object.entries(profileAssets).find(([path]) => path.match(new RegExp(`/${name}\\.(png|jpg|webp)$`, 'i')))
   return entry?.[1]
 }
 
