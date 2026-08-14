@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { API_BASE_URL } from '../config'
 import { authHeaders } from '../api/authToken'
 import caseyImage from '../assets/casey_perfil.png'
@@ -71,6 +71,21 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
   const [messages, setMessages] = useState(INITIAL_MESSAGES)
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(false)
+  const messagesEndRef = useRef(null)
+  const latestAnswerRef = useRef(null)
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      if (loading) {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+        return
+      }
+
+      latestAnswerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [messages, loading])
 
   function handleClear() {
     setMessages([...INITIAL_MESSAGES])
@@ -156,8 +171,12 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-5 space-y-4">
-        {messages.map((message) => (
-          <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+        {messages.map((message, index) => (
+          <div
+            key={message.id}
+            ref={message.role === 'assistant' && index === messages.length - 1 ? latestAnswerRef : null}
+            className={`flex scroll-mt-4 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+          >
             <div
               className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                 message.role === 'user' ? 'bg-brand-blue text-white' : 'bg-gradient-to-br from-slate-50 to-blue-50 text-blue-950'
@@ -216,6 +235,8 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
         {loading && (
           <div className="max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm bg-paper text-slate">Pensando...</div>
         )}
+
+        <div ref={messagesEndRef} aria-hidden="true" />
       </div>
 
       <form onSubmit={handleSend} className="border-t border-line p-3">

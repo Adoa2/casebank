@@ -1,107 +1,124 @@
+import { useEffect, useState } from 'react'
 import caseyImage from '../assets/casey_saludo.png'
-import logoImage from '../assets/logo.png'
+import logoImage from '../assets/logo_black.png'
 
-const features = [
-  {
-    title: 'Explorar el manual',
-    description: 'Consulta capítulos, secciones y procedimientos paso a paso.',
-    color: 'bg-blue-600',
-    icon: (
-      <path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H11v16H7.5A3.5 3.5 0 0 0 4 21.5v-16Zm16 0A3.5 3.5 0 0 0 16.5 2H13v16h3.5a3.5 3.5 0 0 1 3.5 3.5v-16Z" />
-    ),
-  },
-  {
-    title: 'Hacer consultas',
-    description: 'Pregúntame lo que necesites y te responderé al instante.',
-    color: 'bg-sky-500',
-    icon: (
-      <path d="M5 4h14a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3h-8l-5 4v-4H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Zm3 6a1.25 1.25 0 1 0 0 .01V10Zm4 0a1.25 1.25 0 1 0 0 .01V10Zm4 0a1.25 1.25 0 1 0 0 .01V10Z" />
-    ),
-  },
-  {
-    title: 'Conocer más de CASEBANK',
-    description: 'Descubre funcionalidades, buenas prácticas y recomendaciones.',
-    color: 'bg-emerald-500',
-    icon: (
-      <path d="M4 19h4v-7H4v7Zm6 0h4V5h-4v14Zm6 0h4V9h-4v10Z" />
-    ),
-  },
+const profileAssets = import.meta.glob('../assets/perfil*.{png,jpg,jpeg,webp}', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+})
+
+const team = [
+  { image: 'perfil_1', name: 'Ing. José Alfredo Martínez', role: 'Gerente Evaluate Comercial' },
+  { image: 'perfil_2', name: 'MSc. José Alfredo Martínez Cáceres', role: 'Gerente SINTEG' },
+  { image: 'perfil_3', name: 'MSc. Jairon Aviles', role: 'Jefe de Desarrollo' },
+  { image: 'perfil_4', name: 'MSc. Esdra Alvarez', role: 'Programadora' },
+  { image: 'perfil_5', name: 'MSc. Gimena Sanchez', role: 'Programadora' },
+  { image: 'perfil_6', name: 'Ing. Hesler Alvarado', role: 'Programador' },
+  { image: 'perfil_7', name: 'MSc. Heidy Lemus', role: 'Programadora' },
+  { image: 'perfil_8', name: 'Ing. Adolfo Amador', role: 'Programador' },
 ]
 
+function findProfile(name) {
+  const entry = Object.entries(profileAssets).find(([path]) => path.match(new RegExp(`/${name}\\.(png|jpe?g|webp)$`, 'i')))
+  return entry?.[1]
+}
+
 export default function BrandPanel() {
+  const [carouselSlide, setCarouselSlide] = useState(0)
+  const teamPages = Math.ceil(team.length / 4)
+  const totalSlides = teamPages + 1
+  const visibleTeam = carouselSlide > 0 ? team.slice((carouselSlide - 1) * 4, carouselSlide * 4) : []
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setCarouselSlide((current) => (current + 1) % totalSlides)
+    }, 10000)
+
+    return () => window.clearInterval(interval)
+  }, [totalSlides])
+
+  function moveCarousel(direction) {
+    setCarouselSlide((current) => (current + direction + totalSlides) % totalSlides)
+  }
+
   return (
-    <section className="brand-gradient brand-dots relative flex min-h-screen flex-col overflow-hidden px-6 py-5 text-white sm:px-8 lg:px-10">
-      <div
-        className="pointer-events-none absolute bottom-0 right-0 h-64 w-80 bg-white/5"
-        style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 100%)' }}
-        aria-hidden="true"
-      />
+    <section className="brand-light relative flex min-h-screen flex-col overflow-hidden px-[clamp(2rem,4vw,3.75rem)] py-[clamp(1.5rem,3vh,2.6rem)] text-[#102451]">
+      <div className="brand-corner-dots" aria-hidden="true" />
 
       <header className="relative z-10">
-        <img
-          src={logoImage}
-          alt="CaseBank"
-          className="h-auto w-full object-contain object-left"
-          style={{ maxWidth: '150px' }}
-        />
+        <img src={logoImage} alt="CaseBank" className="h-auto w-[150px] object-contain object-left" />
       </header>
 
-      <div className="brand-hero relative z-10 mt-4 flex flex-1 flex-col gap-4 sm:gap-6 md:flex-row md:items-center md:justify-between">
-        <div className="max-w-xl">
-          <h1 className="font-display text-[clamp(2.1rem,3.6vw,2.8rem)] font-semibold leading-tight">
-            Tu manual
-            <br />
-            interactivo de
-            <br />
-            <span className="text-cyan-300">CASEBANK</span>
+      <div className="relative z-10 mt-[clamp(1.6rem,4vh,3.25rem)] grid grid-cols-[minmax(220px,.9fr)_minmax(240px,1.1fr)] items-stretch gap-5">
+        <div className="flex h-full flex-col">
+          <div className="inline-flex items-center gap-2 rounded-xl bg-blue-100/80 px-4 py-2 text-sm font-semibold text-blue-700">
+            <span className="text-lg text-blue-500">✣</span> Tu guía inteligente
+          </div>
+          <h1 className="mt-5 font-display text-[clamp(2.15rem,3.25vw,3.2rem)] font-bold leading-[1.03] tracking-[-0.035em]">
+            Tu manual<br />interactivo de<br /><span className="brand-title-gradient">CASEBANK</span>
           </h1>
-
-          <p className="mt-4 max-w-[38ch] text-base leading-relaxed text-white/95 sm:text-lg">
+          <p className="mt-5 max-w-[39ch] text-[0.92rem] leading-relaxed text-[#536589]">
             Consulta cualquier procedimiento del sistema y pregunta a la IA tus casos específicos.
           </p>
-
-          <div className="mt-5 space-y-2 text-sm sm:text-base">
-            <p className="flex items-center gap-3">
-              <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-emerald-400 text-xs font-bold text-blue-800">✓</span>
-              Busca por capítulo, sección o palabra clave
-            </p>
-            <p className="flex items-center gap-3">
-              <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-emerald-400 text-xs font-bold text-blue-800">✓</span>
-              Pregunta directamente al asistente si tienes dudas
-            </p>
+          <div className="mt-5 space-y-2.5 text-[0.82rem] text-[#455a80]">
+            {['Busca por capítulo, sección o palabra clave', 'Pregunta directamente al asistente si tienes dudas'].map((text) => (
+              <p key={text} className="flex items-center gap-3">
+                <span className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full bg-[#18b9a7] text-[11px] font-bold text-white">✓</span>{text}
+              </p>
+            ))}
           </div>
+
         </div>
 
-        <div className="flex w-full justify-center md:w-auto md:flex-1 md:justify-end">
-          <img
-            src={caseyImage}
-            alt="Casey"
-            className="h-auto w-full max-w-[260px] sm:max-w-[300px] md:max-w-[360px] lg:max-w-[420px] drop-shadow-[0_24px_40px_rgba(0,0,0,0.28)]"
-          />
+        <div className="relative flex min-h-[330px] items-center justify-center">
+          <div className="absolute top-0 h-[min(28vw,370px)] w-[min(28vw,370px)] rounded-full bg-gradient-to-br from-blue-100/70 to-cyan-50/30" aria-hidden="true" />
+          <img src={caseyImage} alt="Casey, asistente virtual de CaseBank" className="relative z-10 w-full max-w-[410px] drop-shadow-[0_22px_28px_rgba(42,93,180,0.18)]" />
         </div>
       </div>
 
-      <div className="relative z-20 mt-2 grid gap-3 md:grid-cols-3">
-        {features.map((feature) => (
-          <article key={feature.title} className="rounded-2xl bg-white/75 p-3 text-blue-950 shadow-lg backdrop-blur-sm">
-            <div className={`grid h-10 w-10 place-items-center rounded-full text-white ${feature.color}`}>
-              <svg className="h-5 w-5 fill-current" viewBox="0 0 24 24" aria-hidden="true">
-                {feature.icon}
-              </svg>
+      <section className="team-showcase relative z-20 mt-4 w-full">
+        <button type="button" onClick={() => moveCarousel(-1)} className="team-arrow left-3" aria-label="Diapositiva anterior">‹</button>
+        <div className="carousel-content px-12" key={carouselSlide}>
+          {carouselSlide === 0 ? (
+            <div className="casey-carousel-intro">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-400 text-white" aria-hidden="true">
+                <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3a7 7 0 0 0-4.7 12.2L7 20l4.2-2.1c.3.1.5.1.8.1a7 7 0 1 0 0-14Z" /><path d="M8.5 10.5h.01M12 10.5h.01M15.5 10.5h.01" strokeLinecap="round" /></svg>
+              </div>
+              <div>
+                <h2 className="font-display text-lg font-bold text-[#0c3f91]">¿Quién es Casey?</h2>
+                <p className="mt-1.5 text-[0.8rem] leading-relaxed text-[#60708f]">Casey es el asistente virtual de CaseBank. Brinda orientación basada en el manual del sistema, ayuda a comprender algunos mensajes de error y explica distintos procedimientos de manera clara, práctica y confiable.</p>
+              </div>
             </div>
-            <h2 className="mt-2 text-sm font-bold">{feature.title}</h2>
-            <p className="mt-1 text-xs leading-relaxed text-blue-950/80">{feature.description}</p>
-          </article>
-        ))}
-      </div>
-
-      <div className="relative z-20 mt-3 flex flex-col items-start gap-3 rounded-2xl bg-white/75 px-4 py-3 text-blue-950 shadow-lg backdrop-blur-sm sm:flex-row sm:items-center">
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-yellow-100 text-xl" aria-hidden="true">💡</div>
-        <p className="text-sm font-semibold leading-relaxed">
-          Diseñado para hacer tu trabajo más fácil, rápido y confiable.
-          <strong className="block text-blue-800">¡Estoy aquí para acompañarte!</strong>
-        </p>
-      </div>
+          ) : (
+            <>
+              <h2 className="mb-3 flex items-center gap-2 font-display text-base font-bold text-[#102451]">
+                <svg className="h-5 w-5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="9" cy="8" r="3" /><path d="M3 19v-1a5 5 0 0 1 10 0v1M16 6a3 3 0 0 1 0 6M17 14a5 5 0 0 1 4 5" /></svg>
+                Conoce a nuestro equipo técnico
+              </h2>
+              <div className="grid grid-cols-4 gap-4">
+                {visibleTeam.map((person) => {
+                  const src = findProfile(person.image)
+                  const initials = person.name.replace(/^(Ing\.|MSc\.)\s*/, '').split(' ').slice(0, 2).map((part) => part[0]).join('')
+                  return (
+                    <article key={person.image} className="min-w-0 text-center">
+                      <div className="team-photo mx-auto">{src ? <img src={src} alt={person.name} /> : <span aria-label={`Imagen pendiente de ${person.name}`}>{initials}</span>}</div>
+                      <h3 className="mt-2 text-[0.66rem] font-bold leading-tight text-[#102451]">{person.name}</h3>
+                      <p className="mt-1 text-[0.55rem] uppercase leading-tight tracking-wide text-[#7786a3]">{person.role}</p>
+                    </article>
+                  )
+                })}
+              </div>
+            </>
+          )}
+          </div>
+        <button type="button" onClick={() => moveCarousel(1)} className="team-arrow right-3" aria-label="Siguiente diapositiva">›</button>
+        <div className="mt-3 flex justify-center gap-2" aria-label="Diapositivas informativas">
+          {Array.from({ length: totalSlides }, (_, index) => (
+            <button key={index} type="button" onClick={() => setCarouselSlide(index)} className={`h-2 rounded-full transition-all ${index === carouselSlide ? 'w-6 bg-blue-600' : 'w-2 bg-blue-200'}`} aria-label={`Ver diapositiva ${index + 1}`} aria-current={index === carouselSlide ? 'true' : undefined} />
+          ))}
+        </div>
+      </section>
     </section>
   )
 }

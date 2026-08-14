@@ -3,6 +3,7 @@ import caseyDer from '../assets/casey_der.png'
 import caseyIzq from '../assets/casey_izq.png'
 import caseyCar1 from '../assets/casey_car1.png'
 import caseyCar2 from '../assets/casey_car2.png'
+import { getUsername } from '../api/authToken'
 
 const SLIDES = [
   {
@@ -27,54 +28,11 @@ const SLIDES = [
   },
 ]
 
-const STEPS = [
-  {
-    title: 'Busca en el manual',
-    description: 'Encuentra lo que necesitas fácilmente.',
-    icon: 'search',
-  },
-  {
-    title: 'Consulta el contenido',
-    description: 'Explora capítulos y procedimientos.',
-    icon: 'book',
-  },
-  {
-    title: 'Pregúntale a Casey',
-    description: 'Obtén ayuda rápida y precisa.',
-    icon: 'chat',
-  },
-]
-
-function StepIcon({ icon }) {
-  if (icon === 'search') {
-    return (
-      <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-        <circle cx="10.5" cy="10.5" r="6.5" />
-        <path d="m15.5 15.5 5 5" />
-      </svg>
-    )
-  }
-
-  if (icon === 'book') {
-    return (
-      <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-        <path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H11v17H7.5A3.5 3.5 0 0 0 4 22V5.5ZM20 5.5A3.5 3.5 0 0 0 16.5 2H13v17h3.5A3.5 3.5 0 0 1 20 22V5.5Z" />
-      </svg>
-    )
-  }
-
-  return (
-    <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-      <rect x="3" y="5" width="18" height="14" rx="5" />
-      <path d="M8 11h.01M16 11h.01M9 15h6M12 2v3" />
-    </svg>
-  )
-}
-
 export default function WelcomeCarousel() {
   const [index, setIndex] = useState(0)
   const [isPaused, setIsPaused] = useState(false)
   const slide = SLIDES[index]
+  const username = getUsername()?.trim()
 
   useEffect(() => {
     if (isPaused) return undefined
@@ -92,33 +50,12 @@ export default function WelcomeCarousel() {
 
   return (
     <div className="mx-auto w-full max-w-5xl">
-      <h1 className="font-display text-xl font-bold text-blue-950 sm:text-3xl">¡Bienvenido a CaseBank!</h1>
+      <h1 className="font-display text-xl font-bold text-blue-950 sm:text-3xl">
+        ¡Bienvenido a CaseBank{username ? `, ${username}` : ''}!
+      </h1>
       <p className="mt-1 text-sm text-slate sm:text-base">
         Consulta el manual o pregúntale a Casey.
       </p>
-
-      <section className="mt-4 grid overflow-hidden rounded-2xl border border-blue-100 bg-white px-3 py-3 shadow-sm sm:grid-cols-3 sm:px-4">
-        {STEPS.map((step, stepIndex) => (
-          <div
-            key={step.title}
-            className="relative flex items-center gap-3 px-3 py-3 sm:px-4 sm:py-1 [&:not(:last-child)]:border-b [&:not(:last-child)]:border-blue-100 sm:[&:not(:last-child)]:border-b-0 sm:[&:not(:last-child)]:border-r"
-          >
-            <span className="absolute left-3 top-1 grid h-6 w-6 place-items-center rounded-full bg-gradient-to-br from-sky-cyan to-brand-blue text-xs font-bold text-white shadow-sm sm:left-4 sm:-top-1">
-              {stepIndex + 1}
-            </span>
-            <span className="mt-3 grid h-14 w-14 shrink-0 place-items-center rounded-full bg-gradient-to-br from-sky-cyan to-blue-700 text-white shadow-md">
-              <StepIcon icon={step.icon} />
-            </span>
-            <div className="min-w-0 flex-1 pt-2">
-              <h2 className="text-sm font-bold leading-snug text-blue-950">{step.title}</h2>
-              <p className="mt-1 text-xs leading-relaxed text-slate">{step.description}</p>
-            </div>
-            {stepIndex < STEPS.length - 1 && (
-              <span className="hidden text-3xl font-light text-brand-blue sm:block" aria-hidden="true">›</span>
-            )}
-          </div>
-        ))}
-      </section>
 
       <section
         className="relative mx-auto mt-4 max-w-[720px] overflow-hidden rounded-2xl border border-blue-100 bg-blue-50 shadow-sm"
