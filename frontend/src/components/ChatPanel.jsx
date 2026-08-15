@@ -53,7 +53,7 @@ function renderTextoConNegritas(texto) {
     }
     if (/^https?:\/\//.test(parte)) {
       return (
-        
+        <a
           key={idx}
           href={parte}
           target="_blank"
