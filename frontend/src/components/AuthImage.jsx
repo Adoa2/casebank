@@ -2,14 +2,6 @@ import { useEffect, useState } from 'react'
 import { API_BASE_URL } from '../config'
 import { authHeaders } from '../api/authToken'
 
-/**
- * Los <img> nativos no pueden mandar headers personalizados (como
- * Authorization: Bearer ...), asi que no se puede apuntar el src directo
- * al endpoint protegido. En su lugar, se descarga la imagen con fetch
- * (que si lleva el token) y se convierte en un blob URL local para
- * mostrarla. Si falla la carga (imagen inexistente, sesion vencida, etc.)
- * el componente simplemente no renderiza nada.
- */
 export default function AuthImage({ nombreArchivo, alt, onDimensions }) {
   const [blobUrl, setBlobUrl] = useState(null)
   const [error, setError] = useState(false)

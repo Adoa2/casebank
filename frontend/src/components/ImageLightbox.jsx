@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { API_BASE_URL } from '../config'
 import { authHeaders } from '../api/authToken'
 
@@ -6,8 +7,8 @@ const ZOOM_MIN = 1
 const ZOOM_MAX = 3
 const ZOOM_STEP = 0.5
 
-export default function ImageLightbox({ nombreArchivo, onClose }) {
-  const [blobUrl, setBlobUrl] = useState(null)
+export default function ImageLightbox({ nombreArchivo, imageUrl, onClose }) {
+  const [blobUrl, setBlobUrl] = useState(imageUrl || null)
   const [error, setError] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [pos, setPos] = useState({ x: 0, y: 0 })
@@ -17,6 +18,17 @@ export default function ImageLightbox({ nombreArchivo, onClose }) {
   const inicioPosRef = useRef({ x: 0, y: 0 })
 
   useEffect(() => {
+    setZoom(1)
+    setPos({ x: 0, y: 0 })
+    setError(false)
+
+    if (imageUrl) {
+      setBlobUrl(imageUrl)
+      return
+    }
+
+    if (!nombreArchivo) return
+
     let cancelado = false
     let urlActual = null
 
@@ -41,14 +53,12 @@ export default function ImageLightbox({ nombreArchivo, onClose }) {
     }
 
     cargarImagen()
-    setZoom(1)
-    setPos({ x: 0, y: 0 })
 
     return () => {
       cancelado = true
       if (urlActual) URL.revokeObjectURL(urlActual)
     }
-  }, [nombreArchivo])
+  }, [nombreArchivo, imageUrl])
 
   useEffect(() => {
     function manejarTecla(e) {
@@ -87,7 +97,7 @@ export default function ImageLightbox({ nombreArchivo, onClose }) {
     setArrastrando(false)
   }
 
-  return (
+  const contenido = (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/70 p-2 sm:p-6"
       onClick={onClose}
@@ -138,7 +148,7 @@ export default function ImageLightbox({ nombreArchivo, onClose }) {
           {blobUrl && (
             <img
               src={blobUrl}
-              alt={nombreArchivo}
+              alt={nombreArchivo || 'Imagen de evidencia'}
               draggable={false}
               onDragStart={(e) => e.preventDefault()}
               style={{
@@ -152,4 +162,6 @@ export default function ImageLightbox({ nombreArchivo, onClose }) {
       </div>
     </div>
   )
+
+  return createPortal(contenido, document.body)
 }

@@ -7,10 +7,7 @@ export default function ResetPasswordView({ email, onBackToLogin, onReset }) {
   const [code, setCode] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
-  const [message, setMessage] = useState({
-    text: 'Si los datos son correctos, revisa tu correo por el código.',
-    type: 'info',
-  })
+  const [message, setMessage] = useState(null)
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e) {

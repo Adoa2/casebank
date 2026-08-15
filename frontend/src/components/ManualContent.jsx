@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ImageLightbox from './ImageLightbox'
 import AuthImage from './AuthImage'
 import WelcomeCarousel from './WelcomeCarousel'
+import VideoGalleryModal from './VideoGalleryModal'
+import { listVideosBySeccion } from '../api/videos'
 
 const IMG_MARKER_REGEX = /(\[IMG:([^\]]+)\])/g
 const LINEA_NUMERO_REGEX = /^\d{1,4}$/
@@ -31,8 +33,6 @@ function normalizarContenido(contenido, titulo, paginaInicio, paginaFin) {
       continue
     }
 
-    // Tanto el JSON anterior (un salto por bloque) como el nuevo (doble
-    // salto por párrafo) terminan aquí convertidos en párrafos limpios.
     const bloques = segmento.split(/\n+/)
     for (const bloque of bloques) {
       const texto = bloque.replace(/\s+/g, ' ').trim()
@@ -43,8 +43,6 @@ function normalizarContenido(contenido, titulo, paginaInicio, paginaFin) {
         continue
       }
 
-      // El encabezado del PDF suele repetirse como primera línea del
-      // contenido; el título ya se muestra en la tarjeta superior.
       if (texto.toLocaleLowerCase('es') === (titulo || '').trim().toLocaleLowerCase('es')) {
         continue
       }
@@ -98,9 +96,6 @@ function agruparPartes(partes) {
       if (actual.tipo === 'imagen') contieneImagen = true
       index += 1
 
-      // Una oración puede quedar dividida por varios controles gráficos.
-      // Se cierra el flujo cuando vuelve a encontrarse texto con cierre
-      // gramatical después de al menos una imagen.
       if (
         contieneImagen &&
         (actual.tipo === 'texto' || actual.tipo === 'item') &&
@@ -167,6 +162,30 @@ function ImagenManual({ nombre, titulo, onZoom, integrada = false }) {
 
 export default function ManualContent({ chapter, subchapter, onGoHome }) {
   const [imagenActiva, setImagenActiva] = useState(null)
+  const [videos, setVideos] = useState([])
+  const [galeriaAbierta, setGaleriaAbierta] = useState(false)
+
+  useEffect(() => {
+    let cancelado = false
+    setVideos([])
+    setGaleriaAbierta(false)
+
+    if (!subchapter?.seccionId) return
+
+    async function cargarVideos() {
+      try {
+        const data = await listVideosBySeccion(subchapter.seccionId)
+        if (!cancelado) setVideos(data)
+      } catch {
+        if (!cancelado) setVideos([])
+      }
+    }
+
+    cargarVideos()
+    return () => {
+      cancelado = true
+    }
+  }, [subchapter?.seccionId])
 
   const partes = useMemo(
     () =>
@@ -204,7 +223,7 @@ export default function ManualContent({ chapter, subchapter, onGoHome }) {
             <h1 className="font-display text-2xl font-semibold text-ink">{chapter?.title}</h1>
             <p className="mt-1 text-base font-medium text-brand-blue">{subchapter.title}</p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             <button
               type="button"
               onClick={onGoHome}
@@ -217,6 +236,22 @@ export default function ManualContent({ chapter, subchapter, onGoHome }) {
               </svg>
               Inicio
             </button>
+
+            {videos.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setGaleriaAbierta(true)}
+                title="Ver videos formativos de esta sección"
+                className="flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-medium text-brand-blue transition hover:border-brand-blue/30 hover:bg-blue-100 focus:outline-none focus:ring-[3px] focus:ring-brand-blue/15"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                  <rect x="3" y="5" width="14" height="14" rx="2" />
+                  <path d="m21 8-4 3 4 3V8Z" />
+                </svg>
+                Ver videos formativos
+              </button>
+            )}
+
             {subchapter.paginaInicio != null && (
               <span className="shrink-0 whitespace-nowrap rounded-md border border-line px-2 py-1 text-xs text-slate">
                 Página {mostrarRangoPaginas}
@@ -330,6 +365,7 @@ export default function ManualContent({ chapter, subchapter, onGoHome }) {
       </div>
 
       {imagenActiva && <ImageLightbox nombreArchivo={imagenActiva} onClose={() => setImagenActiva(null)} />}
+      {galeriaAbierta && <VideoGalleryModal videos={videos} onClose={() => setGaleriaAbierta(false)} />}
     </main>
   )
 }

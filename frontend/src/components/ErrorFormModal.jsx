@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { uploadImagenError } from '../api/errors'
 
 const TABS = [
   { id: 'general', label: 'Información General' },
   { id: 'solucion', label: 'Solución' },
 ]
+
+const TIPOS_PERMITIDOS = ['image/jpeg', 'image/jpg', 'image/png']
 
 export default function ErrorFormModal({ mode = 'create', initialData, onClose, onSubmit }) {
   const isEdit = mode === 'edit'
@@ -18,11 +21,57 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
   const [procedimiento, setProcedimiento] = useState(initialData?.procedimiento || '')
   const [requiereTicket, setRequiereTicket] = useState(initialData?.requiere_ticket || false)
 
+  const [tieneEvidencia, setTieneEvidencia] = useState(initialData?.tiene_evidencia || false)
+  const [imagenUrl, setImagenUrl] = useState(initialData?.imagen_url || null)
+  const [subiendoImagen, setSubiendoImagen] = useState(false)
+  const [imagenError, setImagenError] = useState(null)
+  const fileInputRef = useRef(null)
+
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
 
   const generalValid = titulo.trim() && modulo.trim() && descripcion.trim()
   const solucionValid = solucion.trim()
+
+  async function subirArchivo(file) {
+    if (!TIPOS_PERMITIDOS.includes(file.type)) {
+      setImagenError('Solo se permiten imágenes JPG, JPEG o PNG.')
+      return
+    }
+    setImagenError(null)
+    setSubiendoImagen(true)
+    try {
+      const { url } = await uploadImagenError(file)
+      setImagenUrl(url)
+    } catch (err) {
+      setImagenError(err.message || 'No se pudo subir la imagen.')
+    } finally {
+      setSubiendoImagen(false)
+    }
+  }
+
+  function handleFileChange(e) {
+    const file = e.target.files?.[0]
+    if (file) subirArchivo(file)
+    e.target.value = ''
+  }
+
+  function handlePaste(e) {
+    if (!tieneEvidencia) return
+    const item = Array.from(e.clipboardData?.items || []).find((i) => i.type.startsWith('image/'))
+    if (item) {
+      const file = item.getAsFile()
+      if (file) subirArchivo(file)
+    }
+  }
+
+  function handleToggleEvidencia(checked) {
+    setTieneEvidencia(checked)
+    if (!checked) {
+      setImagenUrl(null)
+      setImagenError(null)
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -38,6 +87,11 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
       setError('La solución es obligatoria.')
       return
     }
+    if (tieneEvidencia && !imagenUrl) {
+      setActiveTab('solucion')
+      setError('Sube la imagen de evidencia antes de guardar, o desmarca la casilla.')
+      return
+    }
 
     setSaving(true)
     try {
@@ -50,6 +104,8 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
         procedimiento: procedimiento.trim() || null,
         palabras_clave: palabrasClave.trim() || null,
         requiere_ticket: requiereTicket,
+        tiene_evidencia: tieneEvidencia,
+        imagen_url: tieneEvidencia ? imagenUrl : null,
       })
     } catch (err) {
       setError(err.message || 'No se pudo guardar el error.')
@@ -172,6 +228,7 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
                     className="w-full resize-none rounded-lg border border-line px-3 py-2.5 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                   />
                 </div>
+
                 <div className="flex items-start gap-2 rounded-lg border border-line bg-slate-50 px-3 py-3">
                   <input
                     id="requiereTicket"
@@ -185,6 +242,73 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
                     <br />
                     Cuando el asistente use esta solución para responder, agregará automáticamente el enlace para abrir un ticket.
                   </label>
+                </div>
+
+                <div className="rounded-lg border border-line bg-slate-50 px-3 py-3">
+                  <div className="flex items-start gap-2">
+                    <input
+                      id="tieneEvidencia"
+                      type="checkbox"
+                      checked={tieneEvidencia}
+                      onChange={(e) => handleToggleEvidencia(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-line text-brand-blue focus:ring-brand-blue/20"
+                    />
+                    <label htmlFor="tieneEvidencia" className="text-sm text-slate-600">
+                      <span className="font-medium text-slate-700">Tiene imagen de evidencia</span>
+                      <br />
+                      El asistente mostrará esta imagen antes de dar la solución, para que el usuario confirme si es su error.
+                    </label>
+                  </div>
+
+                  {tieneEvidencia && (
+                    <div className="mt-3">
+                      <div
+                        onPaste={handlePaste}
+                        tabIndex={0}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-line bg-white px-4 py-6 text-center outline-none focus:border-brand-blue"
+                      >
+                        {subiendoImagen ? (
+                          <p className="text-sm text-slate-500">Subiendo imagen...</p>
+                        ) : imagenUrl ? (
+                          <div className="flex flex-col items-center gap-2">
+                            <img
+                              src={imagenUrl}
+                              alt="Evidencia del error"
+                              className="max-h-40 rounded-lg border border-line object-contain"
+                            />
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setImagenUrl(null)
+                              }}
+                              className="text-xs font-medium text-red-600 hover:underline"
+                            >
+                              Quitar imagen
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="text-sm font-medium text-slate-600">
+                              Haz clic para elegir un archivo o pega una imagen (Ctrl+V)
+                            </p>
+                            <p className="text-xs text-slate-400">JPG, JPEG o PNG, máximo 5 MB</p>
+                          </>
+                        )}
+                      </div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                      {imagenError && (
+                        <p className="mt-2 text-xs text-red-600">{imagenError}</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -200,7 +324,7 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
             </button>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || subiendoImagen}
               className="rounded-lg bg-gradient-to-r from-brand-blue to-sky-cyan px-5 py-2.5 text-sm font-semibold text-white hover:brightness-105 disabled:opacity-70"
             >
               {saving ? 'Guardando...' : isEdit ? 'Guardar cambios' : 'Guardar Error'}

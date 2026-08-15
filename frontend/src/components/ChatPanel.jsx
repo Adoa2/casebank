@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { API_BASE_URL } from '../config'
-import { authHeaders } from '../api/authToken'
+import { authHeaders, parseApiResponse } from '../api/authToken'
 import caseyImage from '../assets/casey_perfil.png'
+import ImageLightbox from './ImageLightbox'
 
 const INITIAL_MESSAGES = [
   {
@@ -67,59 +68,79 @@ function renderTextoConNegritas(texto) {
   })
 }
 
+function formatearRangoPaginas(fuente) {
+  if (fuente.pagina_fin && fuente.pagina_fin !== fuente.pagina) {
+    return `${fuente.pagina}–${fuente.pagina_fin}`
+  }
+  return fuente.pagina
+}
+
 export default function ChatPanel({ onSelectSource, onCollapse }) {
   const [messages, setMessages] = useState(INITIAL_MESSAGES)
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(false)
+  const [activeConfirmation, setActiveConfirmation] = useState(null)
+  const [lightboxUrl, setLightboxUrl] = useState(null)
   const messagesEndRef = useRef(null)
-  const latestAnswerRef = useRef(null)
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      if (loading) {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-        return
-      }
-
-      latestAnswerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
     })
 
     return () => cancelAnimationFrame(frame)
-  }, [messages, loading])
+  }, [messages, loading, activeConfirmation])
 
   function handleClear() {
     setMessages([...INITIAL_MESSAGES])
+    setActiveConfirmation(null)
   }
 
-  async function sendMessage(value) {
-    const text = value.trim()
+  async function sendMessage(value, opts = {}) {
+    const { contextoError = null, confirmacion = null, displayText = null } = opts
+    const text = (displayText ?? value).trim()
     if (!text || loading) return
+
+    if (!contextoError && text.length < 3) {
+      const userMessage = { id: `u-${Date.now()}`, role: 'user', text }
+      const avisoMessage = {
+        id: `e-${Date.now()}`,
+        role: 'assistant',
+        text: 'Disculpa, ¿podrías darme un mayor contexto de tu pregunta?',
+        fuentes: [],
+      }
+      setMessages((prev) => [...prev, userMessage, avisoMessage])
+      setDraft('')
+      return
+    }
 
     const userMessage = { id: `u-${Date.now()}`, role: 'user', text }
     setMessages((prev) => [...prev, userMessage])
     setDraft('')
+    setActiveConfirmation(null)
     setLoading(true)
 
     try {
+      const body = { pregunta: (value ?? text).trim() }
+      if (contextoError) body.contexto_error = contextoError
+      if (confirmacion !== null) body.confirmacion = confirmacion
+
       const res = await fetch(`${API_BASE_URL}/api/chat`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ pregunta: text }),
+        body: JSON.stringify(body),
       })
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.detail || 'No se pudo obtener respuesta del asistente.')
-      }
-
-      const data = await res.json()
+      const data = await parseApiResponse(res)
       const assistantMessage = {
         id: `a-${Date.now()}`,
         role: 'assistant',
         text: data.respuesta,
         fuentes: data.fuentes || [],
+        imagenEvidencia: data.imagen_evidencia || null,
       }
       setMessages((prev) => [...prev, assistantMessage])
+      setActiveConfirmation(data.pendiente_confirmacion || null)
     } catch (err) {
       const errorMessage = {
         id: `e-${Date.now()}`,
@@ -128,6 +149,7 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
         fuentes: [],
       }
       setMessages((prev) => [...prev, errorMessage])
+      setActiveConfirmation(null)
     } finally {
       setLoading(false)
     }
@@ -137,6 +159,18 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
     e.preventDefault()
     sendMessage(draft)
   }
+
+  function handleConfirmacion(esCorrecto) {
+    if (!activeConfirmation || loading) return
+    const texto = esCorrecto ? 'Sí, es mi error' : 'No, no es mi error'
+    sendMessage(texto, {
+      contextoError: activeConfirmation,
+      confirmacion: esCorrecto,
+      displayText: texto,
+    })
+  }
+
+  const inputDisabled = loading || !!activeConfirmation
 
   return (
     <aside className="w-full h-full flex flex-col bg-white">
@@ -171,10 +205,9 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-5 space-y-4">
-        {messages.map((message, index) => (
+        {messages.map((message) => (
           <div
             key={message.id}
-            ref={message.role === 'assistant' && index === messages.length - 1 ? latestAnswerRef : null}
             className={`flex scroll-mt-4 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
@@ -183,6 +216,22 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
               }`}
             >
               <p className="whitespace-pre-line break-words">{renderTextoConNegritas(message.text)}</p>
+
+              {message.imagenEvidencia && (
+                <button
+                  type="button"
+                  onClick={() => setLightboxUrl(message.imagenEvidencia)}
+                  className="mt-2.5 block cursor-zoom-in"
+                  aria-label="Ampliar imagen de evidencia"
+                >
+                  <img
+                    src={message.imagenEvidencia}
+                    alt="Evidencia del error"
+                    className="max-h-56 rounded-lg border border-line/60 object-contain transition hover:opacity-90"
+                  />
+                  <span className="mt-1 block text-xs text-brand-blue">Toca para ampliar</span>
+                </button>
+              )}
 
               {message.fuentes && message.fuentes.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-line/60 text-xs space-y-0.5">
@@ -193,7 +242,7 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
                       onClick={() => onSelectSource?.(f.seccion_id)}
                       className="block text-left text-brand-blue hover:underline cursor-pointer"
                     >
-                      {f.titulo} (pág. {f.pagina})
+                      {f.titulo} (pág. {formatearRangoPaginas(f)})
                     </button>
                   ))}
                 </div>
@@ -202,7 +251,28 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
           </div>
         ))}
 
-        {messages.length === 1 && !loading && (
+        {activeConfirmation && !loading && (
+          <div className="flex justify-start">
+            <div className="flex gap-2 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => handleConfirmacion(true)}
+                className="rounded-lg bg-gradient-to-r from-brand-blue to-sky-cyan px-4 py-2 text-sm font-semibold text-white hover:brightness-105"
+              >
+                Sí, es mi error
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConfirmacion(false)}
+                className="rounded-lg border border-line bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
+              >
+                No es mi error
+              </button>
+            </div>
+          </div>
+        )}
+
+        {messages.length === 1 && !loading && !activeConfirmation && (
           <section className="pt-2">
             <h3 className="mb-2.5 px-1 text-sm font-bold text-brand-blue">Preguntas sugeridas</h3>
             <div className="space-y-2">
@@ -240,6 +310,11 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
       </div>
 
       <form onSubmit={handleSend} className="border-t border-line p-3">
+        {activeConfirmation && (
+          <p className="mb-2 px-1 text-xs text-slate-400">
+            Responde con los botones de arriba para continuar.
+          </p>
+        )}
         <div className="relative rounded-xl border border-blue-200 bg-white shadow-sm transition focus-within:border-brand-blue focus-within:ring-[3px] focus-within:ring-brand-blue/15">
         <textarea
           rows="1"
@@ -252,13 +327,13 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
             }
           }}
           placeholder="Pregúntale a Casey..."
-          disabled={loading}
+          disabled={inputDisabled}
           className="block h-12 w-full resize-none rounded-xl bg-transparent py-3 pl-3 pr-24 text-sm leading-6 outline-none disabled:opacity-60"
         />
         <div className="group absolute bottom-1.5 right-12">
           <button
             type="submit"
-            disabled={loading}
+            disabled={inputDisabled}
             aria-label="Enviar mensaje"
             className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-r from-brand-blue to-sky-cyan text-white shadow-sm transition hover:brightness-105 hover:shadow-md focus:outline-none focus:ring-[3px] focus:ring-brand-blue/20 disabled:opacity-60"
           >
@@ -297,6 +372,10 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
         </div>
         </div>
       </form>
+
+      {lightboxUrl && (
+        <ImageLightbox imageUrl={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+      )}
     </aside>
   )
 }

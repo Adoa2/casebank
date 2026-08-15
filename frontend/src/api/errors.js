@@ -69,3 +69,16 @@ export async function deleteError(id) {
   if (!res.ok) throw await parseError(res, 'No se pudo eliminar el error.')
   return res.json()
 }
+
+export async function uploadImagenError(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const res = await fetch(`${API_BASE_URL}/api/errors/upload-imagen`, {
+    method: 'POST',
+    headers: authHeaders(), // sin Content-Type: el navegador arma el boundary de multipart
+    body: formData,
+  })
+  if (!res.ok) throw await parseError(res, 'No se pudo subir la imagen.')
+  return res.json() // { url }
+}

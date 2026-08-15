@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import re
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func
@@ -14,6 +15,9 @@ from ..services.email_service import send_reset_code_email, EmailSendError
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+
 
 # --- FUNCIONES DE AYUDA ---
 def get_password_hash(password):
@@ -35,12 +39,17 @@ def create_access_token(data: dict):
     status_code=status.HTTP_201_CREATED,
     response_model=schemas.UserResponse,
     summary="Registrar nuevo usuario",
-    description="Crea una cuenta nueva. El nombre de usuario y el correo deben ser únicos.",
+    description="Crea una cuenta nueva. El nombre de usuario y el correo deben ser únicos y el correo debe tener un formato válido.",
     response_description="Usuario creado exitosamente.",
 )
 def register_user(user: schemas.UserCreate, db_session: Session = Depends(db.get_db)):
+    email = user.email.strip()
+
+    if not EMAIL_REGEX.match(email):
+        raise HTTPException(status_code=400, detail="Ingresa un correo electrónico válido.")
+
     user_exists = db_session.query(models.User).filter(
-        (func.lower(models.User.email) == user.email.lower())
+        (func.lower(models.User.email) == email.lower())
         | (func.lower(models.User.username) == user.username.lower())
     ).first()
 
@@ -48,7 +57,7 @@ def register_user(user: schemas.UserCreate, db_session: Session = Depends(db.get
         raise HTTPException(status_code=400, detail="El usuario o correo ya está registrado")
 
     hashed_pwd = get_password_hash(user.password)
-    new_user = models.User(username=user.username, email=user.email, hashed_password=hashed_pwd)
+    new_user = models.User(username=user.username, email=email, hashed_password=hashed_pwd)
 
     db_session.add(new_user)
     db_session.commit()
@@ -97,18 +106,21 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db_session: Ses
     response_model=schemas.MessageResponse,
     summary="Solicitar código de recuperación",
     description="Envía un código de 6 dígitos al correo del usuario, válido por 15 minutos. "
-                "Por seguridad, siempre devuelve el mismo mensaje exista o no la cuenta.",
+                "Si el correo no está registrado, se informa explícitamente.",
     response_description="Confirmación de que la solicitud fue procesada.",
 )
 def forgot_password(data: schemas.PasswordResetRequest, db_session: Session = Depends(db.get_db)):
-    generic_message = {"message": "Si los datos son correctos, te enviamos un código a tu correo."}
+    email = data.email.strip()
+
+    if not EMAIL_REGEX.match(email):
+        raise HTTPException(status_code=400, detail="Ingresa un correo electrónico válido.")
 
     user = db_session.query(models.User).filter(
-        func.lower(models.User.email) == data.email.lower(),
+        func.lower(models.User.email) == email.lower(),
     ).first()
 
     if not user:
-        return generic_message
+        raise HTTPException(status_code=404, detail="Este correo no corresponde a una cuenta del sistema.")
 
     code = models.PasswordResetCode.generate_code()
     reset_entry = models.PasswordResetCode(
@@ -127,7 +139,7 @@ def forgot_password(data: schemas.PasswordResetRequest, db_session: Session = De
             detail="No se pudo enviar el correo. Intenta de nuevo en unos minutos.",
         )
 
-    return generic_message
+    return {"message": "Te enviamos un código a tu correo."}
 
 @router.post(
     "/reset-password",
@@ -203,7 +215,5 @@ def require_role(min_role: int):
     return dependency
 
 
-# role >= 1: puede administrar usuarios e ingresar errores frecuentes
 get_current_admin = require_role(1)
-# role >= 2: puede aprobar o rechazar errores frecuentes
 get_current_reviewer = require_role(2)

@@ -3,6 +3,8 @@ import AuthField from '../components/AuthField'
 import AuthMessage from '../components/AuthMessage'
 import { forgotPassword } from '../api/auth'
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 export default function ForgotPasswordView({ onBackToLogin, onCodeSent }) {
   const [email, setEmail] = useState('')
   const [message, setMessage] = useState(null)
@@ -11,10 +13,15 @@ export default function ForgotPasswordView({ onBackToLogin, onCodeSent }) {
   async function handleSubmit(e) {
     e.preventDefault()
     setMessage(null)
-    setLoading(true)
 
     const trimmedEmail = email.trim()
 
+    if (!EMAIL_REGEX.test(trimmedEmail)) {
+      setMessage({ text: 'Ingresa un correo electrónico válido.', type: 'error' })
+      return
+    }
+
+    setLoading(true)
     try {
       await forgotPassword(trimmedEmail)
       onCodeSent(trimmedEmail)

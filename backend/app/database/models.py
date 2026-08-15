@@ -54,6 +54,8 @@ class ErrorReport(Base):
     palabras_clave = Column(String, nullable=True)
     nivel = Column(String, nullable=True)
     requiere_ticket = Column(Boolean, default=False, nullable=False)
+    tiene_evidencia = Column(Boolean, default=False, nullable=False)
+    imagen_url = Column(String, nullable=True)
     estado = Column(String, default="pendiente", nullable=False)  # pendiente | aprobado | rechazado
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -62,3 +64,19 @@ class ErrorReport(Base):
 
     creator = relationship("User", foreign_keys=[created_by])
     reviewer = relationship("User", foreign_keys=[reviewed_by])
+
+
+class Video(Base):
+    __tablename__ = "videos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    titulo = Column(String, nullable=False)
+    url = Column(String, nullable=False)
+    seccion_id = Column(Integer, nullable=False, index=True)
+    capitulo = Column(String, nullable=False)
+    seccion = Column(String, nullable=True)
+    subseccion = Column(String, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    creator = relationship("User", foreign_keys=[created_by])

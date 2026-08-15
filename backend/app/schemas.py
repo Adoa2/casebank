@@ -107,6 +107,8 @@ class UserAdminUpdate(BaseModel):
 
 # --- Errores frecuentes ---
 
+# --- Errores frecuentes ---
+
 class ErrorReportCreate(BaseModel):
     """Datos para registrar un nuevo error frecuente (queda en estado 'pendiente')."""
     titulo: str
@@ -122,6 +124,17 @@ class ErrorReportCreate(BaseModel):
         description="Si es True, el asistente de IA agrega automaticamente el enlace "
                     "al sistema de tickets cuando use esta solucion para responder.",
     )
+    tiene_evidencia: bool = Field(
+        False,
+        description="Si es True, este error tiene una imagen de referencia asociada "
+                    "(imagen_url) que el asistente muestra al usuario para confirmar "
+                    "que es el error que esta presentando.",
+    )
+    imagen_url: Optional[str] = Field(
+        None,
+        description="URL publica de la imagen de evidencia (subida previamente via "
+                    "POST /errors/upload-imagen). Requerido si tiene_evidencia es True.",
+    )
 
 class ErrorReportUpdate(BaseModel):
     """Datos editables de un error frecuente. Todos opcionales."""
@@ -133,6 +146,8 @@ class ErrorReportUpdate(BaseModel):
     procedimiento: Optional[str] = None
     palabras_clave: Optional[str] = None
     requiere_ticket: Optional[bool] = None
+    tiene_evidencia: Optional[bool] = None
+    imagen_url: Optional[str] = None
 
 class ErrorReportResponse(BaseModel):
     id: int
@@ -145,6 +160,8 @@ class ErrorReportResponse(BaseModel):
     palabras_clave: Optional[str]
     nivel: Optional[str]
     requiere_ticket: bool
+    tiene_evidencia: bool
+    imagen_url: Optional[str]
     estado: str
     created_by: int
     reviewed_by: Optional[int]
@@ -158,3 +175,43 @@ class ErrorReportResponse(BaseModel):
 class ErrorReportReview(BaseModel):
     """Decisión del revisor sobre un error pendiente."""
     aprobar: bool = Field(..., description="True para aprobar (se indexa para la IA), False para rechazar.")
+
+
+class ImagenUploadResponse(BaseModel):
+    """URL publica devuelta tras subir una imagen de evidencia a Supabase Storage."""
+    url: str = Field(..., description="URL publica de la imagen subida.")
+    # --- Videos formativos ---
+
+class VideoCreate(BaseModel):
+    """Datos para registrar un nuevo video formativo, vinculado a una seccion del manual."""
+    titulo: str
+    url: str
+    seccion_id: int = Field(..., description="ID de la seccion del manual (SeccionManual.id) a la que se vincula el video.")
+    capitulo: str = Field(..., description="Titulo del capitulo, tal como aparece en el manual al momento de crear el video.")
+    seccion: Optional[str] = None
+    subseccion: Optional[str] = None
+
+
+class VideoUpdate(BaseModel):
+    """Datos editables de un video formativo. Todos opcionales."""
+    titulo: Optional[str] = None
+    url: Optional[str] = None
+    seccion_id: Optional[int] = None
+    capitulo: Optional[str] = None
+    seccion: Optional[str] = None
+    subseccion: Optional[str] = None
+
+
+class VideoResponse(BaseModel):
+    id: int
+    titulo: str
+    url: str
+    seccion_id: int
+    capitulo: str
+    seccion: Optional[str]
+    subseccion: Optional[str]
+    created_by: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

@@ -3,6 +3,8 @@ import AuthField from '../components/AuthField'
 import AuthMessage from '../components/AuthMessage'
 import { register } from '../api/auth'
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 export default function RegisterView({ onBackToLogin, onRegistered }) {
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
@@ -15,6 +17,13 @@ export default function RegisterView({ onBackToLogin, onRegistered }) {
     e.preventDefault()
     setMessage(null)
 
+    const trimmedEmail = email.trim()
+
+    if (!EMAIL_REGEX.test(trimmedEmail)) {
+      setMessage({ text: 'Ingresa un correo electrónico válido.', type: 'error' })
+      return
+    }
+
     if (password !== passwordConfirm) {
       setMessage({ text: 'Las contraseñas no coinciden.', type: 'error' })
       return
@@ -22,7 +31,7 @@ export default function RegisterView({ onBackToLogin, onRegistered }) {
 
     setLoading(true)
     try {
-      await register(username.trim(), email.trim(), password)
+      await register(username.trim(), trimmedEmail, password)
       onRegistered()
     } catch (err) {
       setMessage({ text: err.message, type: 'error' })
