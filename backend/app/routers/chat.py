@@ -27,11 +27,6 @@ class ContextoErrorConfirmacion(BaseModel):
         description="IDs de otros errores con evidencia que se probarian si el usuario dice que no es este.",
     )
     intento: int = Field(1, description="Numero de intento de confirmacion actual (maximo 2).")
-    ids_vistos: List[int] = Field(
-        default_factory=list,
-        description="IDs de errores con evidencia ya ofrecidos y rechazados en esta cadena, para excluirlos "
-                    "del fallback a busqueda normal si se agotan los candidatos.",
-    )
 
 
 class ChatQuery(BaseModel):
@@ -79,7 +74,6 @@ class PendienteConfirmacionResponse(BaseModel):
     error_id_actual: int
     candidatos_restantes: List[int]
     intento: int
-    ids_vistos: List[int] = []
 
 
 class ChatRespuesta(BaseModel):
