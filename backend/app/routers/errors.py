@@ -1,15 +1,22 @@
 import time
+import uuid
 from datetime import datetime
 from typing import List
 
 import requests
 import psycopg2
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.orm import Session
 
 from ..database import models, db
 from .. import schemas
-from ..config import GEMINI_API_KEY, GEMINI_EMBEDDING_MODEL, DATABASE_URL
+from ..config import (
+    GEMINI_API_KEY,
+    GEMINI_EMBEDDING_MODEL,
+    DATABASE_URL,
+    SUPABASE_URL,
+    SUPABASE_SERVICE_KEY,
+)
 from . import auth
 
 router = APIRouter(prefix="/errors", tags=["Errores frecuentes"])
@@ -19,6 +26,14 @@ GEMINI_EMBED_URL = (
     f"https://generativelanguage.googleapis.com/v1beta/models/"
     f"{GEMINI_EMBEDDING_MODEL}:embedContent"
 )
+
+SUPABASE_STORAGE_BUCKET = "error-evidencias"
+EXTENSIONES_PERMITIDAS = {
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+}
+MAX_TAMANO_IMAGEN_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
 def _generar_embedding_error(texto: str):
@@ -70,6 +85,58 @@ def _indexar_error(error: models.ErrorReport):
 
 
 @router.post(
+    "/upload-imagen",
+    response_model=schemas.ImagenUploadResponse,
+    summary="Subir imagen de evidencia de un error",
+    description="Sube una imagen (JPG, JPEG o PNG) a Supabase Storage y devuelve su URL publica, "
+                "para asociarla luego al campo imagen_url de un error frecuente. "
+                "Requiere privilegio de administrador.",
+)
+def subir_imagen_evidencia(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(auth.get_current_admin),
+):
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="Supabase Storage no esta configurado (SUPABASE_URL/SUPABASE_SERVICE_KEY faltantes).",
+        )
+
+    extension = EXTENSIONES_PERMITIDAS.get(file.content_type)
+    if not extension:
+        raise HTTPException(
+            status_code=400,
+            detail="Solo se permiten imagenes en formato JPG, JPEG o PNG.",
+        )
+
+    contenido = file.file.read()
+    if len(contenido) > MAX_TAMANO_IMAGEN_BYTES:
+        raise HTTPException(status_code=400, detail="La imagen no debe superar los 5 MB.")
+
+    nombre_archivo = f"{uuid.uuid4().hex}.{extension}"
+    url_subida = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_STORAGE_BUCKET}/{nombre_archivo}"
+
+    respuesta = requests.post(
+        url_subida,
+        headers={
+            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Content-Type": file.content_type,
+        },
+        data=contenido,
+    )
+
+    if respuesta.status_code not in (200, 201):
+        raise HTTPException(
+            status_code=502,
+            detail=f"No se pudo subir la imagen a Supabase Storage: {respuesta.text[:300]}",
+        )
+
+    url_publica = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_STORAGE_BUCKET}/{nombre_archivo}"
+    return {"url": url_publica}
+
+
+@router.post(
     "",
     response_model=schemas.ErrorReportResponse,
     status_code=status.HTTP_201_CREATED,
@@ -82,6 +149,12 @@ def crear_error(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_admin),
 ):
+    if data.tiene_evidencia and not data.imagen_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Debes subir una imagen de evidencia antes de guardar el error.",
+        )
+
     nuevo = models.ErrorReport(**data.model_dump(), created_by=current_user.id)
     db_session.add(nuevo)
     db_session.commit()
@@ -171,7 +244,17 @@ def editar_error(
     if not error:
         raise HTTPException(status_code=404, detail="Error no encontrado")
 
-    for campo, valor in data.model_dump(exclude_unset=True).items():
+    datos = data.model_dump(exclude_unset=True)
+
+    tiene_evidencia_final = datos.get("tiene_evidencia", error.tiene_evidencia)
+    imagen_url_final = datos.get("imagen_url", error.imagen_url)
+    if tiene_evidencia_final and not imagen_url_final:
+        raise HTTPException(
+            status_code=400,
+            detail="Debes subir una imagen de evidencia antes de guardar el error.",
+        )
+
+    for campo, valor in datos.items():
         setattr(error, campo, valor)
 
     db_session.commit()
