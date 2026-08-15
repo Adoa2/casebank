@@ -868,10 +868,15 @@ def _generar_respuesta_error_confirmado(pregunta_original, chunk_error):
     }
 
 
-def _iniciar_confirmacion_error(pregunta_original, chunk_evidencia, candidatos_restantes_ids, intento):
+def _iniciar_confirmacion_error(pregunta_original, chunk_evidencia, candidatos_restantes_ids, intento, ids_vistos=None):
     """
     Arma la respuesta que le pide al usuario confirmar, con la imagen del
     error candidato, si es o no el problema que esta presentando.
+
+    ids_vistos acumula los ids de errores con evidencia que ya se ofrecieron
+    en esta cadena de confirmacion, para poder excluirlos si mas adelante se
+    hace un fallback a busqueda normal (y asi no se vuelvan a ofrecer en
+    bucle).
     """
     meta = chunk_evidencia["metadata"]
     titulo = meta.get("titulo") or "un error registrado"
@@ -891,109 +896,27 @@ def _iniciar_confirmacion_error(pregunta_original, chunk_evidencia, candidatos_r
             "error_id_actual": int(meta["seccion_id"]),
             "candidatos_restantes": candidatos_restantes_ids,
             "intento": intento,
+            "ids_vistos": list(ids_vistos or []),
         },
     }
 
 
-def _resolver_confirmacion_error(contexto_error, confirmacion):
+def _responder_via_rag(question, excluir_ids_evidencia=None, permitir_confirmacion_evidencia=True):
     """
-    Continua el flujo de confirmacion con evidencia: el usuario ya respondio
-    si el error mostrado es o no el suyo. contexto_error es el bloque que el
-    frontend reenvia tal cual lo recibio en la respuesta anterior.
+    Nucleo del pipeline RAG normal: busqueda, expansion por sinonimos, boost,
+    filtro por relevancia y generacion final. Factorizado en una funcion
+    aparte para poder reutilizarlo tanto en el flujo principal de
+    answer_question como en el fallback que se dispara cuando se agotan los
+    candidatos de confirmacion por evidencia (ver _resolver_confirmacion_error).
+
+    excluir_ids_evidencia: ids de error_reports con evidencia que ya se le
+    mostraron al usuario y rechazo, para no volver a ofrecerlos ni usarlos
+    como contexto de respuesta en este fallback.
+    permitir_confirmacion_evidencia: si es False, no se dispara un nuevo
+    flujo de confirmacion aunque aparezca un error con evidencia relevante
+    (se usa en el fallback, donde ya se agoto el limite de intentos).
     """
-    pregunta_original = contexto_error.get("pregunta_original", "")
-    error_id_actual = contexto_error.get("error_id_actual")
-    candidatos_restantes = list(contexto_error.get("candidatos_restantes") or [])
-    intento = contexto_error.get("intento", 1)
-
-    if confirmacion:
-        chunk = _obtener_chunk_error(error_id_actual)
-        if chunk is None:
-            return {
-                "respuesta": "Aún no tenemos información registrada para ese error.",
-                "fuentes": [],
-                "imagenes": [],
-                "imagen_evidencia": None,
-                "pendiente_confirmacion": None,
-            }
-        return _generar_respuesta_error_confirmado(pregunta_original, chunk)
-
-    if intento >= MAX_INTENTOS_CONFIRMACION_EVIDENCIA or not candidatos_restantes:
-        return {
-            "respuesta": (
-                "Aún no tenemos información registrada para ese error. "
-                f"Si el problema persiste, puedes abrir un ticket de soporte aquí: {SUPPORT_TICKET_URL}"
-            ),
-            "fuentes": [],
-            "imagenes": [],
-            "imagen_evidencia": None,
-            "pendiente_confirmacion": None,
-        }
-
-    siguiente_id = candidatos_restantes[0]
-    resto = candidatos_restantes[1:]
-    chunk_siguiente = _obtener_chunk_error(siguiente_id)
-
-    if chunk_siguiente is None:
-        return _resolver_confirmacion_error(
-            {
-                "pregunta_original": pregunta_original,
-                "error_id_actual": siguiente_id,
-                "candidatos_restantes": resto,
-                "intento": intento,
-            },
-            confirmacion=False,
-        )
-
-    return _iniciar_confirmacion_error(pregunta_original, chunk_siguiente, resto, intento + 1)
-
-
-def answer_question(question, contexto_error=None, confirmacion=None):
-    """
-    Funcion principal del RAG: busca contexto relevante, genera la respuesta
-    y arma la lista de fuentes (seccion_id + titulo + pagina) e imagenes
-    relacionadas.
-
-    Si contexto_error y confirmacion vienen dados, significa que el usuario
-    esta respondiendo a una pregunta previa de confirmacion con evidencia
-    ("¿es este tu error?"), y se resuelve ese flujo en vez de tratar
-    "question" como una pregunta nueva.
-
-    Devuelve un diccionario con las llaves: respuesta, fuentes, imagenes,
-    imagen_evidencia, pendiente_confirmacion.
-    """
-    if contexto_error is not None and confirmacion is not None:
-        return _resolver_confirmacion_error(contexto_error, confirmacion)
-
-    if es_mensaje_sin_sentido(question):
-        return {
-            "respuesta": "Disculpa, ¿podrías darme un poco más de contexto sobre tu consulta?",
-            "fuentes": [],
-            "imagenes": [],
-            "imagen_evidencia": None,
-            "pendiente_confirmacion": None,
-        }
-
-    if es_saludo_o_cortesia(question):
-        prompt = build_prompt(question, [], incluir_aviso_ticket=False)
-        respuesta = call_gemini_generate(prompt)
-        return {
-            "respuesta": respuesta,
-            "fuentes": [],
-            "imagenes": [],
-            "imagen_evidencia": None,
-            "pendiente_confirmacion": None,
-        }
-
-    if es_pregunta_sobre_el_asistente(question):
-        return {
-            "respuesta": RESPUESTA_SOBRE_ASISTENTE,
-            "fuentes": [],
-            "imagenes": [],
-            "imagen_evidencia": None,
-            "pendiente_confirmacion": None,
-        }
-
+    excluir_ids_evidencia = set(excluir_ids_evidencia or [])
 
     _t_inicio = time.time()
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -1005,7 +928,6 @@ def answer_question(question, contexto_error=None, confirmacion=None):
 
     correccion = analisis["correccion"]
     terminos_clave = analisis["terminos_clave"]
-
 
     pregunta_efectiva = correccion or question
     if correccion and es_saludo_o_cortesia(correccion):
@@ -1046,6 +968,7 @@ def answer_question(question, contexto_error=None, confirmacion=None):
     )
 
     chunks_relevantes = filtrar_por_relevancia(chunks_crudos)
+
     def _umbral_para(chunk):
         return MAX_DISTANCE_ERROR if chunk["metadata"]["origen"] == "error" else MAX_DISTANCE_ABSOLUTE
 
@@ -1053,20 +976,42 @@ def answer_question(question, contexto_error=None, confirmacion=None):
 
     _debug(f"answer_question: chunks tras umbral MAX_DISTANCE_ABSOLUTE={MAX_DISTANCE_ABSOLUTE} -> {len(chunks)} chunk(s)")
 
-  
-    candidatos_evidencia = sorted(
-        (c for c in chunks if c["metadata"]["origen"] == "error" and c["metadata"].get("tiene_evidencia")),
-        key=lambda c: c["distance"],
-    )
-    if candidatos_evidencia:
-        primero = candidatos_evidencia[0]
-        resto_ids = [int(c["metadata"]["seccion_id"]) for c in candidatos_evidencia[1:]]
-        _debug(
-            "answer_question: candidato con evidencia encontrado -> "
-            f"{primero['metadata']['seccion_id']} ({primero['metadata']['titulo']}), "
-            f"candidatos_restantes={resto_ids}"
+    # Si algun error frecuente con evidencia entro dentro del umbral (y no fue
+    # ya rechazado antes ni estamos en modo fallback), primero se le pide al
+    # usuario confirmar con la imagen que efectivamente es ese el error.
+    if permitir_confirmacion_evidencia:
+        candidatos_evidencia = sorted(
+            (
+                c for c in chunks
+                if c["metadata"]["origen"] == "error"
+                and c["metadata"].get("tiene_evidencia")
+                and int(c["metadata"]["seccion_id"]) not in excluir_ids_evidencia
+            ),
+            key=lambda c: c["distance"],
         )
-        return _iniciar_confirmacion_error(question, primero, resto_ids, intento=1)
+        if candidatos_evidencia:
+            primero = candidatos_evidencia[0]
+            resto_ids = [int(c["metadata"]["seccion_id"]) for c in candidatos_evidencia[1:]]
+            _debug(
+                "answer_question: candidato con evidencia encontrado -> "
+                f"{primero['metadata']['seccion_id']} ({primero['metadata']['titulo']}), "
+                f"candidatos_restantes={resto_ids}"
+            )
+            return _iniciar_confirmacion_error(question, primero, resto_ids, intento=1)
+
+    # En modo fallback (o si no se activo confirmacion), se excluyen del
+    # contexto de respuesta los errores con evidencia ya rechazados, para no
+    # usarlos como base de la solucion despues de que el usuario dijo que no
+    # eran los suyos.
+    if excluir_ids_evidencia:
+        chunks = [
+            c for c in chunks
+            if not (
+                c["metadata"]["origen"] == "error"
+                and c["metadata"].get("tiene_evidencia")
+                and int(c["metadata"]["seccion_id"]) in excluir_ids_evidencia
+            )
+        ]
 
     requiere_ticket = any(c["metadata"].get("requiere_ticket") for c in chunks)
 
@@ -1117,7 +1062,7 @@ def answer_question(question, contexto_error=None, confirmacion=None):
     if correccion:
         respuesta = f'Si quisiste decir **"{correccion}"**, esto es lo que necesitas saber:\n\n' + respuesta
 
-    _debug(f"tiempo TOTAL answer_question: {time.time() - _t_inicio:.2f}s")
+    _debug(f"tiempo TOTAL _responder_via_rag: {time.time() - _t_inicio:.2f}s")
 
     return {
         "respuesta": respuesta,
@@ -1126,6 +1071,133 @@ def answer_question(question, contexto_error=None, confirmacion=None):
         "imagen_evidencia": None,
         "pendiente_confirmacion": None,
     }
+
+
+def _resolver_confirmacion_error(contexto_error, confirmacion):
+    """
+    Continua el flujo de confirmacion con evidencia: el usuario ya respondio
+    si el error mostrado es o no el suyo. contexto_error es el bloque que el
+    frontend reenvia tal cual lo recibio en la respuesta anterior.
+
+    Si el usuario confirma, se responde con la causa/solucion de ese error.
+    Si no confirma, se prueba el siguiente candidato (si queda alguno dentro
+    del limite de intentos). Si ya no quedan candidatos, en vez de rendirse
+    directo se intenta una busqueda RAG normal sobre la pregunta original
+    (excluyendo los errores con evidencia ya rechazados), y solo si esa
+    tampoco encuentra nada se informa que no hay informacion registrada.
+    """
+    pregunta_original = contexto_error.get("pregunta_original", "")
+    error_id_actual = contexto_error.get("error_id_actual")
+    candidatos_restantes = list(contexto_error.get("candidatos_restantes") or [])
+    intento = contexto_error.get("intento", 1)
+    ids_vistos = list(contexto_error.get("ids_vistos") or [])
+    if error_id_actual is not None and error_id_actual not in ids_vistos:
+        ids_vistos.append(error_id_actual)
+
+    if confirmacion:
+        chunk = _obtener_chunk_error(error_id_actual)
+        if chunk is None:
+            return {
+                "respuesta": "Aún no tenemos información registrada para ese error.",
+                "fuentes": [],
+                "imagenes": [],
+                "imagen_evidencia": None,
+                "pendiente_confirmacion": None,
+            }
+        return _generar_respuesta_error_confirmado(pregunta_original, chunk)
+
+    # El usuario dijo que no era ese error: se prueba el siguiente candidato,
+    # respetando el limite de intentos.
+    if intento < MAX_INTENTOS_CONFIRMACION_EVIDENCIA and candidatos_restantes:
+        siguiente_id = candidatos_restantes[0]
+        resto = candidatos_restantes[1:]
+        chunk_siguiente = _obtener_chunk_error(siguiente_id)
+
+        if chunk_siguiente is None:
+            # El candidato ya no existe (borrado/editado entre medio); se
+            # sigue con el que quede despues, sin gastar un intento por esto.
+            return _resolver_confirmacion_error(
+                {
+                    "pregunta_original": pregunta_original,
+                    "error_id_actual": siguiente_id,
+                    "candidatos_restantes": resto,
+                    "intento": intento,
+                    "ids_vistos": ids_vistos,
+                },
+                confirmacion=False,
+            )
+
+        return _iniciar_confirmacion_error(pregunta_original, chunk_siguiente, resto, intento + 1, ids_vistos=ids_vistos)
+
+    # Se agotaron los candidatos con evidencia: en vez de rendirse, se intenta
+    # una busqueda RAG normal (manual + otros errores sin evidencia) sobre la
+    # pregunta original, excluyendo los errores con evidencia ya rechazados.
+    _debug(
+        "resolver_confirmacion_error: candidatos de evidencia agotados, "
+        f"fallback a busqueda normal (excluyendo ids {ids_vistos})"
+    )
+    resultado = _responder_via_rag(
+        pregunta_original,
+        excluir_ids_evidencia=ids_vistos,
+        permitir_confirmacion_evidencia=False,
+    )
+
+    if _respuesta_indica_sin_informacion(resultado["respuesta"]):
+        resultado["respuesta"] = (
+            "Aún no tenemos información registrada para ese error. "
+            f"Si el problema persiste, puedes abrir un ticket de soporte aquí: {SUPPORT_TICKET_URL}"
+        )
+
+    return resultado
+
+
+def answer_question(question, contexto_error=None, confirmacion=None):
+    """
+    Funcion principal del RAG: busca contexto relevante, genera la respuesta
+    y arma la lista de fuentes (seccion_id + titulo + pagina) e imagenes
+    relacionadas.
+
+    Si contexto_error y confirmacion vienen dados, significa que el usuario
+    esta respondiendo a una pregunta previa de confirmacion con evidencia
+    ("¿es este tu error?"), y se resuelve ese flujo en vez de tratar
+    "question" como una pregunta nueva.
+
+    Devuelve un diccionario con las llaves: respuesta, fuentes, imagenes,
+    imagen_evidencia, pendiente_confirmacion.
+    """
+    if contexto_error is not None and confirmacion is not None:
+        return _resolver_confirmacion_error(contexto_error, confirmacion)
+
+    if es_mensaje_sin_sentido(question):
+        return {
+            "respuesta": "Disculpa, ¿podrías darme un poco más de contexto sobre tu consulta?",
+            "fuentes": [],
+            "imagenes": [],
+            "imagen_evidencia": None,
+            "pendiente_confirmacion": None,
+        }
+
+    if es_saludo_o_cortesia(question):
+        prompt = build_prompt(question, [], incluir_aviso_ticket=False)
+        respuesta = call_gemini_generate(prompt)
+        return {
+            "respuesta": respuesta,
+            "fuentes": [],
+            "imagenes": [],
+            "imagen_evidencia": None,
+            "pendiente_confirmacion": None,
+        }
+
+    if es_pregunta_sobre_el_asistente(question):
+        return {
+            "respuesta": RESPUESTA_SOBRE_ASISTENTE,
+            "fuentes": [],
+            "imagenes": [],
+            "imagen_evidencia": None,
+            "pendiente_confirmacion": None,
+        }
+
+    return _responder_via_rag(question)
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { API_BASE_URL } from '../config'
 import { authHeaders, parseApiResponse } from '../api/authToken'
 import caseyImage from '../assets/casey_perfil.png'
+import ImageLightbox from './ImageLightbox'
 
 const INITIAL_MESSAGES = [
   {
@@ -52,7 +53,7 @@ function renderTextoConNegritas(texto) {
     }
     if (/^https?:\/\//.test(parte)) {
       return (
-        <a
+        
           key={idx}
           href={parte}
           target="_blank"
@@ -79,6 +80,7 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(false)
   const [activeConfirmation, setActiveConfirmation] = useState(null)
+  const [lightboxUrl, setLightboxUrl] = useState(null)
   const messagesEndRef = useRef(null)
 
   useEffect(() => {
@@ -216,13 +218,19 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
               <p className="whitespace-pre-line break-words">{renderTextoConNegritas(message.text)}</p>
 
               {message.imagenEvidencia && (
-                <div className="mt-2.5">
+                <button
+                  type="button"
+                  onClick={() => setLightboxUrl(message.imagenEvidencia)}
+                  className="mt-2.5 block cursor-zoom-in"
+                  aria-label="Ampliar imagen de evidencia"
+                >
                   <img
                     src={message.imagenEvidencia}
                     alt="Evidencia del error"
-                    className="max-h-56 rounded-lg border border-line/60 object-contain"
+                    className="max-h-56 rounded-lg border border-line/60 object-contain transition hover:opacity-90"
                   />
-                </div>
+                  <span className="mt-1 block text-xs text-brand-blue">Toca para ampliar</span>
+                </button>
               )}
 
               {message.fuentes && message.fuentes.length > 0 && (
@@ -364,6 +372,10 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
         </div>
         </div>
       </form>
+
+      {lightboxUrl && (
+        <ImageLightbox imageUrl={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+      )}
     </aside>
   )
 }
