@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { API_BASE_URL } from '../config'
 import { authHeaders } from '../api/authToken'
 
@@ -96,7 +97,7 @@ export default function ImageLightbox({ nombreArchivo, imageUrl, onClose }) {
     setArrastrando(false)
   }
 
-  return (
+  const contenido = (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/70 p-2 sm:p-6"
       onClick={onClose}
@@ -161,4 +162,6 @@ export default function ImageLightbox({ nombreArchivo, imageUrl, onClose }) {
       </div>
     </div>
   )
+
+  return createPortal(contenido, document.body)
 }
