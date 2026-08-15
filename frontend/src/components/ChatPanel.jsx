@@ -78,6 +78,7 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
   const [messages, setMessages] = useState(INITIAL_MESSAGES)
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(false)
+  const [activeConfirmation, setActiveConfirmation] = useState(null)
   const messagesEndRef = useRef(null)
 
   useEffect(() => {
@@ -86,16 +87,19 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
     })
 
     return () => cancelAnimationFrame(frame)
-  }, [messages, loading])
+  }, [messages, loading, activeConfirmation])
 
   function handleClear() {
     setMessages([...INITIAL_MESSAGES])
+    setActiveConfirmation(null)
   }
 
-  async function sendMessage(value) {
-    const text = value.trim()
+  async function sendMessage(value, opts = {}) {
+    const { contextoError = null, confirmacion = null, displayText = null } = opts
+    const text = (displayText ?? value).trim()
     if (!text || loading) return
-    if (text.length < 3) {
+
+    if (!contextoError && text.length < 3) {
       const userMessage = { id: `u-${Date.now()}`, role: 'user', text }
       const avisoMessage = {
         id: `e-${Date.now()}`,
@@ -111,13 +115,18 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
     const userMessage = { id: `u-${Date.now()}`, role: 'user', text }
     setMessages((prev) => [...prev, userMessage])
     setDraft('')
+    setActiveConfirmation(null)
     setLoading(true)
 
     try {
+      const body = { pregunta: (value ?? text).trim() }
+      if (contextoError) body.contexto_error = contextoError
+      if (confirmacion !== null) body.confirmacion = confirmacion
+
       const res = await fetch(`${API_BASE_URL}/api/chat`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ pregunta: text }),
+        body: JSON.stringify(body),
       })
 
       const data = await parseApiResponse(res)
@@ -126,8 +135,10 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
         role: 'assistant',
         text: data.respuesta,
         fuentes: data.fuentes || [],
+        imagenEvidencia: data.imagen_evidencia || null,
       }
       setMessages((prev) => [...prev, assistantMessage])
+      setActiveConfirmation(data.pendiente_confirmacion || null)
     } catch (err) {
       const errorMessage = {
         id: `e-${Date.now()}`,
@@ -136,6 +147,7 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
         fuentes: [],
       }
       setMessages((prev) => [...prev, errorMessage])
+      setActiveConfirmation(null)
     } finally {
       setLoading(false)
     }
@@ -145,6 +157,18 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
     e.preventDefault()
     sendMessage(draft)
   }
+
+  function handleConfirmacion(esCorrecto) {
+    if (!activeConfirmation || loading) return
+    const texto = esCorrecto ? 'Sí, es mi error' : 'No, no es mi error'
+    sendMessage(texto, {
+      contextoError: activeConfirmation,
+      confirmacion: esCorrecto,
+      displayText: texto,
+    })
+  }
+
+  const inputDisabled = loading || !!activeConfirmation
 
   return (
     <aside className="w-full h-full flex flex-col bg-white">
@@ -191,6 +215,16 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
             >
               <p className="whitespace-pre-line break-words">{renderTextoConNegritas(message.text)}</p>
 
+              {message.imagenEvidencia && (
+                <div className="mt-2.5">
+                  <img
+                    src={message.imagenEvidencia}
+                    alt="Evidencia del error"
+                    className="max-h-56 rounded-lg border border-line/60 object-contain"
+                  />
+                </div>
+              )}
+
               {message.fuentes && message.fuentes.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-line/60 text-xs space-y-0.5">
                   {message.fuentes.map((f, idx) => (
@@ -209,7 +243,28 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
           </div>
         ))}
 
-        {messages.length === 1 && !loading && (
+        {activeConfirmation && !loading && (
+          <div className="flex justify-start">
+            <div className="flex gap-2 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => handleConfirmacion(true)}
+                className="rounded-lg bg-gradient-to-r from-brand-blue to-sky-cyan px-4 py-2 text-sm font-semibold text-white hover:brightness-105"
+              >
+                Sí, es mi error
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConfirmacion(false)}
+                className="rounded-lg border border-line bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
+              >
+                No es mi error
+              </button>
+            </div>
+          </div>
+        )}
+
+        {messages.length === 1 && !loading && !activeConfirmation && (
           <section className="pt-2">
             <h3 className="mb-2.5 px-1 text-sm font-bold text-brand-blue">Preguntas sugeridas</h3>
             <div className="space-y-2">
@@ -247,6 +302,11 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
       </div>
 
       <form onSubmit={handleSend} className="border-t border-line p-3">
+        {activeConfirmation && (
+          <p className="mb-2 px-1 text-xs text-slate-400">
+            Responde con los botones de arriba para continuar.
+          </p>
+        )}
         <div className="relative rounded-xl border border-blue-200 bg-white shadow-sm transition focus-within:border-brand-blue focus-within:ring-[3px] focus-within:ring-brand-blue/15">
         <textarea
           rows="1"
@@ -259,13 +319,13 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
             }
           }}
           placeholder="Pregúntale a Casey..."
-          disabled={loading}
+          disabled={inputDisabled}
           className="block h-12 w-full resize-none rounded-xl bg-transparent py-3 pl-3 pr-24 text-sm leading-6 outline-none disabled:opacity-60"
         />
         <div className="group absolute bottom-1.5 right-12">
           <button
             type="submit"
-            disabled={loading}
+            disabled={inputDisabled}
             aria-label="Enviar mensaje"
             className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-r from-brand-blue to-sky-cyan text-white shadow-sm transition hover:brightness-105 hover:shadow-md focus:outline-none focus:ring-[3px] focus:ring-brand-blue/20 disabled:opacity-60"
           >

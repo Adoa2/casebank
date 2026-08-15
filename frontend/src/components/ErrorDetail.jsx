@@ -206,6 +206,22 @@ export default function ErrorDetail({ error, canReview, canEdit, onBack, onRevie
               Este error requiere que el usuario abra un ticket de soporte. El asistente incluirá el enlace automáticamente al responder.
             </div>
           )}
+
+          {error.tiene_evidencia && error.imagen_url && (
+            <div className="rounded-xl border border-line p-4">
+              <h3 className="mb-2 text-sm font-semibold text-slate-700">Imagen de evidencia</h3>
+              <p className="mb-3 text-xs text-slate-500">
+                El asistente muestra esta imagen al usuario antes de dar la solución, para confirmar que es su error.
+              </p>
+              <a href={error.imagen_url} target="_blank" rel="noopener noreferrer">
+                <img
+                  src={error.imagen_url}
+                  alt="Evidencia del error"
+                  className="max-h-64 rounded-lg border border-line object-contain"
+                />
+              </a>
+            </div>
+          )}
         </div>
       )}
 

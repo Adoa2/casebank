@@ -56,6 +56,8 @@ MAX_DISTANCE_ABSOLUTE = 0.55
 
 MAX_DISTANCE_ERROR = 0.35
 
+MAX_INTENTOS_CONFIRMACION_EVIDENCIA = 2
+
 DEBUG_RAG = True
 
 FRASE_SIN_INFORMACION = "No cuento con esa información en el manual."
@@ -330,8 +332,7 @@ Responde solo el JSON."""
             correccion = None
         else:
             correccion = correccion.strip()
-            # Si el modelo "corrige" pero el resultado es identico (ignorando
-            # mayusculas/espacios), no es una correccion real.
+            # Si el modelo "corrige" pero el resultado es identico (ignorando mayusculas/espacios), no es una correccion real.
             if correccion.lower() == pregunta.strip().lower():
                 correccion = None
 
@@ -386,14 +387,14 @@ def search_relevant_chunks(pregunta, n_results=N_RESULTS, max_reintentos=MAX_REI
     cur.execute(
         """
         SELECT 'manual' AS origen, seccion_id, titulo, pagina_inicio, pagina_fin, contenido, imagenes,
-               FALSE AS requiere_ticket,
+               FALSE AS requiere_ticket, FALSE AS tiene_evidencia, NULL::text AS imagen_url,
                embedding <=> %s::vector AS distance,
                ctid::text AS row_id
         FROM manual_chunks
         UNION ALL
-        SELECT 'error' AS origen, ec.error_id::text AS seccion_id, NULL::text AS titulo, NULL::integer AS pagina_inicio,
+        SELECT 'error' AS origen, ec.error_id::text AS seccion_id, er.titulo AS titulo, NULL::integer AS pagina_inicio,
                NULL::integer AS pagina_fin, ec.contenido, NULL::jsonb AS imagenes,
-               er.requiere_ticket,
+               er.requiere_ticket, er.tiene_evidencia, er.imagen_url,
                ec.embedding <=> %s::vector AS distance,
                ec.ctid::text AS row_id
         FROM error_chunks ec
@@ -408,7 +409,7 @@ def search_relevant_chunks(pregunta, n_results=N_RESULTS, max_reintentos=MAX_REI
     conn.close()
 
     chunks = []
-    for origen, seccion_id, titulo, pagina_inicio, pagina_fin, contenido, imagenes, requiere_ticket, distance, row_id in filas:
+    for origen, seccion_id, titulo, pagina_inicio, pagina_fin, contenido, imagenes, requiere_ticket, tiene_evidencia, imagen_url, distance, row_id in filas:
         chunks.append({
             "documento": contenido,
             "metadata": {
@@ -419,6 +420,8 @@ def search_relevant_chunks(pregunta, n_results=N_RESULTS, max_reintentos=MAX_REI
                 "pagina_fin": pagina_fin,
                 "imagenes": imagenes or [],
                 "requiere_ticket": bool(requiere_ticket),
+                "tiene_evidencia": bool(tiene_evidencia),
+                "imagen_url": imagen_url,
                 "row_id": row_id,
             },
             "distance": float(distance),
@@ -430,6 +433,55 @@ def search_relevant_chunks(pregunta, n_results=N_RESULTS, max_reintentos=MAX_REI
     )
 
     return chunks
+
+
+def _obtener_chunk_error(error_id):
+    """
+    Recupera directamente (sin busqueda vectorial) el contenido y metadata de
+    un error puntual por su id. Se usa durante el flujo de confirmacion con
+    evidencia, una vez que ya se identifico cual error se quiere usar (ya sea
+    porque el usuario confirmo que es el suyo, o porque se va a probar como
+    siguiente candidato).
+    """
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT ec.contenido, er.titulo, er.requiere_ticket, er.tiene_evidencia,
+                   er.imagen_url, ec.ctid::text
+            FROM error_chunks ec
+            JOIN error_reports er ON er.id = ec.error_id
+            WHERE ec.error_id = %s
+            LIMIT 1;
+            """,
+            (error_id,),
+        )
+        fila = cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+
+    if not fila:
+        return None
+
+    contenido, titulo, requiere_ticket, tiene_evidencia, imagen_url, row_id = fila
+    return {
+        "documento": contenido,
+        "metadata": {
+            "origen": "error",
+            "seccion_id": str(error_id),
+            "titulo": titulo,
+            "pagina_inicio": None,
+            "pagina_fin": None,
+            "imagenes": [],
+            "requiere_ticket": bool(requiere_ticket),
+            "tiene_evidencia": bool(tiene_evidencia),
+            "imagen_url": imagen_url,
+            "row_id": row_id,
+        },
+        "distance": 0.0,
+    }
 
 
 def _fusionar_chunks(*listas_chunks):
@@ -788,28 +840,159 @@ def _extraer_fuentes_usadas(respuesta, total_chunks):
     return respuesta_limpia, indices
 
 
-def answer_question(question):
+def _generar_respuesta_error_confirmado(pregunta_original, chunk_error):
+    """
+    Genera la respuesta final (causa + solucion) para un error frecuente que
+    el usuario ya confirmo como el suyo via el flujo de evidencia. Reutiliza
+    build_prompt/call_gemini_generate para mantener el mismo tono y formato
+    que el resto de las respuestas de Casey.
+    """
+    requiere_ticket = chunk_error["metadata"]["requiere_ticket"]
+    prompt = build_prompt(pregunta_original, [chunk_error], incluir_aviso_ticket=requiere_ticket)
+    respuesta = call_gemini_generate(prompt)
+    respuesta, _ = _extraer_fuentes_usadas(respuesta, 1)
+    respuesta = _sanitizar_formato(respuesta)
+
+    if requiere_ticket:
+        respuesta = (
+            respuesta.rstrip()
+            + f"\n\nSi necesitas que se corrija directamente, abre un ticket de soporte aquí: {SUPPORT_TICKET_URL}"
+        )
+
+    return {
+        "respuesta": respuesta,
+        "fuentes": [],
+        "imagenes": [],
+        "imagen_evidencia": None,
+        "pendiente_confirmacion": None,
+    }
+
+
+def _iniciar_confirmacion_error(pregunta_original, chunk_evidencia, candidatos_restantes_ids, intento):
+    """
+    Arma la respuesta que le pide al usuario confirmar, con la imagen del
+    error candidato, si es o no el problema que esta presentando.
+    """
+    meta = chunk_evidencia["metadata"]
+    titulo = meta.get("titulo") or "un error registrado"
+
+    respuesta = (
+        f'Encontré un posible error relacionado con tu consulta: **"{titulo}"**. '
+        "¿Es este el error que estás presentando?"
+    )
+
+    return {
+        "respuesta": respuesta,
+        "fuentes": [],
+        "imagenes": [],
+        "imagen_evidencia": meta.get("imagen_url"),
+        "pendiente_confirmacion": {
+            "pregunta_original": pregunta_original,
+            "error_id_actual": int(meta["seccion_id"]),
+            "candidatos_restantes": candidatos_restantes_ids,
+            "intento": intento,
+        },
+    }
+
+
+def _resolver_confirmacion_error(contexto_error, confirmacion):
+    """
+    Continua el flujo de confirmacion con evidencia: el usuario ya respondio
+    si el error mostrado es o no el suyo. contexto_error es el bloque que el
+    frontend reenvia tal cual lo recibio en la respuesta anterior.
+    """
+    pregunta_original = contexto_error.get("pregunta_original", "")
+    error_id_actual = contexto_error.get("error_id_actual")
+    candidatos_restantes = list(contexto_error.get("candidatos_restantes") or [])
+    intento = contexto_error.get("intento", 1)
+
+    if confirmacion:
+        chunk = _obtener_chunk_error(error_id_actual)
+        if chunk is None:
+            return {
+                "respuesta": "Aún no tenemos información registrada para ese error.",
+                "fuentes": [],
+                "imagenes": [],
+                "imagen_evidencia": None,
+                "pendiente_confirmacion": None,
+            }
+        return _generar_respuesta_error_confirmado(pregunta_original, chunk)
+
+    if intento >= MAX_INTENTOS_CONFIRMACION_EVIDENCIA or not candidatos_restantes:
+        return {
+            "respuesta": (
+                "Aún no tenemos información registrada para ese error. "
+                f"Si el problema persiste, puedes abrir un ticket de soporte aquí: {SUPPORT_TICKET_URL}"
+            ),
+            "fuentes": [],
+            "imagenes": [],
+            "imagen_evidencia": None,
+            "pendiente_confirmacion": None,
+        }
+
+    siguiente_id = candidatos_restantes[0]
+    resto = candidatos_restantes[1:]
+    chunk_siguiente = _obtener_chunk_error(siguiente_id)
+
+    if chunk_siguiente is None:
+        return _resolver_confirmacion_error(
+            {
+                "pregunta_original": pregunta_original,
+                "error_id_actual": siguiente_id,
+                "candidatos_restantes": resto,
+                "intento": intento,
+            },
+            confirmacion=False,
+        )
+
+    return _iniciar_confirmacion_error(pregunta_original, chunk_siguiente, resto, intento + 1)
+
+
+def answer_question(question, contexto_error=None, confirmacion=None):
     """
     Funcion principal del RAG: busca contexto relevante, genera la respuesta
     y arma la lista de fuentes (seccion_id + titulo + pagina) e imagenes
     relacionadas.
 
-    Devuelve un diccionario con las llaves: respuesta, fuentes, imagenes.
+    Si contexto_error y confirmacion vienen dados, significa que el usuario
+    esta respondiendo a una pregunta previa de confirmacion con evidencia
+    ("¿es este tu error?"), y se resuelve ese flujo en vez de tratar
+    "question" como una pregunta nueva.
+
+    Devuelve un diccionario con las llaves: respuesta, fuentes, imagenes,
+    imagen_evidencia, pendiente_confirmacion.
     """
+    if contexto_error is not None and confirmacion is not None:
+        return _resolver_confirmacion_error(contexto_error, confirmacion)
+
     if es_mensaje_sin_sentido(question):
         return {
             "respuesta": "Disculpa, ¿podrías darme un poco más de contexto sobre tu consulta?",
             "fuentes": [],
             "imagenes": [],
+            "imagen_evidencia": None,
+            "pendiente_confirmacion": None,
         }
 
     if es_saludo_o_cortesia(question):
         prompt = build_prompt(question, [], incluir_aviso_ticket=False)
         respuesta = call_gemini_generate(prompt)
-        return {"respuesta": respuesta, "fuentes": [], "imagenes": []}
+        return {
+            "respuesta": respuesta,
+            "fuentes": [],
+            "imagenes": [],
+            "imagen_evidencia": None,
+            "pendiente_confirmacion": None,
+        }
 
     if es_pregunta_sobre_el_asistente(question):
-        return {"respuesta": RESPUESTA_SOBRE_ASISTENTE, "fuentes": [], "imagenes": []}
+        return {
+            "respuesta": RESPUESTA_SOBRE_ASISTENTE,
+            "fuentes": [],
+            "imagenes": [],
+            "imagen_evidencia": None,
+            "pendiente_confirmacion": None,
+        }
 
 
     _t_inicio = time.time()
@@ -829,7 +1012,13 @@ def answer_question(question):
         prompt = build_prompt(correccion, [], incluir_aviso_ticket=False)
         respuesta = call_gemini_generate(prompt)
         respuesta = _sanitizar_formato(respuesta)
-        return {"respuesta": respuesta, "fuentes": [], "imagenes": []}
+        return {
+            "respuesta": respuesta,
+            "fuentes": [],
+            "imagenes": [],
+            "imagen_evidencia": None,
+            "pendiente_confirmacion": None,
+        }
 
     terminos_para_aviso = list(dict.fromkeys(list(terminos_clave) + _sinonimos_fijos(question)))
     if terminos_para_aviso:
@@ -863,6 +1052,21 @@ def answer_question(question):
     chunks = [c for c in chunks_relevantes if c["distance"] <= _umbral_para(c)]
 
     _debug(f"answer_question: chunks tras umbral MAX_DISTANCE_ABSOLUTE={MAX_DISTANCE_ABSOLUTE} -> {len(chunks)} chunk(s)")
+
+  
+    candidatos_evidencia = sorted(
+        (c for c in chunks if c["metadata"]["origen"] == "error" and c["metadata"].get("tiene_evidencia")),
+        key=lambda c: c["distance"],
+    )
+    if candidatos_evidencia:
+        primero = candidatos_evidencia[0]
+        resto_ids = [int(c["metadata"]["seccion_id"]) for c in candidatos_evidencia[1:]]
+        _debug(
+            "answer_question: candidato con evidencia encontrado -> "
+            f"{primero['metadata']['seccion_id']} ({primero['metadata']['titulo']}), "
+            f"candidatos_restantes={resto_ids}"
+        )
+        return _iniciar_confirmacion_error(question, primero, resto_ids, intento=1)
 
     requiere_ticket = any(c["metadata"].get("requiere_ticket") for c in chunks)
 
@@ -919,6 +1123,8 @@ def answer_question(question):
         "respuesta": respuesta,
         "fuentes": fuentes,
         "imagenes": imagenes,
+        "imagen_evidencia": None,
+        "pendiente_confirmacion": None,
     }
 
 
@@ -935,3 +1141,5 @@ if __name__ == "__main__":
         print("\nImagenes relacionadas:")
         for img in resultado["imagenes"]:
             print(f"  - {img}")
+    if resultado.get("imagen_evidencia"):
+        print(f"\nImagen de evidencia (confirmacion pendiente): {resultado['imagen_evidencia']}")

@@ -18,3 +18,5 @@ GEMINI_EMBEDDING_MODEL = "gemini-embedding-001"
 GEMINI_GENERATION_MODEL = "gemini-flash-lite-latest"
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
