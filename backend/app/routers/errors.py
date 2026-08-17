@@ -6,7 +6,7 @@ from typing import List
 import requests
 import psycopg2
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from ..database import models, db
 from .. import schemas
@@ -172,7 +172,15 @@ def listar_errores(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_admin),
 ):
-    return db_session.query(models.ErrorReport).order_by(models.ErrorReport.created_at.desc()).all()
+    return (
+        db_session.query(models.ErrorReport)
+        .options(
+            joinedload(models.ErrorReport.creator),
+            joinedload(models.ErrorReport.reviewer),
+        )
+        .order_by(models.ErrorReport.created_at.desc())
+        .all()
+    )
 
 
 @router.get(
@@ -185,9 +193,16 @@ def listar_pendientes(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_reviewer),
 ):
-    return db_session.query(models.ErrorReport).filter(
-        models.ErrorReport.estado == "pendiente"
-    ).order_by(models.ErrorReport.created_at.desc()).all()
+    return (
+        db_session.query(models.ErrorReport)
+        .options(
+            joinedload(models.ErrorReport.creator),
+            joinedload(models.ErrorReport.reviewer),
+        )
+        .filter(models.ErrorReport.estado == "pendiente")
+        .order_by(models.ErrorReport.created_at.desc())
+        .all()
+    )
 
 
 @router.post(

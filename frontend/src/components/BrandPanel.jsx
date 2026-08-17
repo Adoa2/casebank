@@ -13,6 +13,7 @@ const team = [
   { image: 'perfil_2', name: 'MSc. José Alfredo Martínez Cáceres', role: 'Gerente SINTEG' },
   { image: 'perfil_3', name: 'MSc. Jairon Aviles', role: 'Jefe de Desarrollo' },
   { image: 'perfil_4', name: 'MSc. Esdra Alvarez', role: 'Programadora' },
+  { image: 'perfil_9', name: 'Ing. Tania Coca', role: 'Soporte técnico' },
   { image: 'perfil_5', name: 'MSc. Gimena Sanchez', role: 'Programadora' },
   { image: 'perfil_6', name: 'Ing. Hesler Alvarado', role: 'Programador' },
   { image: 'perfil_7', name: 'MSc. Heidy Lemus', role: 'Programadora' },
@@ -26,9 +27,9 @@ function findProfile(name) {
 
 export default function BrandPanel() {
   const [carouselSlide, setCarouselSlide] = useState(0)
-  const teamPages = Math.ceil(team.length / 4)
+  const teamPages = Math.ceil(team.length / 5)
   const totalSlides = teamPages + 1
-  const visibleTeam = carouselSlide > 0 ? team.slice((carouselSlide - 1) * 4, carouselSlide * 4) : []
+  const visibleTeam = carouselSlide > 0 ? team.slice((carouselSlide - 1) * 5, carouselSlide * 5) : []
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -96,7 +97,7 @@ export default function BrandPanel() {
                 <svg className="h-5 w-5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="9" cy="8" r="3" /><path d="M3 19v-1a5 5 0 0 1 10 0v1M16 6a3 3 0 0 1 0 6M17 14a5 5 0 0 1 4 5" /></svg>
                 Conoce a nuestro equipo técnico
               </h2>
-              <div className="grid grid-cols-4 gap-4">
+              <div className={`grid gap-3 ${visibleTeam.length === 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
                 {visibleTeam.map((person) => {
                   const src = findProfile(person.image)
                   const initials = person.name.replace(/^(Ing\.|MSc\.)\s*/, '').split(' ').slice(0, 2).map((part) => part[0]).join('')
