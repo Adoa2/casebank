@@ -165,6 +165,8 @@ class ErrorReportResponse(BaseModel):
     estado: str
     created_by: int
     reviewed_by: Optional[int]
+    created_by_name: Optional[str] = None
+    reviewed_by_name: Optional[str] = None
     created_at: datetime
     reviewed_at: Optional[datetime]
 

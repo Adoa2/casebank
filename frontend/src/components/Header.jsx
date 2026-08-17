@@ -1,6 +1,6 @@
 import logo from '../assets/logo.png'
 
-export default function Header({ onLogout, isAdmin = false, onGoAdmin, onGoHome, showSupport = true }) {
+export default function Header({ onLogout, isAdmin = false, onGoAdmin, onGoHome, showSupport = true, showLogo = true, adminShell = false }) {
   function handleAdminClick(e) {
     e.stopPropagation()
     onGoAdmin()
@@ -17,8 +17,8 @@ export default function Header({ onLogout, isAdmin = false, onGoAdmin, onGoHome,
   }
 
   return (
-    <header className="header-gradient h-16 flex-shrink-0 flex items-center justify-between gap-2 px-3 shadow-sm sm:px-7">
-      <img src={logo} alt="CaseBank" className="h-9 w-auto max-w-[145px] object-contain object-left sm:h-11 sm:max-w-none" />
+    <header className={`header-gradient flex flex-shrink-0 items-center gap-2 px-3 shadow-sm sm:px-7 ${adminShell ? 'h-[72px] justify-end lg:h-20 lg:px-10' : 'h-16 justify-between'}`}>
+      {showLogo && <img src={logo} alt="CaseBank" className="h-9 w-auto max-w-[145px] object-contain object-left sm:h-11 sm:max-w-none" />}
 
       <div className="flex items-center gap-1 sm:gap-2">
         {onGoHome && (

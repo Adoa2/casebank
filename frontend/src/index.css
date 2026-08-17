@@ -33,6 +33,18 @@
     background: linear-gradient(105deg, #2575d8 0%, #20b9d0 52%, #28c7ae 100%);
   }
 
+  .admin-sidebar {
+    background:
+      radial-gradient(circle at 18% 52%, rgba(30, 91, 190, .22), transparent 36%),
+      linear-gradient(165deg, #132752 0%, #0a1d48 55%, #0b214f 100%);
+  }
+
+  .admin-content-bg {
+    background:
+      radial-gradient(circle at 65% 18%, rgba(219, 236, 255, .3), transparent 30%),
+      linear-gradient(135deg, #fbfcfe 0%, #f7f9fc 100%);
+  }
+
   .brand-dots::before {
     content: '';
     position: absolute;
@@ -204,6 +216,179 @@
     box-shadow: 0 0 0 1px #f7faff;
   }
 
+  /* El modal vive dentro del layout administrativo. Estas dimensiones
+     explícitas evitan que herede el ancho disponible de ese contenedor. */
+  .user-form-modal-overlay {
+    padding: 20px;
+  }
+
+  .user-form-modal-panel {
+    width: min(700px, calc(100vw - 40px));
+    max-width: 700px;
+    max-height: calc(100dvh - 40px);
+    overscroll-behavior: contain;
+  }
+
+  .error-form-modal-overlay {
+    padding: 20px;
+  }
+
+  .error-form-modal-panel {
+    width: min(760px, calc(100vw - 40px));
+    max-width: 760px;
+    height: min(760px, calc(100dvh - 40px));
+    max-height: calc(100dvh - 40px);
+    border-radius: 16px;
+    overscroll-behavior: contain;
+  }
+
+  .error-form-stepper {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    margin-top: 24px;
+  }
+
+  .error-form-step {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 0%;
+    align-items: center;
+  }
+
+  .error-form-step:last-child {
+    flex: 0 0 auto;
+  }
+
+  .error-form-step-line {
+    height: 1px;
+    min-width: 12px;
+    flex: 1 1 auto;
+    margin: 0 10px;
+    transition: background-color .2s ease;
+  }
+
+  .error-form-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .video-form-modal-overlay {
+    padding: 20px;
+  }
+
+  .video-form-modal-panel {
+    width: min(640px, calc(100vw - 40px));
+    max-width: 640px;
+    max-height: calc(100dvh - 40px);
+    border-radius: 16px;
+    overscroll-behavior: contain;
+  }
+
+  .video-form-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+  }
+
+}
+
+@media (max-width: 639px) {
+  .user-form-modal-overlay {
+    align-items: flex-start;
+    padding: 10px;
+  }
+
+  .user-form-modal-panel {
+    width: calc(100vw - 20px);
+    max-width: none;
+    max-height: calc(100dvh - 20px);
+    border-radius: 14px;
+  }
+
+  .error-form-modal-overlay {
+    align-items: flex-start;
+    padding: 10px;
+  }
+
+  .error-form-modal-panel {
+    width: calc(100vw - 20px);
+    max-width: none;
+    height: calc(100dvh - 20px);
+    max-height: calc(100dvh - 20px);
+    border-radius: 14px;
+  }
+
+  .error-form-stepper {
+    margin-top: 20px;
+  }
+
+  .error-form-step-line {
+    margin: 0 6px;
+  }
+
+  .error-form-footer {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .error-form-footer > button,
+  .error-form-footer > div,
+  .error-form-footer > div > button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .video-form-modal-overlay {
+    align-items: flex-start;
+    padding: 10px;
+  }
+
+  .video-form-modal-panel {
+    width: calc(100vw - 20px);
+    max-width: none;
+    max-height: calc(100dvh - 20px);
+    border-radius: 14px;
+  }
+
+  .video-form-modal-footer {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .video-form-modal-footer > button {
+    width: 100%;
+  }
+}
+
+@media (max-height: 700px) and (min-width: 640px) {
+  .user-form-modal-overlay {
+    padding: 12px;
+  }
+
+  .user-form-modal-panel {
+    max-height: calc(100dvh - 24px);
+  }
+
+  .error-form-modal-overlay {
+    padding: 12px;
+  }
+
+  .error-form-modal-panel {
+    height: calc(100dvh - 24px);
+    max-height: calc(100dvh - 24px);
+  }
+
+  .video-form-modal-overlay {
+    padding: 12px;
+  }
+
+  .video-form-modal-panel {
+    max-height: calc(100dvh - 24px);
+  }
 }
 
 @media (max-width: 1023px) {

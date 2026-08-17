@@ -65,6 +65,14 @@ class ErrorReport(Base):
     creator = relationship("User", foreign_keys=[created_by])
     reviewer = relationship("User", foreign_keys=[reviewed_by])
 
+    @property
+    def created_by_name(self):
+        return self.creator.username if self.creator else None
+
+    @property
+    def reviewed_by_name(self):
+        return self.reviewer.username if self.reviewer else None
+
 
 class Video(Base):
     __tablename__ = "videos"
