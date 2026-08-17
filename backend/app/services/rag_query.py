@@ -164,6 +164,15 @@ SINONIMOS_DOMINIO = {
     "eliminar": ["borrar"],
     "modificar": ["editar", "actualizar"],
     "editar": ["modificar", "actualizar"],
+    "agregar credito": ["apertura de préstamo", "apertura de credito", "nuevo préstamo"],
+    "agregar crédito": ["apertura de préstamo", "apertura de credito", "nuevo préstamo"],
+    "agregar prestamo": ["apertura de préstamo", "nuevo préstamo"],
+    "agregar préstamo": ["apertura de préstamo", "nuevo préstamo"],
+    "nuevo prestamo": ["apertura de préstamo"],
+    "nuevo préstamo": ["apertura de préstamo"],
+    "abrir cuenta": ["apertura de cuenta"],
+    "abrir prestamo": ["apertura de préstamo"],
+    "abrir préstamo": ["apertura de préstamo"],   
 }
 
 
@@ -483,6 +492,109 @@ def _obtener_chunk_error(error_id):
         "distance": 0.0,
     }
 
+def _obtener_chunk_seccion(seccion_id):
+    """
+    Recupera directamente (sin busqueda vectorial) el primer chunk disponible
+    de una seccion puntual del manual por su seccion_id. Se usa para inyectar
+    chunks-ancla de prerequisito (ver SECCIONES_PREREQUISITO), que deben
+    acompañar al prompt aunque no hayan ganado por distancia vectorial.
+    """
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT titulo, pagina_inicio, pagina_fin, contenido, imagenes, ctid::text
+            FROM manual_chunks
+            WHERE seccion_id = %s
+            ORDER BY ctid
+            LIMIT 1;
+            """,
+           (str(seccion_id),),
+        )
+        fila = cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+
+    if not fila:
+        return None
+
+    titulo, pagina_inicio, pagina_fin, contenido, imagenes, row_id = fila
+    return {
+        "documento": contenido,
+        "metadata": {
+            "origen": "manual",
+            "seccion_id": str(seccion_id),
+            "titulo": titulo,
+            "pagina_inicio": pagina_inicio,
+            "pagina_fin": pagina_fin,
+            "imagenes": imagenes or [],
+            "requiere_ticket": False,
+            "tiene_evidencia": False,
+            "imagen_url": None,
+            "row_id": row_id,
+        },
+        "distance": 0.0,
+    }
+
+
+SECCIONES_PREREQUISITO = {
+    16: [15],
+    17: [15],
+    18: [15],
+}
+
+
+def _agregar_chunks_prerequisito(chunks):
+    ids_presentes = {int(c["metadata"]["seccion_id"]) for c in chunks if c["metadata"]["origen"] == "manual"}
+    agregados = []
+
+    for c in chunks:
+        if c["metadata"]["origen"] != "manual":
+            continue
+
+        titulo = c["metadata"].get("titulo") or ""
+        if " — " in titulo:
+            continue
+
+        seccion_id = int(c["metadata"]["seccion_id"])
+        for prereq_id in SECCIONES_PREREQUISITO.get(seccion_id, []):
+            if prereq_id in ids_presentes:
+                continue
+            chunk_prereq = _obtener_chunk_seccion(prereq_id)
+            if chunk_prereq:
+                chunk_prereq["metadata"]["es_prerequisito"] = True
+                agregados.append(chunk_prereq)
+                ids_presentes.add(prereq_id)
+                _debug(f"_agregar_chunks_prerequisito: agregado chunk-ancla seccion {prereq_id} por prerequisito de {seccion_id}")
+
+    return chunks + agregados
+
+APERTURA_INTENT_REGEX = {
+    17: re.compile(r"\b(agregar|abrir|nuevo|nueva|crear|registrar|aperturar)\b.*\b(credito|crédito|prestamo|préstamo)\b", re.IGNORECASE),
+    16: re.compile(r"\b(agregar|abrir|nuevo|nueva|crear|registrar|aperturar)\b.*\b(ahorro)\b", re.IGNORECASE),
+    18: re.compile(r"\b(agregar|abrir|nuevo|nueva|crear|registrar|aperturar)\b.*\b(dpf|plazo fijo|deposito a plazo|depósito a plazo)\b", re.IGNORECASE),
+}
+
+
+def _forzar_chunk_apertura(chunks, pregunta):
+    for seccion_id, patron in APERTURA_INTENT_REGEX.items():
+        if not patron.search(pregunta):
+            continue
+        ya_presente = any(
+            c["metadata"]["origen"] == "manual"
+            and int(c["metadata"]["seccion_id"]) == seccion_id
+            and " — " not in (c["metadata"].get("titulo") or "")
+            for c in chunks
+        )
+        if ya_presente:
+            continue
+        chunk_intro = _obtener_chunk_seccion(seccion_id)
+        if chunk_intro:
+            chunks = [chunk_intro] + chunks
+            _debug(f"_forzar_chunk_apertura: forzado chunk intro de seccion {seccion_id} por intencion detectada en la pregunta")
+    return chunks
 
 def _fusionar_chunks(*listas_chunks):
     """
@@ -657,6 +769,8 @@ Mensaje del usuario: {pregunta}
 
 Responde en espanol:"""
 
+    chunks_prerequisito = [c for c in chunks if c["metadata"].get("es_prerequisito")]
+
     bloques = [f"[FUENTE {i}]\n{c['documento']}" for i, c in enumerate(chunks, start=1)]
     contexto = "\n\n---\n\n".join(bloques)
 
@@ -709,6 +823,17 @@ forma automatica, al final de la respuesta. Si el unico paso de la solucion
 es "abrir un ticket", igual explica brevemente la causa del problema, pero
 omite esa instruccion de tus pasos."""
 
+    aviso_prerequisito = ""
+    if chunks_prerequisito:
+        numeros_prereq = ", ".join(str(i) for i in range(1, len(chunks_prerequisito) + 1))
+        aviso_prerequisito = f"""
+
+Las fuentes numeradas {numeros_prereq} son OBLIGATORIAS y describen la ruta de menus
+previa que el usuario debe recorrer antes del procedimiento especifico consultado.
+Debes integrar siempre sus pasos como los PRIMEROS de tu respuesta numerada, fusionados
+en una sola secuencia continua con el resto de los pasos, y debes incluir su numero en
+FUENTES_USADAS aunque el resto del contexto ya parezca suficiente."""
+
     prompt = f"""Eres Casey, el asistente virtual de CaseBank. Respondes preguntas sobre el uso
 del sistema con base en el Manual de Usuario y en soluciones registradas por soporte.
 Tu tono es calido, cercano y servicial, como el de un companero de trabajo que
@@ -744,7 +869,7 @@ explicacion fluida y conversacional (no como una plantilla rigida con
 encabezados tipo "Causa:" / "Solucion:"). Por ejemplo, en vez de separar
 "Causa: X. Solucion: Y", escribe algo como "Eso pasa porque X. Para
 solucionarlo, sigue estos pasos:" y luego los pasos numerados. Nunca respondas
-unicamente con la causa si el contexto tambien contiene la solucion.{aviso_sinonimos}{aviso_citas}{aviso_saludo}{aviso_ticket}
+unicamente con la causa si el contexto tambien contiene la solucion.{aviso_sinonimos}{aviso_citas}{aviso_saludo}{aviso_ticket}{aviso_prerequisito}
 
 Contexto del manual:
 {contexto}
@@ -1063,6 +1188,9 @@ def answer_question(question, contexto_error=None, confirmacion=None):
         return MAX_DISTANCE_ERROR if chunk["metadata"]["origen"] == "error" else MAX_DISTANCE_ABSOLUTE
 
     chunks = [c for c in chunks_relevantes if c["distance"] <= _umbral_para(c)]
+    chunks = _forzar_chunk_apertura(chunks, question)
+    chunks = _agregar_chunks_prerequisito(chunks)
+    chunks = sorted(chunks, key=lambda c: not c["metadata"].get("es_prerequisito", False))
 
     _debug(f"answer_question: chunks tras umbral MAX_DISTANCE_ABSOLUTE={MAX_DISTANCE_ABSOLUTE} -> {len(chunks)} chunk(s)")
 

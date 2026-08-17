@@ -116,8 +116,10 @@ def dividir_en_chunks(texto, max_chars=CHUNK_MAX_CHARS, overlap=CHUNK_OVERLAP):
 def construir_chunks(secciones):
     """
     Convierte cada seccion del manual (Capitulo, subcapitulo, etc.) en uno
-    o mas chunks listos para generar embeddings. Se ignoran las secciones
-    sin contenido real (por ejemplo, encabezados de capitulo vacios).
+    o mas chunks listos para generar embeddings. Primero se intenta
+    dividir la seccion en sub-bloques con titulo propio (ver
+    dividir_en_subsecciones); luego cada sub-bloque, si sigue siendo largo,
+    se corta por tamano igual que antes.
     """
     chunks = []
     for seccion in secciones:
@@ -128,22 +130,30 @@ def construir_chunks(secciones):
         if not contenido:
             continue
 
-        titulo = seccion.get("titulo", "")
-        partes = dividir_en_chunks(contenido)
+        titulo_base = seccion.get("titulo", "")
+        subsecciones = dividir_en_subsecciones(contenido)
 
-        for idx, parte in enumerate(partes):
-            texto_embedding = f"{titulo}\n\n{parte}" if titulo else parte
+        for sub_idx, (subtitulo, texto_sub) in enumerate(subsecciones):
+            if subtitulo:
+                titulo_chunk = f"{titulo_base} — {subtitulo}" if titulo_base else subtitulo
+            else:
+                titulo_chunk = titulo_base
 
-            chunks.append({
-                "chunk_key": f"{seccion['id']}-{idx}",  # solo para el checkpoint
-                "texto": texto_embedding,
-                "titulo": titulo,
-                "id_seccion": seccion["id"],
-                "nivel": seccion.get("nivel", 0),
-                "pagina_inicio": seccion.get("pagina_inicio", 0),
-                "pagina_fin": seccion.get("pagina_fin", 0),
-                "imagenes": seccion.get("imagenes", []),
-            })
+            partes = dividir_en_chunks(texto_sub)
+
+            for idx, parte in enumerate(partes):
+                texto_embedding = f"{titulo_chunk}\n\n{parte}" if titulo_chunk else parte
+
+                chunks.append({
+                    "chunk_key": f"{seccion['id']}-{sub_idx}-{idx}",
+                    "texto": texto_embedding,
+                    "titulo": titulo_chunk,
+                    "id_seccion": seccion["id"],
+                    "nivel": seccion.get("nivel", 0),
+                    "pagina_inicio": seccion.get("pagina_inicio", 0),
+                    "pagina_fin": seccion.get("pagina_fin", 0),
+                    "imagenes": seccion.get("imagenes", []),
+                })
 
     return chunks
 
@@ -357,6 +367,63 @@ def main():
     print(f"\nListo. {len(chunks)} chunks indexados en la tabla 'manual_chunks'.")
     print("Ya puedes probar consultas con: python rag_query.py \"tu pregunta\"")
 
+VERBOS_SUBENCABEZADO = [
+    "Agregar", "Modificar", "Eliminar", "Visualizar", "Ingresar",
+    "Imprimir", "Buscar", "Consultar", "Registrar", "Generar",
+    "Cambiar", "Cargar", "Descargar", "Actualizar", "Configurar",
+    "Activar", "Desactivar", "Habilitar", "Deshabilitar", "Revisar",
+    "Enviar", "Aprobar", "Rechazar", "Cancelar", "Asignar",
+    "Control de", "Definir", "Descripción de",
+]
+
+_patron_verbos = "|".join(re.escape(v) for v in VERBOS_SUBENCABEZADO)
+SUBENCABEZADO_REGEX = re.compile(
+    rf"(?:^|\n\n)(?:[#\d][#\d\.\)]{{0,3}}\s+)?((?:{_patron_verbos})[^\n:]{{0,90}}?):\s+",
+    re.MULTILINE,
+)
+
+_NUMERO_SUELTO_INICIAL_REGEX = re.compile(r"^\s*[#\d][#\d]{0,2}\s+")
+
+def dividir_en_subsecciones(contenido):
+    """
+    Detecta sub-encabezados dentro de una seccion larga del manual, del
+    tipo "Agregar un plan de pago: Para agregar..." o "Visualizar
+    transacciones: Para poder...", que en el PDF original marcan un
+    sub-procedimiento distinto dentro de una misma seccion del indice
+    (TOC). Sin esto, secciones largas (ej. "Apertura y modificacion de
+    cuenta de prestamo", 27 paginas con ~20 sub-procedimientos) quedan
+    todas bajo el mismo titulo generico al trocearse por tamano, lo que
+    impide que la busqueda semantica distinga "agregar un prestamo" de
+    "agregar una cuota".
+
+    Devuelve una lista de (subtitulo, texto). subtitulo es None para el
+    primer tramo (texto antes del primer sub-encabezado detectado,
+    tipicamente la introduccion o los pasos iniciales de la seccion). Si
+    no se detecta ningun sub-encabezado, devuelve [(None, contenido)] sin
+    modificar el comportamiento anterior.
+    """
+    matches = list(SUBENCABEZADO_REGEX.finditer(contenido))
+    if not matches:
+        return [(None, contenido)]
+
+    tramos = []
+
+    intro = contenido[:matches[0].start()].strip()
+    if intro:
+        tramos.append((None, intro))
+
+    for idx, m in enumerate(matches):
+        subtitulo = m.group(1).strip()
+        inicio_texto = m.end()
+        fin_texto = matches[idx + 1].start() if idx + 1 < len(matches) else len(contenido)
+        texto = contenido[inicio_texto:fin_texto].strip()
+        texto = _NUMERO_SUELTO_INICIAL_REGEX.sub("", texto).strip()
+        if texto:
+            tramos.append((subtitulo, texto))
+
+    return tramos
 
 if __name__ == "__main__":
     main()
+
+
