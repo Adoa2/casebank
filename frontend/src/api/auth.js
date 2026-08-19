@@ -4,7 +4,7 @@ const FIELD_MESSAGES = {
   new_password: 'La contraseña debe tener al menos 8 caracteres.',
   code: 'El código debe tener 6 dígitos.',
   email: 'El correo no es válido.',
-  password: 'La contraseña debe tener al menos 8 caracteres.',
+  password: 'La contraseña debe incluir 8 caracteres, mayúscula, minúscula, número y carácter especial.',
 }
 
 async function parseError(res, fallback) {
@@ -36,11 +36,11 @@ export async function login(username, password) {
   return res.json()
 }
 
-export async function register(username, email, password) {
+export async function register(username, email, password, nationality) {
   const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, email, password }),
+    body: JSON.stringify({ username, email, password, nationality }),
   })
 
   if (!res.ok) {

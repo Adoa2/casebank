@@ -82,6 +82,7 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
   const [activeConfirmation, setActiveConfirmation] = useState(null)
   const [lightboxUrl, setLightboxUrl] = useState(null)
   const messagesEndRef = useRef(null)
+  const selectedClarificationsRef = useRef(new Set())
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -94,6 +95,7 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
   function handleClear() {
     setMessages([...INITIAL_MESSAGES])
     setActiveConfirmation(null)
+    selectedClarificationsRef.current.clear()
   }
 
   async function sendMessage(value, opts = {}) {
@@ -121,7 +123,11 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
     setLoading(true)
 
     try {
-      const body = { pregunta: (value ?? text).trim() }
+      const historial = messages
+        .filter((message) => message.id !== 'welcome' && !message.id.startsWith('e-'))
+        .slice(-8)
+        .map((message) => ({ role: message.role, text: message.text.slice(0, 1200) }))
+      const body = { pregunta: (value ?? text).trim(), historial }
       if (contextoError) body.contexto_error = contextoError
       if (confirmacion !== null) body.confirmacion = confirmacion
 
@@ -138,6 +144,8 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
         text: data.respuesta,
         fuentes: data.fuentes || [],
         imagenEvidencia: data.imagen_evidencia || null,
+        opcionesAclaracion: data.opciones_aclaracion || [],
+        sugerirSoporte: Boolean(data.sugerir_soporte),
       }
       setMessages((prev) => [...prev, assistantMessage])
       setActiveConfirmation(data.pendiente_confirmacion || null)
@@ -168,6 +176,17 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
       confirmacion: esCorrecto,
       displayText: texto,
     })
+  }
+
+  function handleClarificationChoice(messageId, opcion) {
+    if (loading || selectedClarificationsRef.current.has(messageId)) return
+    selectedClarificationsRef.current.add(messageId)
+    setMessages((prev) => prev.map((message) => (
+      message.id === messageId
+        ? { ...message, opcionAclaracionSeleccionada: opcion }
+        : message
+    )))
+    sendMessage(opcion)
   }
 
   const inputDisabled = loading || !!activeConfirmation
@@ -216,6 +235,41 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
               }`}
             >
               <p className="whitespace-pre-line break-words">{renderTextoConNegritas(message.text)}</p>
+
+              {message.opcionesAclaracion?.length > 0 && (
+                <div className="mt-3 flex flex-col gap-2" aria-label="Opciones para aclarar la pregunta">
+                  {message.opcionesAclaracion.map((opcion, index) => (
+                    <button
+                      key={opcion}
+                      type="button"
+                      onClick={() => handleClarificationChoice(message.id, opcion)}
+                      disabled={loading || Boolean(message.opcionAclaracionSeleccionada)}
+                      className={`rounded-lg border px-3 py-2 text-left text-xs font-medium transition disabled:cursor-not-allowed ${
+                        message.opcionAclaracionSeleccionada === opcion
+                          ? 'border-brand-blue bg-blue-100 text-blue-950 ring-1 ring-brand-blue/20'
+                          : message.opcionAclaracionSeleccionada
+                            ? 'border-slate-200 bg-slate-50 text-slate-400 opacity-60'
+                            : 'border-blue-200 bg-white text-blue-950 hover:border-brand-blue hover:bg-blue-50 disabled:opacity-60'
+                      }`}
+                    >
+                      <span className={`mr-1.5 font-bold ${message.opcionAclaracionSeleccionada && message.opcionAclaracionSeleccionada !== opcion ? 'text-slate-400' : 'text-brand-blue'}`}>{index + 1}.</span>
+                      {opcion}
+                      {message.opcionAclaracionSeleccionada === opcion && <span className="ml-1.5 text-brand-blue">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {message.sugerirSoporte && (
+                <a
+                  href="https://soporte.sinteghn.com/clientes/login.php"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 inline-flex items-center rounded-lg bg-gradient-to-r from-brand-blue to-sky-cyan px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-105"
+                >
+                  Crear ticket en Soporte
+                </a>
+              )}
 
               {message.imagenEvidencia && (
                 <button

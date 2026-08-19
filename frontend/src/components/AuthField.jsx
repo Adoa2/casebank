@@ -9,14 +9,15 @@ export default function AuthField({
   placeholder,
   autoComplete,
   required = true,
+  compact = false,
   ...rest
 }) {
   const [revealed, setRevealed] = useState(false)
   const isPassword = type === 'password'
 
   return (
-    <div className="mb-5">
-      <label htmlFor={id} className="mb-2 block text-[0.78rem] font-bold text-[#14254c]">{label}</label>
+    <div className={compact ? 'mb-3' : 'mb-5'}>
+      <label htmlFor={id} className={`${compact ? 'mb-1.5' : 'mb-2'} block text-[0.78rem] font-bold text-[#14254c]`}>{label}</label>
       <div className="relative">
         <span className="pointer-events-none absolute inset-y-0 left-4 grid place-items-center text-[#8796b6]" aria-hidden="true">
           {isPassword ? (
@@ -34,7 +35,7 @@ export default function AuthField({
           placeholder={placeholder}
           autoComplete={autoComplete}
           required={required}
-          className="h-[52px] w-full rounded-xl border border-[#d9e1ef] bg-white pl-12 pr-12 text-[0.92rem] text-ink shadow-sm outline-none transition placeholder:text-[#8a98b5] focus:border-brand-blue focus:ring-[3px] focus:ring-brand-blue/10"
+          className={`${compact ? 'h-12' : 'h-[52px]'} w-full rounded-xl border border-[#d9e1ef] bg-white pl-12 pr-12 text-[0.92rem] text-ink shadow-sm outline-none transition placeholder:text-[#8a98b5] focus:border-brand-blue focus:ring-[3px] focus:ring-brand-blue/10`}
           {...rest}
         />
         {isPassword && (
