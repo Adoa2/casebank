@@ -53,6 +53,7 @@ export default function UserFormModal({ mode, initialData, existingUsers = [], o
   const isEdit = mode === 'edit'
   const [username, setUsername] = useState(initialData?.username || '')
   const [email, setEmail] = useState(initialData?.email || '')
+  const [nationality, setNationality] = useState(initialData?.nationality || '')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState(initialData?.role ?? (isEdit ? 0 : 1))
   const [isActive, setIsActive] = useState(initialData?.is_active ?? true)
@@ -90,6 +91,10 @@ export default function UserFormModal({ mode, initialData, existingUsers = [], o
       setError('El nombre de usuario ya está registrado. Elige uno diferente.')
       return
     }
+    if (!nationality) {
+      setError('Selecciona la nacionalidad del usuario.')
+      return
+    }
     if ((!isEdit || password) && !passwordIsValid) {
       setError('La contraseña debe cumplir todos los requisitos de seguridad.')
       return
@@ -97,11 +102,11 @@ export default function UserFormModal({ mode, initialData, existingUsers = [], o
     setSaving(true)
     try {
       if (isEdit) {
-        const payload = { email, role: Number(role), is_active: isActive }
+        const payload = { email, nationality, role: Number(role), is_active: isActive }
         if (password) payload.password = password
         await onSubmit(payload)
       } else {
-        await onSubmit({ username, email, password, role: Number(role), is_active: isActive })
+        await onSubmit({ username, email, nationality, password, role: Number(role), is_active: isActive })
       }
     } catch (err) {
       setError(err.message || 'No se pudo guardar el usuario.')
@@ -137,6 +142,19 @@ export default function UserFormModal({ mode, initialData, existingUsers = [], o
                 </Field>
                 <Field label="Correo electrónico" required hint="Se enviará la información de acceso a este correo.">
                   <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" placeholder="juan.perez@casebank.com" className={inputClass} />
+                </Field>
+              </div>
+              <div className="mt-4 max-w-[360px]">
+                <Field label="Nacionalidad" required hint="Selecciona la nacionalidad registrada para esta cuenta.">
+                  <div className="relative">
+                    <svg className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" /></svg>
+                    <select value={nationality} onChange={(event) => { setNationality(event.target.value); setError(null) }} required className={`${inputClass} appearance-none pl-11 pr-10 ${nationality ? '' : 'text-slate-400'}`}>
+                      <option value="" disabled>Selecciona una nacionalidad</option>
+                      <option value="hondurena">Hondureña</option>
+                      <option value="dominicana">Dominicana</option>
+                    </select>
+                    <svg className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+                  </div>
                 </Field>
               </div>
             </section>

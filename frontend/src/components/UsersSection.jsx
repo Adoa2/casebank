@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { listUsers, createUser, updateUser, deleteUser } from '../api/adminUsers'
 import { getUsername } from '../api/authToken'
 import UserFormModal from './UserFormModal'
+import hondurasFlag from '../assets/honduras.png'
+import dominicanRepublicFlag from '../assets/republica-dominicana.png'
 
 const PAGE_SIZE = 8
 
@@ -54,6 +56,23 @@ function StatusBadge({ active }) {
     <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${active ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
       <span className={`h-2 w-2 rounded-full ${active ? 'bg-emerald-500' : 'bg-red-500'}`} />
       {active ? 'Activo' : 'Inactivo'}
+    </span>
+  )
+}
+
+const NATIONALITY_DATA = {
+  hondurena: { flag: hondurasFlag, label: 'Hondureña' },
+  dominicana: { flag: dominicanRepublicFlag, label: 'Dominicana' },
+}
+
+function NationalityBadge({ nationality }) {
+  const data = NATIONALITY_DATA[nationality]
+  if (!data) return <span className="text-xs text-slate-400">Sin definir</span>
+
+  return (
+    <span className="inline-flex items-center justify-center" title={data.label}>
+      <img src={data.flag} alt={`Bandera ${data.label}`} className="h-11 w-11 object-contain drop-shadow-sm" />
+      <span className="sr-only">{data.label}</span>
     </span>
   )
 }
@@ -243,19 +262,20 @@ export default function UsersSection() {
 
       <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-[0_8px_24px_rgba(30,55,90,.08)]">
         <div className="hidden overflow-x-auto md:block">
-          <table className="w-full min-w-[900px] table-fixed text-left text-sm">
+          <table className="w-full min-w-[1050px] table-fixed text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50/40 text-xs font-semibold uppercase tracking-wide text-slate-600">
               <tr>
-                <th className="w-[17%] px-6 py-5">Usuario</th>
-                <th className="w-[25%] px-5 py-5">Correo</th>
-                <th className="w-[16%] px-5 py-5">Rol</th>
-                <th className="w-[15%] px-5 py-5">Estado</th>
-                <th className="w-[15%] px-5 py-5">Creado</th>
-                <th className="w-[12%] px-5 py-5 text-right">Acciones</th>
+                <th className="w-[15%] px-6 py-5">Usuario</th>
+                <th className="w-[22%] px-5 py-5">Correo</th>
+                <th className="w-[15%] px-5 py-5 text-center">Nacionalidad</th>
+                <th className="w-[14%] px-5 py-5">Rol</th>
+                <th className="w-[12%] px-5 py-5">Estado</th>
+                <th className="w-[12%] px-5 py-5">Creado</th>
+                <th className="w-[10%] px-5 py-5 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {feedback && <tr><td colSpan={6} className={`px-6 py-16 text-center ${error ? 'text-red-600' : 'text-slate-400'}`}>{feedback}</td></tr>}
+              {feedback && <tr><td colSpan={7} className={`px-6 py-16 text-center ${error ? 'text-red-600' : 'text-slate-400'}`}>{feedback}</td></tr>}
               {!feedback && visibleUsers.map((user) => {
                 const isSelf = user.username === currentUsername
                 return (
@@ -264,6 +284,7 @@ export default function UsersSection() {
                       <div className="flex items-center gap-4"><UserAvatar username={user.username} /><strong className="truncate text-[#101a38]">{user.username}</strong></div>
                     </td>
                     <td className="truncate px-5 py-5 text-slate-600" title={user.email}>{user.email}</td>
+                    <td className="px-5 py-3 text-center"><NationalityBadge nationality={user.nationality} /></td>
                     <td className="px-5 py-5"><RoleBadge role={user.role} /></td>
                     <td className="px-5 py-5"><StatusBadge active={user.is_active} /></td>
                     <td className="px-5 py-5 text-[#17213e]">
@@ -288,7 +309,7 @@ export default function UsersSection() {
                 <UserAvatar username={user.username} />
                 <div className="min-w-0"><h2 className="truncate font-semibold text-[#101a38]">{user.username}</h2><p className="truncate text-sm text-slate-500">{user.email}</p></div>
               </div>
-              <div className="mb-4 flex flex-wrap items-center gap-2"><RoleBadge role={user.role} /><StatusBadge active={user.is_active} /></div>
+              <div className="mb-4 flex flex-wrap items-center gap-3"><NationalityBadge nationality={user.nationality} /><RoleBadge role={user.role} /><StatusBadge active={user.is_active} /></div>
               <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
                 <span className="flex items-center gap-2 text-xs text-slate-500">
                   <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M8 3v4m8-4v4M3 10h18" /></svg>

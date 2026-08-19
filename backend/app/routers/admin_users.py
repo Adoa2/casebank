@@ -46,6 +46,7 @@ def crear_usuario(
     nuevo = models.User(
         username=data.username,
         email=data.email,
+        nationality=data.nationality,
         hashed_password=auth.get_password_hash(data.password),
         role=data.role,
         is_active=data.is_active,
@@ -74,6 +75,8 @@ def actualizar_usuario(
 
     if data.email is not None:
         usuario.email = data.email
+    if data.nationality is not None:
+        usuario.nationality = data.nationality
     if data.role is not None:
         usuario.role = data.role
     if data.is_active is not None:
