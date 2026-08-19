@@ -1499,13 +1499,13 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
     def _umbral_para(chunk):
         return MAX_DISTANCE_ERROR if chunk["metadata"]["origen"] == "error" else MAX_DISTANCE_ABSOLUTE
 
-        candidatos_bajo_umbral = [c for c in chunks_crudos if c["distance"] <= _umbral_para(c)]
-        chunks_reordenados = rerank_chunks(pregunta_efectiva, candidatos_bajo_umbral)
-        if chunks_reordenados is None:
-            chunks_relevantes = filtrar_por_relevancia(chunks_crudos)
-            chunks = [c for c in chunks_relevantes if c["distance"] <= _umbral_para(c)]
-        else:
-            chunks = chunks_reordenados
+    candidatos_bajo_umbral = [c for c in chunks_crudos if c["distance"] <= _umbral_para(c)]
+    chunks_reordenados = rerank_chunks(pregunta_efectiva, candidatos_bajo_umbral)
+    if chunks_reordenados is None:
+        chunks_relevantes = filtrar_por_relevancia(chunks_crudos)
+        chunks = [c for c in chunks_relevantes if c["distance"] <= _umbral_para(c)]
+    else:
+        chunks = chunks_reordenados
 
     chunks = _forzar_chunk_apertura(chunks, pregunta_efectiva)
     chunks = _agregar_chunks_prerequisito(chunks)
