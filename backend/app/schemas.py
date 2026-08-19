@@ -115,6 +115,7 @@ class UserAdminCreate(BaseModel):
     """Datos para crear un usuario desde el panel administrativo."""
     username: str
     email: str
+    nationality: Optional[Literal["hondurena", "dominicana"]] = None
     password: str = Field(..., min_length=8)
     role: int = Field(0, ge=0, le=2, description="0 usuario, 1 admin, 2 privilegio mayor.")
     is_active: bool = True
@@ -123,6 +124,7 @@ class UserAdminCreate(BaseModel):
 class UserAdminUpdate(BaseModel):
     """Datos editables de un usuario desde el panel administrativo. Todos opcionales."""
     email: Optional[str] = None
+    nationality: Optional[Literal["hondurena", "dominicana"]] = None
     role: Optional[int] = Field(None, ge=0, le=2)
     is_active: Optional[bool] = None
     password: Optional[str] = Field(None, min_length=8)
