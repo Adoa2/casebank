@@ -83,7 +83,7 @@ export default function App() {
 
       <div className="auth-stage relative flex min-h-screen min-h-dvh items-center justify-center px-4 py-6 sm:px-8 sm:py-10 lg:px-[clamp(2rem,4vw,4.5rem)]">
         <img src={logoImage} alt="CaseBank" className="absolute left-6 top-6 w-[138px] lg:hidden" />
-        <div className={`auth-card w-full ${view === 'login' ? 'max-w-[510px] lg:min-h-[650px]' : 'max-w-[510px]'}`}>
+        <div className={`auth-card w-full ${view === 'login' ? 'max-w-[510px] lg:min-h-[650px]' : 'max-w-[510px]'} ${view === 'register' ? '!px-7 !py-6 sm:!px-10 sm:!py-8' : ''}`}>
           {view === 'login' && (
             <LoginView
               notice={loginNotice}

@@ -3,9 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .database import models
 from .database.db import engine
+from .database.db import ensure_schema_columns
 from .routers import auth, chat, manual, admin_users, errors, videos
 
 models.Base.metadata.create_all(bind=engine)
+ensure_schema_columns()
 
 tags_metadata = [
     {

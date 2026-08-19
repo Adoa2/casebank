@@ -1,7 +1,8 @@
 from datetime import datetime
-from typing import Optional
+import re
+from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class UserCreate(BaseModel):
@@ -22,6 +23,26 @@ class UserCreate(BaseModel):
         description="Contraseña en texto plano. Se guarda encriptada (hash), nunca en texto plano.",
         examples=["MiClaveSegura123"],
     )
+    nationality: Literal["hondurena", "dominicana"] = Field(
+        ...,
+        description="Nacionalidad seleccionada por el usuario.",
+        examples=["hondurena"],
+    )
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, password: str) -> str:
+        requirements = (
+            re.search(r"[A-ZÁÉÍÓÚÑ]", password),
+            re.search(r"[a-záéíóúñ]", password),
+            re.search(r"\d", password),
+            re.search(r"[^A-Za-zÁÉÍÓÚÑáéíóúñ0-9\s]", password),
+        )
+        if not all(requirements):
+            raise ValueError(
+                "La contraseña debe incluir mayúscula, minúscula, número y carácter especial."
+            )
+        return password
 
 
 class UserResponse(BaseModel):
@@ -29,6 +50,7 @@ class UserResponse(BaseModel):
     id: int = Field(..., description="Identificador único del usuario en la base de datos.")
     username: str = Field(..., description="Nombre de usuario.")
     email: str = Field(..., description="Correo electrónico del usuario.")
+    nationality: str = Field(..., description="Nacionalidad del usuario.")
 
     class Config:
         from_attributes = True
@@ -80,6 +102,7 @@ class UserAdminResponse(BaseModel):
     id: int
     username: str
     email: str
+    nationality: Optional[str] = None
     role: int
     is_active: bool
     created_at: datetime
