@@ -88,25 +88,6 @@ export default function AdminSidebar({ activeSection, onSelectSection, role = 0 
         </ul>
       </nav>
 
-      <div className="mb-7 mt-auto hidden rounded-xl border border-white/10 bg-white/[.06] p-5 shadow-lg lg:block">
-        <div className="mb-3 flex items-center gap-3">
-          <span className="grid h-8 w-8 place-items-center rounded-full border-2 border-sky-400 text-lg font-semibold text-sky-400">?</span>
-          <strong className="text-sm">¿Necesitas ayuda?</strong>
-        </div>
-        <p className="mb-4 text-sm leading-6 text-blue-100/85">Consulta la documentación o contacta al soporte.</p>
-        <a
-          href="https://soporte.sinteghn.com/clientes/login.php"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-center gap-2 rounded-lg bg-white/[.08] px-3 py-3 text-sm font-semibold transition-colors hover:bg-white/[.14]"
-        >
-          Ir a Soporte
-          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-            <path d="M14 4h6v6M20 4l-9 9" />
-            <path d="M18 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h6" />
-          </svg>
-        </a>
-      </div>
     </aside>
   )
 }

@@ -1,11 +1,10 @@
 # app/routers/chat.py
-from typing import List
+from typing import List, Literal, Optional
 
 import psycopg2
 import requests
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from typing import List, Optional
 from . import auth
 from ..database import models
 from ..services.rag_query import answer_question
@@ -29,6 +28,11 @@ class ContextoErrorConfirmacion(BaseModel):
     intento: int = Field(1, description="Numero de intento de confirmacion actual (maximo 2).")
 
 
+class MensajeHistorial(BaseModel):
+    role: Literal["user", "assistant"]
+    text: str = Field(..., min_length=1, max_length=1200)
+
+
 class ChatQuery(BaseModel):
     pregunta: str = Field(
         ...,
@@ -46,6 +50,11 @@ class ChatQuery(BaseModel):
         None,
         description="True si el usuario confirmo que el error mostrado es el suyo, False si no. "
                     "Solo se usa junto con contexto_error.",
+    )
+    historial: List[MensajeHistorial] = Field(
+        default_factory=list,
+        max_length=8,
+        description="Mensajes recientes usados para interpretar preguntas de seguimiento.",
     )
 
 
@@ -91,6 +100,14 @@ class ChatRespuesta(BaseModel):
                     "mostrado es el suyo. El frontend debe reenviar este bloque tal cual en el "
                     "siguiente mensaje, junto con el campo confirmacion.",
     )
+    opciones_aclaracion: List[str] = Field(
+        default_factory=list,
+        description="Opciones sugeridas cuando la pregunta admite varias interpretaciones.",
+    )
+    sugerir_soporte: bool = Field(
+        False,
+        description="Indica que el chat debe mostrar un acceso para crear un ticket de soporte.",
+    )
 
 
 # --- RUTAS ---
@@ -109,7 +126,13 @@ def chat_con_manual(
 ):
     try:
         contexto = data.contexto_error.model_dump() if data.contexto_error else None
-        resultado = answer_question(data.pregunta, contexto_error=contexto, confirmacion=data.confirmacion)
+        historial = [mensaje.model_dump() for mensaje in data.historial]
+        resultado = answer_question(
+            data.pregunta,
+            contexto_error=contexto,
+            confirmacion=data.confirmacion,
+            historial=historial,
+        )
     except RuntimeError:
         # rag_query.py agoto los reintentos por rate limit (429) de Gemini
         raise HTTPException(

@@ -12,12 +12,12 @@ const team = [
   { image: 'perfil_1', name: 'Ing. José Alfredo Martínez', role: 'Gerente Evaluate Comercial' },
   { image: 'perfil_2', name: 'MSc. José Alfredo Martínez Cáceres', role: 'Gerente SINTEG' },
   { image: 'perfil_3', name: 'MSc. Jairon Aviles', role: 'Jefe de Desarrollo' },
-  { image: 'perfil_4', name: 'MSc. Esdra Alvarez', role: 'Programadora' },
+  { image: 'perfil_4', name: 'MSc. Esdra Maria Alvarez', role: 'Programadora' },
   { image: 'perfil_9', name: 'Ing. Tania Coca', role: 'Soporte técnico' },
-  { image: 'perfil_5', name: 'MSc. Gimena Sanchez', role: 'Programadora' },
-  { image: 'perfil_6', name: 'Ing. Hesler Alvarado', role: 'Programador' },
-  { image: 'perfil_7', name: 'MSc. Heidy Lemus', role: 'Programadora' },
-  { image: 'perfil_8', name: 'Ing. Adolfo Amador', role: 'Programador' },
+  { image: 'perfil_5', name: 'MSc. Yosseny Gimena Sanchez C.', role: 'Programadora' },
+  { image: 'perfil_6', name: 'Ing. Hesler Aldair Alvarado H.', role: 'Programador' },
+  { image: 'perfil_7', name: 'MSc. Heidy Nohemy Lemus R.', role: 'Programadora' },
+  { image: 'perfil_8', name: 'Ing. Adolfo Angel Amador', role: 'Programador' },
 ]
 
 function findProfile(name) {

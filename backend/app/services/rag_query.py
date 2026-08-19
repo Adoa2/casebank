@@ -22,6 +22,7 @@ import os
 import re
 import json
 import time
+import unicodedata
 import requests
 import psycopg2
 from concurrent.futures import ThreadPoolExecutor
@@ -49,10 +50,11 @@ GEMINI_GENERATE_URL = (
 EMBED_DIMENSION = 768  # debe coincidir con el usado en build_vector_db.py
 MAX_REINTENTOS = 5
 
-N_RESULTS = 8
-DISTANCE_FACTOR = 1.3
-MAX_CHUNKS_USADOS = 5
+N_RESULTS = 10
+DISTANCE_FACTOR = 1.45
+MAX_CHUNKS_USADOS = 7
 MAX_DISTANCE_ABSOLUTE = 0.55
+MAX_DISTANCE_TEMA_RELACIONADO = 0.32
 
 MAX_DISTANCE_ERROR = 0.35
 
@@ -62,6 +64,19 @@ DEBUG_RAG = True
 
 FRASE_SIN_INFORMACION = "No cuento con esa información en el manual."
 SUPPORT_TICKET_URL = "https://soporte.sinteghn.com/clientes/login.php"
+OPCION_SIN_TEMA_UTIL = "Ninguna de estas opciones"
+
+MIEMBROS_EQUIPO = [
+    ("Ing. José Alfredo Martínez", ["jose alfredo martinez"]),
+    ("MSc. José Alfredo Martínez Cáceres", ["jose alfredo martinez caceres"]),
+    ("MSc. Jairon Aviles", ["jairon", "jairon aviles"]),
+    ("MSc. Esdra Maria Alvarez", ["esdra", "esdra alvarez", "maria"]),
+    ("Ing. Tania Coca", ["tania", "tania coca"]),
+    ("MSc. Yosseny Gimena Sanchez C.", ["gimena", "gimena sanchez","yosseny"]),
+    ("Ing. Hesler Aldair Alvarado H", ["hesler", "hesler alvarado", "aldair"]),
+    ("MSc. Heidy Nohemy Lemus R.", ["heidy", "heidy lemus", "nohemy"]),
+    ("Ing. Adolfo Angel Amador", ["adolfo", "adolfo amador", "angel"]),
+]
 
 GREETING_BASES = [
     r"hola+",
@@ -149,6 +164,77 @@ def es_pregunta_sobre_el_asistente(texto):
     normalizado = texto.strip().lower()
     return bool(_ABOUT_ASSISTANT_REGEX.search(normalizado))
 
+
+def _normalizar_busqueda(texto):
+    """Normaliza tildes y mayusculas para reconocer intenciones concretas."""
+    texto = unicodedata.normalize("NFD", texto.lower())
+    return "".join(caracter for caracter in texto if unicodedata.category(caracter) != "Mn")
+
+
+def _respuesta_sobre_miembro_equipo(pregunta):
+    """Reconoce a integrantes publicados en la sección del equipo técnico."""
+    normalizada = _normalizar_busqueda(pregunta)
+    coincidencias = []
+    for nombre, aliases in MIEMBROS_EQUIPO:
+        if any(re.search(rf"\b{re.escape(alias)}\b", normalizada) for alias in aliases):
+            coincidencias.append(nombre)
+
+    if not coincidencias:
+        return None
+
+    # Algunos nombres pueden coincidir parcialmente; se conserva el más específico.
+    nombre = max(coincidencias, key=len)
+    return {
+        "respuesta": (
+            f"**{nombre}** forma parte del equipo de soporte técnico que labora en "
+            "**Evaluate** y **Sinteg**. El equipo está dispuesto a apoyarte con tus "
+            "consultas mediante la plataforma de tickets. Puedes crear una solicitud "
+            "utilizando el botón **Soporte**."
+        ),
+        "fuentes": [],
+        "imagenes": [],
+        "imagen_evidencia": None,
+        "pendiente_confirmacion": None,
+        "opciones_aclaracion": [],
+        "sugerir_soporte": True,
+    }
+
+
+def _respuesta_estructurada(pregunta):
+    """
+    Resuelve clasificaciones verificadas que estan repartidas entre secciones
+    distantes del manual y que una busqueda puramente vectorial puede confundir
+    con acciones relacionadas (por ejemplo, confirmar o cambiar un cheque).
+    """
+    normalizada = _normalizar_busqueda(pregunta)
+    consulta_tipos_cheque = bool(
+        re.search(r"\b(tipos?|clases?)\s+(?:de\s+)?cheques?\b", normalizada)
+        or re.search(r"\b(cuantos?|cuales)\b.*\bcheques?\b", normalizada)
+        or re.search(r"\bque\s+cheques?\s+(?:tiene|genera|maneja)\b", normalizada)
+    )
+    if not consulta_tipos_cheque:
+        return None
+
+    return {
+        "respuesta": (
+            "CaseBank maneja **cuatro tipos principales de cheque**:\n\n"
+            "1. **Cheque por retiro de cuentas de ahorro.**\n"
+            "2. **Cheque por liquidación.**\n"
+            "3. **Cheque de gastos.**\n"
+            "4. **Cheque por otorgamiento.**\n\n"
+            "Las opciones **interno** y **externo** pertenecen a la pantalla de "
+            "cambio de cheques y no representan esta clasificación principal."
+        ),
+        "fuentes": [
+            {"seccion_id": 11, "titulo": "3.1 Menú de oficialía", "pagina": 23, "pagina_fin": 27},
+            {"seccion_id": 186, "titulo": "4.1.2 Cheques de Gasto", "pagina": 727, "pagina_fin": 732},
+        ],
+        "imagenes": [],
+        "imagen_evidencia": None,
+        "pendiente_confirmacion": None,
+        "opciones_aclaracion": [],
+    }
+
 SINONIMOS_DOMINIO = {
     "catalogo": ["definición", "definicion"],
     "catálogo": ["definición", "definicion"],
@@ -157,6 +243,10 @@ SINONIMOS_DOMINIO = {
     "crear cuenta": ["definir cuenta", "definición de cuentas"],
     "afiliado": ["socio", "asociado"],
     "socio": ["afiliado", "asociado"],
+    "cliente": ["afiliado", "cooperativista", "socio"],
+    "clientes": ["afiliados", "cooperativistas", "socios"],
+    "asignar": ["agregar", "asociar", "vincular"],
+    "asignarle": ["agregar", "asociar", "vincular"],
     "prestamo": ["credito", "préstamo"],
     "préstamo": ["credito", "prestamo"],
     "credito": ["prestamo", "préstamo"],
@@ -244,7 +334,7 @@ def _post_con_reintentos(url, body, max_reintentos=MAX_REINTENTOS, timeout=REQUE
     )
 
 
-def analizar_pregunta(pregunta):
+def analizar_pregunta(pregunta, historial=None):
     """
     Una sola llamada a Gemini Flash Lite (modelo de generacion, no de
     embeddings) que hace dos cosas a la vez para no duplicar costos:
@@ -262,15 +352,38 @@ def analizar_pregunta(pregunta):
     Si algo falla (red, JSON invalido, etc.), devuelve valores vacios y el
     flujo normal continua sin este enriquecimiento.
     """
+    historial = historial or []
+    historial_reciente = "\n".join(
+        f"{'Usuario' if mensaje.get('role') == 'user' else 'Casey'}: {mensaje.get('text', '')[:1200]}"
+        for mensaje in historial[-8:]
+    ) or "(sin conversación previa)"
+
     prompt_analisis = f"""Analiza el siguiente mensaje de un usuario, escrito para un asistente
 de un sistema bancario/financiero cooperativo llamado CaseBank.
 
-Mensaje: "{pregunta}"
+Conversación reciente:
+{historial_reciente}
+
+Mensaje actual: "{pregunta}"
 
 Responde UNICAMENTE con un objeto JSON valido, sin texto adicional ni markdown,
 con esta forma exacta:
 
-{{"correccion": "...", "terminos_clave": ["...", "..."]}}
+{{"correccion": null, "consulta_autonoma": "...", "terminos_clave": ["..."], "requiere_aclaracion": false, "pregunta_aclaracion": null, "opciones_aclaracion": []}}
+
+Reglas para contexto y aclaracion:
+- Convierte el mensaje actual en "consulta_autonoma", incorporando SOLO el contexto
+  necesario de la conversacion. Ejemplo: despues de "como creo un usuario", la
+  pregunta "y como lo modifico" se convierte en "como modifico un usuario".
+- Si el mensaje actual ya es independiente, conserva su significado sin ampliarlo.
+- Marca "requiere_aclaracion" como true UNICAMENTE cuando ni el mensaje actual ni
+  la conversacion permiten elegir entre dos o mas interpretaciones realmente
+  distintas. No pidas aclaracion por detalles menores que el manual puede resolver.
+- Ejemplo ambiguo: "como creo una cuenta" puede significar cuenta de ahorro de un
+  socio, cuenta de usuario o cuenta contable. Ejemplo claro: "como creo una cuenta
+  de ahorro para un socio" no necesita aclaracion.
+- Si requiere aclaracion, escribe una pregunta breve y ofrece de 2 a 4 opciones
+  concretas. Si no, pregunta_aclaracion debe ser null y opciones_aclaracion [].
 
 Reglas para "correccion":
 - Si el mensaje tiene errores ortograficos, de tipeo, letras faltantes o
@@ -297,6 +410,9 @@ Reglas para "terminos_clave":
   reportes, usuarios, permisos, etc). Incluye sinonimos tecnicos relevantes.
 - Si el mensaje no tiene relacion con el sistema (saludo, charla casual),
   deja la lista vacia.
+- En el vocabulario de CaseBank, "cliente" normalmente corresponde a
+  "afiliado", "cooperativista" o "socio". Usa esas variantes para la consulta
+  autonoma cuando ayuden a localizar la ficha o el procedimiento correcto.
 
 Responde solo el JSON."""
 
@@ -314,13 +430,13 @@ Responde solo el JSON."""
         candidatos = datos.get("candidates") or []
         if not candidatos:
             _debug("analizar_pregunta: Gemini no devolvio candidatos")
-            return {"correccion": None, "terminos_clave": []}
+            return {"correccion": None, "consulta_autonoma": pregunta, "terminos_clave": [], "requiere_aclaracion": False, "pregunta_aclaracion": None, "opciones_aclaracion": []}
 
         partes = candidatos[0].get("content", {}).get("parts", [])
         if not partes:
             _debug("analizar_pregunta: candidato sin parts (posible respuesta bloqueada)")
             _debug(f"candidato completo: {candidatos[0]}")
-            return {"correccion": None, "terminos_clave": []}
+            return {"correccion": None, "consulta_autonoma": pregunta, "terminos_clave": [], "requiere_aclaracion": False, "pregunta_aclaracion": None, "opciones_aclaracion": []}
 
         texto_json = partes[0].get("text", "").strip()
         _debug(f"analizar_pregunta: JSON crudo devuelto -> {texto_json!r}")
@@ -341,12 +457,46 @@ Responde solo el JSON."""
             terminos = []
         terminos = [str(t).strip() for t in terminos if str(t).strip()]
 
-        _debug(f"analizar_pregunta: correccion={correccion!r} terminos_clave={terminos!r}")
+        consulta_autonoma = resultado.get("consulta_autonoma")
+        if not isinstance(consulta_autonoma, str) or not consulta_autonoma.strip():
+            consulta_autonoma = correccion or pregunta
+        else:
+            consulta_autonoma = consulta_autonoma.strip()
 
-        return {"correccion": correccion, "terminos_clave": terminos}
+        requiere_aclaracion = resultado.get("requiere_aclaracion") is True
+        pregunta_aclaracion = resultado.get("pregunta_aclaracion")
+        opciones_aclaracion = resultado.get("opciones_aclaracion") or []
+        if not isinstance(opciones_aclaracion, list):
+            opciones_aclaracion = []
+        opciones_aclaracion = [str(opcion).strip() for opcion in opciones_aclaracion if str(opcion).strip()][:4]
+        if (
+            not requiere_aclaracion
+            or not isinstance(pregunta_aclaracion, str)
+            or not pregunta_aclaracion.strip()
+            or len(opciones_aclaracion) < 2
+        ):
+            requiere_aclaracion = False
+            pregunta_aclaracion = None
+            opciones_aclaracion = []
+        else:
+            pregunta_aclaracion = pregunta_aclaracion.strip()
+
+        _debug(
+            f"analizar_pregunta: correccion={correccion!r} consulta_autonoma={consulta_autonoma!r} "
+            f"requiere_aclaracion={requiere_aclaracion} terminos_clave={terminos!r}"
+        )
+
+        return {
+            "correccion": correccion,
+            "consulta_autonoma": consulta_autonoma,
+            "terminos_clave": terminos,
+            "requiere_aclaracion": requiere_aclaracion,
+            "pregunta_aclaracion": pregunta_aclaracion,
+            "opciones_aclaracion": opciones_aclaracion,
+        }
     except Exception as e:
         _debug(f"analizar_pregunta: EXCEPCION {type(e).__name__}: {e}")
-        return {"correccion": None, "terminos_clave": []}
+        return {"correccion": None, "consulta_autonoma": pregunta, "terminos_clave": [], "requiere_aclaracion": False, "pregunta_aclaracion": None, "opciones_aclaracion": []}
 
 
 def _sinonimos_fijos(texto):
@@ -503,6 +653,13 @@ def _fusionar_chunks(*listas_chunks):
 
 
 BOOST_SINONIMO_TITULO = 0.05
+TERMINOS_CON_BOOST_DE_TITULO = {
+    "catalogo",
+    "catálogo",
+    "catalogo de cuentas",
+    "plan de cuentas",
+    "crear cuenta",
+}
 
 
 def _aplicar_boost_sinonimos(chunks, pregunta):
@@ -523,7 +680,7 @@ def _aplicar_boost_sinonimos(chunks, pregunta):
     normalizado = pregunta.lower()
     terminos_relevantes = set()
     for termino, sinonimos in SINONIMOS_DOMINIO.items():
-        if termino in normalizado:
+        if termino in normalizado and termino in TERMINOS_CON_BOOST_DE_TITULO:
             terminos_relevantes.add(termino.lower())
             terminos_relevantes.update(s.lower() for s in sinonimos)
 
@@ -565,6 +722,70 @@ def filtrar_por_relevancia(chunks, factor=DISTANCE_FACTOR, max_chunks=MAX_CHUNKS
         + str([(c["metadata"]["seccion_id"], round(c["distance"], 4)) for c in resultado])
     )
     return resultado
+
+
+def rerank_chunks(pregunta, chunks, max_chunks=MAX_CHUNKS_USADOS):
+    """
+    Verifica cuales candidatos responden la relacion completa de la pregunta.
+    Evita escoger una seccion solo porque comparte una palabra generica, como
+    "socio", cuando la accion solicitada se explica en otra seccion.
+    """
+    if not chunks:
+        return []
+
+    candidatos = chunks[:12]
+    bloques = []
+    for indice, chunk in enumerate(candidatos, start=1):
+        titulo = chunk["metadata"].get("titulo") or "Sin titulo"
+        extracto = re.sub(r"\s+", " ", chunk["documento"]).strip()[:1800]
+        bloques.append(f"[CANDIDATO {indice}]\nTitulo: {titulo}\nContenido: {extracto}")
+
+    prompt = f"""Selecciona los fragmentos de un manual de CaseBank necesarios para
+responder exactamente la pregunta del usuario.
+
+Pregunta: {pregunta}
+
+Reglas:
+- Evalua la accion completa y la relacion entre sus conceptos, no solo palabras sueltas.
+- Incluye fragmentos complementarios si uno define un registro y otro explica como
+  asociarlo, modificarlo o utilizarlo.
+- Excluye procedimientos que solo comparten palabras genericas pero realizan otra accion.
+- No respondas la pregunta. Devuelve solamente JSON con los indices elegidos, ordenados
+  por utilidad, con un maximo de {max_chunks}: {{"indices": [1, 2]}}.
+- Si ningun candidato contiene informacion util, devuelve {{"indices": []}}.
+
+Fragmentos:
+{chr(10).join(bloques)}"""
+
+    try:
+        datos = _post_con_reintentos(
+            GEMINI_GENERATE_URL,
+            {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"response_mime_type": "application/json"},
+            },
+            max_reintentos=REINTENTOS_BEST_EFFORT,
+            timeout=TIMEOUT_BEST_EFFORT_SEGUNDOS,
+        )
+        partes = datos.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+        resultado = json.loads(partes[0].get("text", "{}")) if partes else {}
+        indices = resultado.get("indices") or []
+        elegidos = []
+        vistos = set()
+        for indice in indices:
+            if isinstance(indice, int) and 1 <= indice <= len(candidatos) and indice not in vistos:
+                elegidos.append(candidatos[indice - 1])
+                vistos.add(indice)
+                if len(elegidos) >= max_chunks:
+                    break
+        _debug(
+            "rerank_chunks: seleccion -> "
+            + str([(c["metadata"]["seccion_id"], c["metadata"]["titulo"]) for c in elegidos])
+        )
+        return elegidos
+    except Exception as e:
+        _debug(f"rerank_chunks: EXCEPCION {type(e).__name__}: {e}")
+        return None
 
 
 def _fuentes_unicas(chunks_citados, chunks_disponibles=None):
@@ -738,6 +959,18 @@ Usa UNICAMENTE la siguiente informacion extraida del manual para responder. Si l
 respuesta no se encuentra en el contexto, no inventes pasos: responde UNICAMENTE
 con esta frase exacta, sin agregar nada mas: "{FRASE_SIN_INFORMACION}"
 
+Cuando el usuario pregunte cuantos tipos, clases u opciones existen, revisa y
+combina TODOS los bloques relevantes antes de responder. Distingue las categorias
+principales de los estados, acciones, propiedades o subtipos de una pantalla. Si
+la clasificacion esta distribuida entre varias fuentes, sintetizala y enumera cada
+elemento sin sustituirla por una clasificacion secundaria.
+
+Una respuesta puede estar repartida entre varias fuentes: por ejemplo, una
+seccion puede explicar como crear un registro maestro y otra como asociarlo a
+un afiliado. Combina esos fragmentos complementarios para responder la accion
+completa solicitada. No descartes la respuesta solo porque ningun bloque aislado
+contenga por si solo todos los pasos.
+
 Si el contexto incluye tanto la causa de un problema como su solucion o
 procedimiento para resolverlo, incluye SIEMPRE ambas partes, integradas en una
 explicacion fluida y conversacional (no como una plantilla rigida con
@@ -782,6 +1015,28 @@ def _respuesta_indica_sin_informacion(respuesta):
     """
     normalizado = respuesta.replace("*", "").replace('"', "").replace("'", "").strip().lower()
     return FRASE_SIN_INFORMACION.lower() in normalizado
+
+
+def _obtener_temas_relacionados(chunks, max_temas=3):
+    """Obtiene solo titulos con similitud alta, sin repetir secciones ni nombres."""
+    temas = []
+    secciones_vistas = set()
+    titulos_vistos = set()
+    for chunk in chunks:
+        if chunk.get("distance", 1.0) > MAX_DISTANCE_TEMA_RELACIONADO:
+            continue
+        metadata = chunk.get("metadata", {})
+        seccion = (metadata.get("origen"), metadata.get("seccion_id"))
+        titulo = (metadata.get("titulo") or "").strip()
+        titulo_normalizado = titulo.lower()
+        if not titulo or seccion in secciones_vistas or titulo_normalizado in titulos_vistos:
+            continue
+        temas.append(titulo)
+        secciones_vistas.add(seccion)
+        titulos_vistos.add(titulo_normalizado)
+        if len(temas) >= max_temas:
+            break
+    return temas
 
 
 _FUENTES_USADAS_REGEX = re.compile(r"\n?[ \t]*\**FUENTES[_ ]USADAS\**\s*:\s*([^\n]*)\s*$", re.IGNORECASE)
@@ -961,7 +1216,7 @@ def _resolver_confirmacion_error(contexto_error, confirmacion):
     }
 
 
-def answer_question(question, contexto_error=None, confirmacion=None):
+def answer_question(question, contexto_error=None, confirmacion=None, historial=None):
     """
     Funcion principal del RAG: busca contexto relevante, genera la respuesta
     y arma la lista de fuentes (seccion_id + titulo + pagina) e imagenes
@@ -977,6 +1232,25 @@ def answer_question(question, contexto_error=None, confirmacion=None):
     """
     if contexto_error is not None and confirmacion is not None:
         return _resolver_confirmacion_error(contexto_error, confirmacion)
+
+    respuesta_equipo = _respuesta_sobre_miembro_equipo(question)
+    if respuesta_equipo:
+        return respuesta_equipo
+
+    if _normalizar_busqueda(question).strip(" .!?¿¡") == _normalizar_busqueda(OPCION_SIN_TEMA_UTIL).lower():
+        return {
+            "respuesta": (
+                "Entiendo. Como ninguno de los temas sugeridos responde tu consulta, "
+                "puedes crear un ticket mediante el botón **Soporte** ubicado en la parte "
+                "superior. Incluye allí tu pregunta y un técnico podrá orientarte."
+            ),
+            "fuentes": [],
+            "imagenes": [],
+            "imagen_evidencia": None,
+            "pendiente_confirmacion": None,
+            "opciones_aclaracion": [],
+            "sugerir_soporte": True,
+        }
 
     if es_mensaje_sin_sentido(question):
         return {
@@ -1007,10 +1281,13 @@ def answer_question(question, contexto_error=None, confirmacion=None):
             "pendiente_confirmacion": None,
         }
 
+    respuesta_estructurada = _respuesta_estructurada(question)
+    if respuesta_estructurada:
+        return respuesta_estructurada
 
     _t_inicio = time.time()
     with ThreadPoolExecutor(max_workers=2) as executor:
-        futuro_analisis = executor.submit(analizar_pregunta, question)
+        futuro_analisis = executor.submit(analizar_pregunta, question, historial)
         futuro_chunks = executor.submit(search_relevant_chunks, question)
         analisis = futuro_analisis.result()
         chunks_crudos = futuro_chunks.result()
@@ -1019,8 +1296,20 @@ def answer_question(question, contexto_error=None, confirmacion=None):
     correccion = analisis["correccion"]
     terminos_clave = analisis["terminos_clave"]
 
+    if analisis.get("requiere_aclaracion"):
+        return {
+            "respuesta": analisis["pregunta_aclaracion"],
+            "fuentes": [],
+            "imagenes": [],
+            "imagen_evidencia": None,
+            "pendiente_confirmacion": None,
+            "opciones_aclaracion": analisis["opciones_aclaracion"],
+        }
 
-    pregunta_efectiva = correccion or question
+    pregunta_efectiva = analisis.get("consulta_autonoma") or correccion or question
+    respuesta_estructurada = _respuesta_estructurada(pregunta_efectiva)
+    if respuesta_estructurada:
+        return respuesta_estructurada
     if correccion and es_saludo_o_cortesia(correccion):
         prompt = build_prompt(correccion, [], incluir_aviso_ticket=False)
         respuesta = call_gemini_generate(prompt)
@@ -1033,10 +1322,14 @@ def answer_question(question, contexto_error=None, confirmacion=None):
             "pendiente_confirmacion": None,
         }
 
-    terminos_para_aviso = list(dict.fromkeys(list(terminos_clave) + _sinonimos_fijos(question)))
-    if terminos_para_aviso:
+    terminos_para_aviso = list(
+        dict.fromkeys(list(terminos_clave) + _sinonimos_fijos(pregunta_efectiva))
+    )
+    if terminos_para_aviso or pregunta_efectiva.lower() != question.strip().lower():
         _t_expandida = time.time()
-        texto_expandido = question + " (" + ", ".join(terminos_para_aviso) + ")"
+        texto_expandido = pregunta_efectiva
+        if terminos_para_aviso:
+            texto_expandido += " (" + ", ".join(terminos_para_aviso) + ")"
         try:
             chunks_expandidos = search_relevant_chunks(
                 texto_expandido,
@@ -1052,17 +1345,22 @@ def answer_question(question, contexto_error=None, confirmacion=None):
             + str([(c["metadata"]["seccion_id"], c["metadata"]["titulo"], round(c["distance"], 4)) for c in chunks_crudos])
         )
 
-    chunks_crudos = _aplicar_boost_sinonimos(chunks_crudos, question)
+    chunks_crudos = _aplicar_boost_sinonimos(chunks_crudos, pregunta_efectiva)
     _debug(
         "answer_question: resultados tras boost por sinonimos -> "
         + str([(c["metadata"]["seccion_id"], c["metadata"]["titulo"], round(c["distance"], 4)) for c in chunks_crudos])
     )
 
-    chunks_relevantes = filtrar_por_relevancia(chunks_crudos)
     def _umbral_para(chunk):
         return MAX_DISTANCE_ERROR if chunk["metadata"]["origen"] == "error" else MAX_DISTANCE_ABSOLUTE
 
-    chunks = [c for c in chunks_relevantes if c["distance"] <= _umbral_para(c)]
+    candidatos_bajo_umbral = [c for c in chunks_crudos if c["distance"] <= _umbral_para(c)]
+    chunks_reordenados = rerank_chunks(pregunta_efectiva, candidatos_bajo_umbral)
+    if chunks_reordenados is None:
+        chunks_relevantes = filtrar_por_relevancia(chunks_crudos)
+        chunks = [c for c in chunks_relevantes if c["distance"] <= _umbral_para(c)]
+    else:
+        chunks = chunks_reordenados
 
     _debug(f"answer_question: chunks tras umbral MAX_DISTANCE_ABSOLUTE={MAX_DISTANCE_ABSOLUTE} -> {len(chunks)} chunk(s)")
 
@@ -1099,9 +1397,26 @@ def answer_question(question, contexto_error=None, confirmacion=None):
     sin_informacion = _respuesta_indica_sin_informacion(respuesta)
     _debug(f"answer_question: sin_informacion={sin_informacion}")
 
+    opciones_aclaracion = []
+    sugerir_soporte = False
     if sin_informacion or not chunks:
         fuentes = []
         imagenes = []
+        temas_relacionados = _obtener_temas_relacionados(chunks)
+        if temas_relacionados:
+            respuesta = (
+                "No encontré un procedimiento que responda exactamente a tu consulta, "
+                "pero estos temas del manual podrían estar relacionados. Selecciona uno "
+                "para que te muestre su información:"
+            )
+            opciones_aclaracion = temas_relacionados + [OPCION_SIN_TEMA_UTIL]
+        else:
+            respuesta = (
+                "No se encontró información dentro del manual relacionada con tu consulta. "
+                "Si requieres seguimiento, puedes crear un ticket mediante el botón "
+                "**Soporte** para que un técnico pueda orientarte."
+            )
+            sugerir_soporte = True
     else:
         if indices_usados is None:
             chunks_para_citar = chunks
@@ -1137,6 +1452,8 @@ def answer_question(question, contexto_error=None, confirmacion=None):
         "imagenes": imagenes,
         "imagen_evidencia": None,
         "pendiente_confirmacion": None,
+        "opciones_aclaracion": opciones_aclaracion,
+        "sugerir_soporte": sugerir_soporte,
     }
 
 
