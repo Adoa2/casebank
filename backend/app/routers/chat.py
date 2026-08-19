@@ -75,6 +75,8 @@ class FuenteManual(BaseModel):
         description="Numero de pagina donde termina esa seccion en el manual. Es None si la fuente es un error "
                     "o si la seccion ocupa una sola pagina.",
     )
+    url: Optional[str] = Field(None, description="URL del PDF cuando la fuente es una actualización.")
+    tipo: Optional[str] = Field(None, description="Origen de la fuente: manual o actualización.")
 
 
 class PendienteConfirmacionResponse(BaseModel):
@@ -132,6 +134,7 @@ def chat_con_manual(
             contexto_error=contexto,
             confirmacion=data.confirmacion,
             historial=historial,
+            nationality=current_user.nationality,
         )
     except RuntimeError:
         # rag_query.py agoto los reintentos por rate limit (429) de Gemini

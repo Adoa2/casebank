@@ -289,13 +289,12 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
 
               {message.fuentes && message.fuentes.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-line/60 text-xs space-y-0.5">
-                  {message.fuentes.map((f, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => onSelectSource?.(f.seccion_id)}
-                      className="block text-left text-brand-blue hover:underline cursor-pointer"
-                    >
+                  {message.fuentes.map((f, idx) => f.url ? (
+                    <a key={idx} href={f.url} target="_blank" rel="noopener noreferrer" className="block text-left text-brand-blue hover:underline">
+                      {f.titulo} · Actualización PDF{f.pagina ? ` (pág. ${formatearRangoPaginas(f)})` : ''}
+                    </a>
+                  ) : (
+                    <button key={idx} type="button" onClick={() => onSelectSource?.(f.seccion_id)} className="block cursor-pointer text-left text-brand-blue hover:underline">
                       {f.titulo} (pág. {formatearRangoPaginas(f)})
                     </button>
                   ))}

@@ -2,7 +2,7 @@ import random
 import string
 from datetime import datetime, timedelta
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from .db import Base
@@ -89,3 +89,30 @@ class Video(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     creator = relationship("User", foreign_keys=[created_by])
+
+
+class UpdateDocument(Base):
+    __tablename__ = "update_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    titulo = Column(String, nullable=False)
+    descripcion = Column(Text, nullable=False)
+    palabras_clave = Column(String, nullable=False)
+    aplicabilidad = Column(String, nullable=False)  # honduras | dominicana | ambas
+    seccion_id = Column(Integer, nullable=True, index=True)
+    capitulo = Column(String, nullable=True)
+    seccion = Column(String, nullable=True)
+    subseccion = Column(String, nullable=True)
+    archivo_url = Column(String, nullable=False)
+    archivo_nombre = Column(String, nullable=False)
+    storage_path = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    creator = relationship("User", foreign_keys=[created_by])
+
+    @property
+    def created_by_name(self):
+        return self.creator.username if self.creator else None
