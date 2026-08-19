@@ -49,6 +49,17 @@ GEMINI_GENERATE_URL = (
 EMBED_DIMENSION = 768  # debe coincidir con el usado en build_vector_db.py
 MAX_REINTENTOS = 5
 
+# Temperatura baja para la generacion final de la respuesta al usuario. Sin
+# esto, Gemini queda con su temperatura por defecto (mas alta), lo que hace
+# que ante el MISMO contexto recuperado (mismos chunks, mismas distancias)
+# el modelo pueda decidir de forma inconsistente entre corridas identicas
+# cuantos y cuales de los bloques [FUENTE N] usar para responder (ej. usar
+# los 4 procedimientos relacionados con "registrar un socio" en una corrida,
+# y solo el mas general en la siguiente). Una temperatura baja no elimina
+# la variabilidad del todo, pero la reduce mucho para este caso de uso,
+# donde se busca una respuesta consistente y no creativa.
+GENERATION_TEMPERATURE = 0.2
+
 N_RESULTS = 8
 DISTANCE_FACTOR = 1.3
 MAX_CHUNKS_USADOS = 5
@@ -802,6 +813,25 @@ etiquetas [FUENTE N] dentro del texto de tu respuesta al usuario, son solo
 una referencia interna; la linea final "FUENTES_USADAS:" si debe incluirse
 siempre."""
 
+    aviso_multiples_casos = """
+
+IMPORTANTE sobre multiples procedimientos aplicables: el contexto puede
+incluir varios procedimientos distintos que en principio se relacionan con
+la pregunta pero que corresponden a escenarios distintos (por ejemplo,
+distintas variantes para "registrar un socio": el registro durante una
+asamblea, agregar un miembro de un grupo o empresa, agregar un socio
+referido, o dar de alta un nuevo afiliado en general). Si la pregunta del
+usuario es general y no da pistas de cual escenario aplica, NO desarrolles
+los pasos completos de cada variante uno detras de otro: elige el
+procedimiento mas general o mas comun (el que no depende de una condicion
+especial como estar en una asamblea o pertenecer a un grupo) y desarrolla
+ese paso a paso completo. Al final, agrega una sola frase breve mencionando
+que existen otras variantes segun el caso (por ejemplo si es para una
+asamblea o si el socio pertenece a un grupo o empresa), sin desarrollarlas,
+para que el usuario pueda pedir el detalle de esa variante si es la que
+necesita. Usa este mismo criterio para cualquier otra pregunta general que
+tenga varios procedimientos especificos relacionados en el contexto."""
+
     aviso_saludo = ""
     if omitir_saludo:
         aviso_saludo = """
@@ -869,7 +899,7 @@ explicacion fluida y conversacional (no como una plantilla rigida con
 encabezados tipo "Causa:" / "Solucion:"). Por ejemplo, en vez de separar
 "Causa: X. Solucion: Y", escribe algo como "Eso pasa porque X. Para
 solucionarlo, sigue estos pasos:" y luego los pasos numerados. Nunca respondas
-unicamente con la causa si el contexto tambien contiene la solucion.{aviso_sinonimos}{aviso_citas}{aviso_saludo}{aviso_ticket}{aviso_prerequisito}
+unicamente con la causa si el contexto tambien contiene la solucion.{aviso_sinonimos}{aviso_multiples_casos}{aviso_citas}{aviso_saludo}{aviso_ticket}{aviso_prerequisito}
 
 Contexto del manual:
 {contexto}
@@ -886,6 +916,7 @@ def call_gemini_generate(prompt):
     """Envia el prompt al modelo de generacion y devuelve el texto de respuesta."""
     datos = _post_con_reintentos(GEMINI_GENERATE_URL, {
         "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": GENERATION_TEMPERATURE},
     })
 
     candidatos = datos.get("candidates") or []
