@@ -50,26 +50,9 @@ GEMINI_GENERATE_URL = (
 EMBED_DIMENSION = 768  # debe coincidir con el usado en build_vector_db.py
 MAX_REINTENTOS = 5
 
-<<<<<<< HEAD
-# Temperatura baja para la generacion final de la respuesta al usuario. Sin
-# esto, Gemini queda con su temperatura por defecto (mas alta), lo que hace
-# que ante el MISMO contexto recuperado (mismos chunks, mismas distancias)
-# el modelo pueda decidir de forma inconsistente entre corridas identicas
-# cuantos y cuales de los bloques [FUENTE N] usar para responder (ej. usar
-# los 4 procedimientos relacionados con "registrar un socio" en una corrida,
-# y solo el mas general en la siguiente). Una temperatura baja no elimina
-# la variabilidad del todo, pero la reduce mucho para este caso de uso,
-# donde se busca una respuesta consistente y no creativa.
-GENERATION_TEMPERATURE = 0.2
-
-N_RESULTS = 8
-DISTANCE_FACTOR = 1.3
-MAX_CHUNKS_USADOS = 5
-=======
 N_RESULTS = 10
 DISTANCE_FACTOR = 1.45
 MAX_CHUNKS_USADOS = 7
->>>>>>> origin/diseño
 MAX_DISTANCE_ABSOLUTE = 0.55
 MAX_DISTANCE_TEMA_RELACIONADO = 0.32
 
@@ -1516,12 +1499,6 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
     def _umbral_para(chunk):
         return MAX_DISTANCE_ERROR if chunk["metadata"]["origen"] == "error" else MAX_DISTANCE_ABSOLUTE
 
-<<<<<<< HEAD
-    chunks = [c for c in chunks_relevantes if c["distance"] <= _umbral_para(c)]
-    chunks = _forzar_chunk_apertura(chunks, question)
-    chunks = _agregar_chunks_prerequisito(chunks)
-    chunks = sorted(chunks, key=lambda c: not c["metadata"].get("es_prerequisito", False))
-=======
     candidatos_bajo_umbral = [c for c in chunks_crudos if c["distance"] <= _umbral_para(c)]
     chunks_reordenados = rerank_chunks(pregunta_efectiva, candidatos_bajo_umbral)
     if chunks_reordenados is None:
@@ -1529,7 +1506,6 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
         chunks = [c for c in chunks_relevantes if c["distance"] <= _umbral_para(c)]
     else:
         chunks = chunks_reordenados
->>>>>>> origin/diseño
 
     _debug(f"answer_question: chunks tras umbral MAX_DISTANCE_ABSOLUTE={MAX_DISTANCE_ABSOLUTE} -> {len(chunks)} chunk(s)")
 
