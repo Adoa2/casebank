@@ -61,7 +61,7 @@ MAX_DISTANCE_ERROR = 0.35
 MAX_INTENTOS_CONFIRMACION_EVIDENCIA = 2
 
 DEBUG_RAG = True
-
+GENERATION_TEMPERATURE = 0.15
 FRASE_SIN_INFORMACION = "No cuento con esa información en el manual."
 SUPPORT_TICKET_URL = "https://soporte.sinteghn.com/clientes/login.php"
 OPCION_SIN_TEMA_UTIL = "Ninguna de estas opciones"
@@ -1499,13 +1499,17 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
     def _umbral_para(chunk):
         return MAX_DISTANCE_ERROR if chunk["metadata"]["origen"] == "error" else MAX_DISTANCE_ABSOLUTE
 
-    candidatos_bajo_umbral = [c for c in chunks_crudos if c["distance"] <= _umbral_para(c)]
+        candidatos_bajo_umbral = [c for c in chunks_crudos if c["distance"] <= _umbral_para(c)]
     chunks_reordenados = rerank_chunks(pregunta_efectiva, candidatos_bajo_umbral)
     if chunks_reordenados is None:
         chunks_relevantes = filtrar_por_relevancia(chunks_crudos)
         chunks = [c for c in chunks_relevantes if c["distance"] <= _umbral_para(c)]
     else:
         chunks = chunks_reordenados
+
+    chunks = _forzar_chunk_apertura(chunks, pregunta_efectiva)
+    chunks = _agregar_chunks_prerequisito(chunks)
+    chunks = sorted(chunks, key=lambda c: not c["metadata"].get("es_prerequisito", False))
 
     _debug(f"answer_question: chunks tras umbral MAX_DISTANCE_ABSOLUTE={MAX_DISTANCE_ABSOLUTE} -> {len(chunks)} chunk(s)")
 
