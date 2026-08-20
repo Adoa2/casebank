@@ -1854,7 +1854,16 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
         or _es_intencion_afiliado_general(pregunta_efectiva)
     )
     intencion_tipos_clara = bool(TIPOS_INTENT_REGEX.search(pregunta_efectiva))
-    empatados = None if (intencion_apertura_clara or intencion_tipos_clara) else _detectar_ambiguedad_por_dispersion(chunks_crudos)
+    hay_error_con_evidencia_temprano = any(
+        c["metadata"]["origen"] == "error"
+        and c["metadata"].get("tiene_evidencia")
+        and c["distance"] <= MAX_DISTANCE_ERROR
+        for c in chunks_crudos
+    )
+    empatados = None if (intencion_apertura_clara or intencion_tipos_clara or hay_error_con_evidencia_temprano) else _detectar_ambiguedad_por_dispersion(chunks_crudos)
+    _debug(f"answer_question: hay_error_con_evidencia_temprano={hay_error_con_evidencia_temprano}")
+
+
     if empatados:
         opciones = [_titulo_para_mostrar(c["metadata"]["titulo"]) for c in empatados]
         _debug(
