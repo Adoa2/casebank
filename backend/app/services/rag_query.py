@@ -63,6 +63,7 @@ MAX_INTENTOS_CONFIRMACION_EVIDENCIA = 2
 DEBUG_RAG = True
 GENERATION_TEMPERATURE = 0.15
 FRASE_SIN_INFORMACION = "No cuento con esa información en el manual."
+DIAGNOSTICO_TITULO_FIJO = "¿Qué acción está realizando?"
 SUPPORT_TICKET_URL = "https://soporte.sinteghn.com/clientes/login.php"
 OPCION_SIN_TEMA_UTIL = "Ninguna de estas opciones"
 
@@ -684,16 +685,18 @@ def _obtener_chunk_error(error_id):
     }
 def _obtener_diagnostico_error(error_id):
     """
-    Recupera, si existe, el diagnostico interactivo configurado para un error
-    (titulo de la pregunta + opciones). Devuelve None si el error no tiene
-    diagnostico configurado, para que el llamador siga con el flujo normal
-    de causa/solucion generada por el LLM.
+    Recupera, si existe, las opciones de diagnostico interactivo configuradas
+    para un error (cada una con su propia pregunta y respuesta). Devuelve
+    None si el error no tiene diagnostico configurado (o le faltan opciones),
+    para que el llamador siga con el flujo normal de causa/solucion generada
+    por el LLM. El mensaje que Casey muestra antes de las opciones es fijo
+    (DIAGNOSTICO_TITULO_FIJO), no se guarda por error.
     """
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
     try:
         cur.execute(
-            "SELECT tiene_diagnostico, diagnostico_titulo FROM error_reports WHERE id = %s;",
+            "SELECT tiene_diagnostico FROM error_reports WHERE id = %s;",
             (error_id,),
         )
         fila = cur.fetchone()
@@ -702,14 +705,14 @@ def _obtener_diagnostico_error(error_id):
 
         cur.execute(
             """
-            SELECT id, etiqueta
+            SELECT id, pregunta
             FROM error_diagnostico_opciones
             WHERE error_id = %s
             ORDER BY orden;
             """,
             (error_id,),
         )
-        opciones = [{"id": id_, "etiqueta": etiqueta} for id_, etiqueta in cur.fetchall()]
+        opciones = [{"id": id_, "pregunta": pregunta} for id_, pregunta in cur.fetchall()]
     finally:
         cur.close()
         conn.close()
@@ -717,7 +720,7 @@ def _obtener_diagnostico_error(error_id):
     if len(opciones) < 2:
         return None
 
-    return {"titulo": fila[1], "opciones": opciones}
+    return opciones
 
 
 def _obtener_opcion_diagnostico(error_id, opcion_id):
@@ -746,10 +749,10 @@ def _obtener_opcion_diagnostico(error_id, opcion_id):
     return {"respuesta": respuesta, "requiere_ticket": bool(requiere_ticket)}
 
 
-def _iniciar_diagnostico(pregunta_original, error_id, diagnostico):
-    """Arma la respuesta que presenta la pregunta de diagnostico y sus opciones al usuario."""
+def _iniciar_diagnostico(pregunta_original, error_id, opciones):
+    """Arma la respuesta que presenta el mensaje fijo de diagnostico y sus opciones al usuario."""
     return {
-        "respuesta": diagnostico["titulo"],
+        "respuesta": DIAGNOSTICO_TITULO_FIJO,
         "fuentes": [],
         "imagenes": [],
         "imagen_evidencia": None,
@@ -757,7 +760,7 @@ def _iniciar_diagnostico(pregunta_original, error_id, diagnostico):
         "pendiente_diagnostico": {
             "error_id": error_id,
             "pregunta_original": pregunta_original,
-            "opciones": diagnostico["opciones"],
+            "opciones": opciones,
         },
     }
 
@@ -1560,9 +1563,9 @@ def _resolver_confirmacion_error(contexto_error, confirmacion):
     intento = contexto_error.get("intento", 1)
 
     if confirmacion:
-        diagnostico = _obtener_diagnostico_error(error_id_actual)
-        if diagnostico:
-            return _iniciar_diagnostico(pregunta_original, error_id_actual, diagnostico)
+        opciones_diagnostico = _obtener_diagnostico_error(error_id_actual)
+        if opciones_diagnostico:
+            return _iniciar_diagnostico(pregunta_original, error_id_actual, opciones_diagnostico)
 
         chunk = _obtener_chunk_error(error_id_actual)
         if chunk is None:
@@ -1707,7 +1710,7 @@ def _detectar_ambiguedad_por_dispersion(chunks):
     return empatados[:MAX_CANDIDATOS_AMBIGUOS_MOSTRADOS]
 
 
-def answer_question(question, contexto_error=None, confirmacion=None, historial=None, nationality=None):
+def answer_question(question, contexto_error=None, confirmacion=None, historial=None, nationality=None, contexto_diagnostico=None, opcion_diagnostico_id=None,):
     """
     Funcion principal del RAG: busca contexto relevante, genera la respuesta
     y arma la lista de fuentes (seccion_id + titulo + pagina) e imagenes
@@ -1721,6 +1724,9 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
     Devuelve un diccionario con las llaves: respuesta, fuentes, imagenes,
     imagen_evidencia, pendiente_confirmacion.
     """
+    if contexto_diagnostico is not None and opcion_diagnostico_id is not None:
+        return _resolver_seleccion_diagnostico(contexto_diagnostico, opcion_diagnostico_id)
+
     if contexto_error is not None and confirmacion is not None:
         return _resolver_confirmacion_error(contexto_error, confirmacion)
 

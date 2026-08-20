@@ -10,6 +10,7 @@ const STEPS = [
 
 const TIPOS_PERMITIDOS = ['image/jpeg', 'image/jpg', 'image/png']
 const MAX_FILE_SIZE = 5 * 1024 * 1024
+const SOLUCION_PLACEHOLDER_DIAGNOSTICO = 'Diagnóstico interactivo: la respuesta depende de la opción que elija el usuario.'
 
 function Field({ label, required, hint, children }) {
   return (
@@ -62,7 +63,9 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
   const [palabrasClave, setPalabrasClave] = useState(initialData?.palabras_clave || '')
   const [descripcion, setDescripcion] = useState(initialData?.descripcion || '')
   const [causa, setCausa] = useState(initialData?.causa || '')
-  const [solucion, setSolucion] = useState(initialData?.solucion || '')
+  const [solucion, setSolucion] = useState(
+    initialData?.tiene_diagnostico ? '' : (initialData?.solucion || '')
+  )
   const [procedimiento, setProcedimiento] = useState(initialData?.procedimiento || '')
   const [requiereTicket, setRequiereTicket] = useState(initialData?.requiere_ticket || false)
   const [tieneEvidencia, setTieneEvidencia] = useState(initialData?.tiene_evidencia || false)
@@ -74,11 +77,10 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
   const [saving, setSaving] = useState(false)
   const fileInputRef = useRef(null)
   const [tieneDiagnostico, setTieneDiagnostico] = useState(initialData?.tiene_diagnostico || false)
-  const [diagnosticoTitulo, setDiagnosticoTitulo] = useState(initialData?.diagnostico_titulo || '')
   const [diagnosticoOpciones, setDiagnosticoOpciones] = useState(
     initialData?.diagnostico_opciones?.length
-      ? initialData.diagnostico_opciones.map((opcion) => ({ etiqueta: opcion.etiqueta, respuesta: opcion.respuesta }))
-      : [{ etiqueta: '', respuesta: '' }, { etiqueta: '', respuesta: '' }]
+      ? initialData.diagnostico_opciones.map((opcion) => ({ pregunta: opcion.pregunta, respuesta: opcion.respuesta }))
+      : [{ pregunta: '', respuesta: '' }, { pregunta: '', respuesta: '' }]
   )
 
   const inputClass = 'w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-[#17213e] outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100'
@@ -102,7 +104,7 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
       setError('Completa el título, el módulo relacionado y la descripción del error.')
       return false
     }
-    if (step === 2 && !solucion.trim()) {
+    if (step === 2 && !tieneDiagnostico && !solucion.trim()) {
       setError('Describe la solución antes de continuar.')
       return false
     }
@@ -111,13 +113,9 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
       return false
     }
     if (step === 2 && tieneDiagnostico) {
-      if (!diagnosticoTitulo.trim()) {
-        setError('Escribe el título de la pregunta de diagnóstico.')
-        return false
-      }
-      const opcionesValidas = diagnosticoOpciones.filter((opcion) => opcion.etiqueta.trim() && opcion.respuesta.trim())
+      const opcionesValidas = diagnosticoOpciones.filter((opcion) => opcion.pregunta.trim() && opcion.respuesta.trim())
       if (opcionesValidas.length < 2) {
-        setError('Agrega al menos dos opciones de diagnóstico con su respuesta.')
+        setError('Agrega al menos dos opciones de diagnóstico, cada una con su pregunta y respuesta.')
         return false
       }
     }
@@ -188,12 +186,17 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
     }
   }
 
+  function handleToggleDiagnostico(checked) {
+    setTieneDiagnostico(checked)
+    setError(null)
+  }
+
   function handleDiagnosticoOpcionChange(index, campo, valor) {
     setDiagnosticoOpciones((prev) => prev.map((opcion, i) => (i === index ? { ...opcion, [campo]: valor } : opcion)))
   }
 
   function agregarDiagnosticoOpcion() {
-    setDiagnosticoOpciones((prev) => [...prev, { etiqueta: '', respuesta: '' }])
+    setDiagnosticoOpciones((prev) => [...prev, { pregunta: '', respuesta: '' }])
   }
 
   function quitarDiagnosticoOpcion(index) {
@@ -217,18 +220,17 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
         modulo: modulo.trim(),
         descripcion: descripcion.trim(),
         causa: causa.trim() || null,
-        solucion: solucion.trim(),
-        procedimiento: procedimiento.trim() || null,
+        solucion: tieneDiagnostico ? SOLUCION_PLACEHOLDER_DIAGNOSTICO : solucion.trim(),
+        procedimiento: tieneDiagnostico ? null : (procedimiento.trim() || null),
         palabras_clave: palabrasClave.trim() || null,
         requiere_ticket: requiereTicket,
         tiene_evidencia: tieneEvidencia,
         imagen_url: tieneEvidencia ? imagenUrl : null,
         tiene_diagnostico: tieneDiagnostico,
-        diagnostico_titulo: tieneDiagnostico ? diagnosticoTitulo.trim() : null,
         diagnostico_opciones: tieneDiagnostico
           ? diagnosticoOpciones
-              .filter((opcion) => opcion.etiqueta.trim() && opcion.respuesta.trim())
-              .map((opcion) => ({ etiqueta: opcion.etiqueta.trim(), respuesta: opcion.respuesta.trim() }))
+              .filter((opcion) => opcion.pregunta.trim() && opcion.respuesta.trim())
+              .map((opcion) => ({ pregunta: opcion.pregunta.trim(), respuesta: opcion.respuesta.trim() }))
           : [],
       })
     } catch (err) {
@@ -285,12 +287,16 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
 
             {activeStep === 2 && (
               <div className="space-y-4">
-                <Field label="Solución" required hint="Explica de forma breve qué debe hacer el usuario para resolver el problema.">
-                  <textarea value={solucion} onChange={(event) => setSolucion(event.target.value)} rows={5} placeholder="Describe la solución recomendada..." autoFocus className={`${inputClass} min-h-[120px] resize-y`} />
-                </Field>
-                <Field label="Procedimiento detallado" hint="Agrega instrucciones numeradas si la solución requiere varios pasos.">
-                  <textarea value={procedimiento} onChange={(event) => setProcedimiento(event.target.value)} rows={4} placeholder={'1. Ingresa al módulo...\n2. Selecciona la opción...'} className={`${inputClass} min-h-[100px] resize-y`} />
-                </Field>
+                {!tieneDiagnostico && (
+                  <>
+                    <Field label="Solución" required hint="Explica de forma breve qué debe hacer el usuario para resolver el problema.">
+                      <textarea value={solucion} onChange={(event) => setSolucion(event.target.value)} rows={5} placeholder="Describe la solución recomendada..." autoFocus className={`${inputClass} min-h-[120px] resize-y`} />
+                    </Field>
+                    <Field label="Procedimiento detallado" hint="Agrega instrucciones numeradas si la solución requiere varios pasos.">
+                      <textarea value={procedimiento} onChange={(event) => setProcedimiento(event.target.value)} rows={4} placeholder={'1. Ingresa al módulo...\n2. Selecciona la opción...'} className={`${inputClass} min-h-[100px] resize-y`} />
+                    </Field>
+                  </>
+                )}
 
                 <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${requiereTicket ? 'border-blue-300 bg-blue-50/50' : 'border-slate-200 bg-slate-50/60 hover:border-blue-200'}`}>
                   <input type="checkbox" checked={requiereTicket} onChange={(event) => setRequiereTicket(event.target.checked)} className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-200" />
@@ -315,19 +321,15 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
 
                 <div className={`rounded-xl border p-4 transition ${tieneDiagnostico ? 'border-blue-300 bg-blue-50/30' : 'border-slate-200 bg-slate-50/60'}`}>
                   <label className="flex cursor-pointer items-start gap-3">
-                    <input type="checkbox" checked={tieneDiagnostico} onChange={(event) => setTieneDiagnostico(event.target.checked)} className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-200" />
+                    <input type="checkbox" checked={tieneDiagnostico} onChange={(event) => handleToggleDiagnostico(event.target.checked)} className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-200" />
                     <span className="text-xs leading-5 text-slate-500">
                       <strong className="block text-sm text-[#17213e]">Agregar diagnóstico interactivo</strong>
-                      Cuando el usuario confirme que es este error, Casey le preguntará qué acción está realizando y le dará la respuesta exacta según el caso, en vez de una solución única.
+                      Cuando el usuario confirme que es este error, Casey le preguntará "¿Qué acción está realizando?" y mostrará la respuesta exacta según la opción que elija, en reemplazo de la Solución de arriba.
                     </span>
                   </label>
 
                   {tieneDiagnostico && (
                     <div className="mt-4 space-y-4">
-                      <Field label="Pregunta" required hint="Se muestra como título antes de las opciones, ej. '¿Qué acción está realizando?'.">
-                        <input type="text" value={diagnosticoTitulo} onChange={(event) => setDiagnosticoTitulo(event.target.value)} placeholder="¿Qué acción está realizando?" className={inputClass} />
-                      </Field>
-
                       <div className="space-y-3">
                         {diagnosticoOpciones.map((opcion, index) => (
                           <div key={index} className="rounded-lg border border-slate-200 bg-white p-3">
@@ -339,20 +341,24 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
                                 </button>
                               )}
                             </div>
-                            <input
-                              type="text"
-                              value={opcion.etiqueta}
-                              onChange={(event) => handleDiagnosticoOpcionChange(index, 'etiqueta', event.target.value)}
-                              placeholder="Ej. Otorgamiento de crédito"
-                              className={`${inputClass} mt-2`}
-                            />
-                            <textarea
-                              value={opcion.respuesta}
-                              onChange={(event) => handleDiagnosticoOpcionChange(index, 'respuesta', event.target.value)}
-                              rows={2}
-                              placeholder="Respuesta exacta para esta opción..."
-                              className={`${inputClass} mt-2 min-h-[70px] resize-y`}
-                            />
+                            <Field label="Pregunta" hint="Ej. 'Otorgamiento de crédito'.">
+                              <input
+                                type="text"
+                                value={opcion.pregunta}
+                                onChange={(event) => handleDiagnosticoOpcionChange(index, 'pregunta', event.target.value)}
+                                placeholder="Ej. Otorgamiento de crédito"
+                                className={`${inputClass} mt-1`}
+                              />
+                            </Field>
+                            <Field label="Respuesta" hint="Texto exacto que Casey mostrará si el usuario elige esta opción.">
+                              <textarea
+                                value={opcion.respuesta}
+                                onChange={(event) => handleDiagnosticoOpcionChange(index, 'respuesta', event.target.value)}
+                                rows={2}
+                                placeholder="Respuesta exacta para este caso..."
+                                className={`${inputClass} mt-1 min-h-[70px] resize-y`}
+                              />
+                            </Field>
                           </div>
                         ))}
                       </div>
@@ -379,13 +385,18 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
                   <ReviewItem label="Palabras clave" value={palabrasClave} wide />
                   <ReviewItem label="Descripción" value={descripcion} wide />
                   <ReviewItem label="Causa" value={causa} wide />
-                  <ReviewItem label="Solución" value={solucion} wide />
-                  <ReviewItem label="Procedimiento" value={procedimiento} wide />
+                  {!tieneDiagnostico && (
+                    <>
+                      <ReviewItem label="Solución" value={solucion} wide />
+                      <ReviewItem label="Procedimiento" value={procedimiento} wide />
+                    </>
+                  )}
                   <ReviewItem label="Soporte" value={requiereTicket ? 'Requiere ticket de soporte' : 'No requiere ticket'} />
                   <ReviewItem label="Evidencia" value={tieneEvidencia ? 'Imagen adjunta' : 'Sin imagen'} />
                   <ReviewItem
                     label="Diagnóstico interactivo"
-                    value={tieneDiagnostico ? `Sí — ${diagnosticoOpciones.filter((o) => o.etiqueta.trim() && o.respuesta.trim()).length} opciones` : 'No configurado'}
+                    value={tieneDiagnostico ? `Sí — ${diagnosticoOpciones.filter((o) => o.pregunta.trim() && o.respuesta.trim()).length} opciones` : 'No configurado'}
+                    wide
                   />
                 </div>
               </div>

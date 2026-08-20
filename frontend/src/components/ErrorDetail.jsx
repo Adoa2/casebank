@@ -6,6 +6,8 @@ const TABS = [
   { id: 'procedimiento', label: 'Procedimiento' },
 ]
 
+const DIAGNOSTICO_TITULO_FIJO = '¿Qué acción está realizando?'
+
 const STATUS = {
   pendiente: {
     label: 'Pendiente',
@@ -165,7 +167,9 @@ export default function ErrorDetail({ error, canReview, canEdit, userNames = {},
 
           {activeTab === 'solucion' && (
             <div className="space-y-4">
-              <InfoCard icon="check" iconStyle="bg-emerald-50 text-emerald-600" title="Solución recomendada" value={error.solucion} helper="Respuesta que recibirá el usuario para resolver el problema." wide />
+              {!error.tiene_diagnostico && (
+                <InfoCard icon="check" iconStyle="bg-emerald-50 text-emerald-600" title="Solución recomendada" value={error.solucion} helper="Respuesta que recibirá el usuario para resolver el problema." wide />
+              )}
               {error.requiere_ticket && <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50/60 p-4 text-sm text-blue-700"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white"><Icon name="ticket" className="h-5 w-5" /></span><div><strong>Requiere ticket de soporte</strong><p className="mt-1 text-xs leading-5 text-blue-600">El asistente incluirá automáticamente el enlace para abrir un ticket.</p></div></div>}
               {error.tiene_evidencia && error.imagen_url && <div className="rounded-xl border border-slate-200 p-4 sm:p-5"><h3 className="text-sm font-semibold text-[#17213e]">Imagen de evidencia</h3><p className="mt-1 text-xs text-slate-500">Referencia visual que se mostrará antes de brindar la solución.</p><a href={error.imagen_url} target="_blank" rel="noopener noreferrer" className="mt-4 block w-fit"><img src={error.imagen_url} alt="Evidencia del error" className="max-h-72 rounded-xl border border-slate-200 object-contain" /></a></div>}
 
@@ -176,20 +180,20 @@ export default function ErrorDetail({ error, canReview, canEdit, userNames = {},
                     <div className="min-w-0">
                       <h3 className="text-sm font-semibold text-[#17213e]">Diagnóstico interactivo</h3>
                       <p className="mt-1 text-xs leading-5 text-slate-500">
-                        Tras confirmar que es este error, Casey pregunta lo siguiente y responde según la opción elegida.
+                        Tras confirmar que es este error, Casey siempre pregunta lo siguiente y responde según la opción elegida:
                       </p>
                     </div>
                   </div>
 
                   <p className="mt-4 rounded-lg bg-blue-50/60 px-3.5 py-2.5 text-sm font-semibold text-[#17213e]">
-                    {error.diagnostico_titulo || 'Sin título configurado.'}
+                    {DIAGNOSTICO_TITULO_FIJO}
                   </p>
 
                   {diagnosticoOpciones.length ? (
                     <ul className="mt-3 space-y-3">
                       {diagnosticoOpciones.map((opcion) => (
                         <li key={opcion.id} className="rounded-lg border border-slate-200 bg-white p-3.5">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">{opcion.etiqueta}</p>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">{opcion.pregunta}</p>
                           <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-5 text-[#25304d]">{opcion.respuesta}</p>
                         </li>
                       ))}
@@ -202,7 +206,11 @@ export default function ErrorDetail({ error, canReview, canEdit, userNames = {},
             </div>
           )}
 
-          {activeTab === 'procedimiento' && <InfoCard icon="document" iconStyle="bg-blue-50 text-blue-600" title="Procedimiento detallado" value={error.procedimiento || 'No se especificó un procedimiento detallado.'} helper="Pasos sugeridos para aplicar la solución." wide />}
+          {activeTab === 'procedimiento' && (
+            error.tiene_diagnostico
+              ? <InfoCard icon="branch" iconStyle="bg-blue-50 text-blue-600" title="No aplica" value="La respuesta se define en el diagnóstico interactivo (pestaña Solución), no en un procedimiento único." wide />
+              : <InfoCard icon="document" iconStyle="bg-blue-50 text-blue-600" title="Procedimiento detallado" value={error.procedimiento || 'No se especificó un procedimiento detallado.'} helper="Pasos sugeridos para aplicar la solución." wide />
+          )}
 
           <div className={`mt-5 rounded-xl border p-4 sm:p-5 ${status.panel}`}>
             <div className="flex items-start gap-3">

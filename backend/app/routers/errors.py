@@ -224,12 +224,9 @@ def crear_error(
             detail="Debes subir una imagen de evidencia antes de guardar el error.",
         )
 
-    opciones_validas = [o for o in data.diagnostico_opciones if o.etiqueta.strip() and o.respuesta.strip()]
-    if data.tiene_diagnostico:
-        if not data.diagnostico_titulo or not data.diagnostico_titulo.strip():
-            raise HTTPException(status_code=400, detail="Escribe el título de la pregunta de diagnóstico.")
-        if len(opciones_validas) < 2:
-            raise HTTPException(status_code=400, detail="Agrega al menos dos opciones de diagnóstico con su respuesta.")
+    opciones_validas = [o for o in data.diagnostico_opciones if o.pregunta.strip() and o.respuesta.strip()]
+    if data.tiene_diagnostico and len(opciones_validas) < 2:
+        raise HTTPException(status_code=400, detail="Agrega al menos dos opciones de diagnóstico, cada una con su pregunta y respuesta.")
 
     payload = data.model_dump(exclude={"diagnostico_opciones"})
     nuevo = models.ErrorReport(**payload, created_by=current_user.id)
@@ -240,7 +237,7 @@ def crear_error(
         for indice, opcion in enumerate(opciones_validas):
             db_session.add(models.ErrorDiagnosticoOpcion(
                 error_id=nuevo.id,
-                etiqueta=opcion.etiqueta.strip(),
+                pregunta=opcion.pregunta.strip(),
                 respuesta=opcion.respuesta.strip(),
                 orden=indice,
             ))
@@ -307,17 +304,14 @@ def editar_error(
         )
 
     tiene_diagnostico_final = datos.get("tiene_diagnostico", error.tiene_diagnostico)
-    diagnostico_titulo_final = datos.get("diagnostico_titulo", error.diagnostico_titulo)
-    if tiene_diagnostico_final and not (diagnostico_titulo_final and diagnostico_titulo_final.strip()):
-        raise HTTPException(status_code=400, detail="Escribe el título de la pregunta de diagnóstico.")
 
     for campo, valor in datos.items():
         setattr(error, campo, valor)
 
     if data.diagnostico_opciones is not None:
-        opciones_validas = [o for o in data.diagnostico_opciones if o.etiqueta.strip() and o.respuesta.strip()]
+        opciones_validas = [o for o in data.diagnostico_opciones if o.pregunta.strip() and o.respuesta.strip()]
         if tiene_diagnostico_final and len(opciones_validas) < 2:
-            raise HTTPException(status_code=400, detail="Agrega al menos dos opciones de diagnóstico con su respuesta.")
+            raise HTTPException(status_code=400, detail="Agrega al menos dos opciones de diagnóstico, cada una con su pregunta y respuesta.")
 
         db_session.query(models.ErrorDiagnosticoOpcion).filter(
             models.ErrorDiagnosticoOpcion.error_id == error.id
@@ -325,11 +319,10 @@ def editar_error(
         for indice, opcion in enumerate(opciones_validas):
             db_session.add(models.ErrorDiagnosticoOpcion(
                 error_id=error.id,
-                etiqueta=opcion.etiqueta.strip(),
+                pregunta=opcion.pregunta.strip(),
                 respuesta=opcion.respuesta.strip(),
                 orden=indice,
             ))
-
     db_session.commit()
     db_session.refresh(error)
 

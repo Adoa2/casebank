@@ -86,12 +86,12 @@ class ErrorDiagnosticoOpcion(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     error_id = Column(Integer, ForeignKey("error_reports.id", ondelete="CASCADE"), nullable=False)
-    etiqueta = Column(String, nullable=False)
+    pregunta = Column(String, nullable=False)
     respuesta = Column(Text, nullable=False)
     orden = Column(Integer, nullable=False, default=0)
 
     error = relationship("ErrorReport", back_populates="diagnostico_opciones")
-    
+
 class Video(Base):
     __tablename__ = "videos"
 

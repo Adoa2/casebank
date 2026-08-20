@@ -193,13 +193,13 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
 
   function handleDiagnosticoChoice(opcion) {
     if (!activeDiagnostico || loading) return
-    sendMessage(opcion.etiqueta, {
+    sendMessage(opcion.pregunta, {
       contextoDiagnostico: {
         error_id: activeDiagnostico.error_id,
         pregunta_original: activeDiagnostico.pregunta_original,
       },
       opcionDiagnosticoId: opcion.id,
-      displayText: opcion.etiqueta,
+      displayText: opcion.pregunta,
     })
   }
 
@@ -360,7 +360,7 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
                   onClick={() => handleDiagnosticoChoice(opcion)}
                   className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-left text-xs font-medium text-blue-950 transition hover:border-brand-blue hover:bg-blue-50"
                 >
-                  {opcion.etiqueta}
+                  {opcion.pregunta}
                 </button>
               ))}
             </div>

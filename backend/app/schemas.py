@@ -131,13 +131,13 @@ class UserAdminUpdate(BaseModel):
 
 class DiagnosticoOpcionCreate(BaseModel):
     """Un par pregunta-respuesta del diagnóstico interactivo de un error."""
-    etiqueta: str = Field(..., min_length=1, max_length=200, description="Ej. 'Otorgamiento de crédito'.")
+    pregunta: str = Field(..., min_length=1, max_length=200, description="Ej. 'Otorgamiento de crédito'.")
     respuesta: str = Field(..., min_length=1, description="Respuesta exacta que Casey mostrará si el usuario elige esta opción.")
 
 
 class DiagnosticoOpcionResponse(BaseModel):
     id: int
-    etiqueta: str
+    pregunta: str
     respuesta: str
     orden: int
 
@@ -178,8 +178,9 @@ class ErrorReportCreate(BaseModel):
     )
     diagnostico_titulo: Optional[str] = Field(
         None,
-        description="Pregunta mostrada como titulo antes de las opciones, ej. "
-                    "'¿Que accion esta realizando?'. Requerido si tiene_diagnostico es True.",
+        description="Ya no se usa: el mensaje previo a las opciones es fijo "
+                    "('¿Que accion esta realizando?') y no lo define el admin. "
+                    "Se mantiene el campo por compatibilidad, pero se ignora.",
     )
     diagnostico_opciones: list[DiagnosticoOpcionCreate] = Field(
         default_factory=list,

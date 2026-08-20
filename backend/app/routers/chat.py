@@ -99,7 +99,7 @@ class PendienteConfirmacionResponse(BaseModel):
 
 class OpcionDiagnosticoResponse(BaseModel):
     id: int
-    etiqueta: str
+    pregunta: str
 
 
 class PendienteDiagnosticoResponse(BaseModel):
