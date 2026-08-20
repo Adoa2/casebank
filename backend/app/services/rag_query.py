@@ -749,6 +749,10 @@ def _agregar_chunks_prerequisito(chunks):
         if " — " in titulo:
             continue
 
+        titulo = c["metadata"].get("titulo") or ""
+        if " — " in titulo:
+            continue
+
         seccion_id = int(c["metadata"]["seccion_id"])
         for prereq_id in SECCIONES_PREREQUISITO.get(seccion_id, []):
             if prereq_id in ids_presentes:
@@ -1555,7 +1559,7 @@ def _detectar_ambiguedad_por_dispersion(chunks):
     candidatos_intro = []
     secciones_vistas = set()
     for c in chunks:
-        if c["metadata"]["origen"] != "manual":
+        if c["metadata"]["origen"] not in ("manual", "actualizacion"):
             continue
         if not _es_titulo_intro(c["metadata"].get("titulo")):
             continue
