@@ -1484,6 +1484,7 @@ def _resolver_confirmacion_error(contexto_error, confirmacion):
 
 UMBRAL_AMBIGUEDAD_GAP = 0.02
 MIN_CANDIDATOS_AMBIGUOS = 2
+MAX_CANDIDATOS_AMBIGUOS_MOSTRADOS = 4
 
 
 def _es_titulo_intro(titulo):
@@ -1540,6 +1541,16 @@ def _detectar_ambiguedad_por_dispersion(chunks):
     un socio") vs gap >=0.025 en preguntas claras, aunque generales (ej.
     "agregar prestamo", "como agrego un usuario"). Opera sobre chunks ya
     ordenados por distancia (post boost de sinonimos).
+
+    El gap se mide siempre contra el primer candidato (el de menor
+    distancia), no contra el anterior en la lista: esto evita que una
+    seguidilla de pequeños incrementos "encadene" candidatos cada vez menos
+    relacionados sin que ninguno individualmente parezca lejano. Aun asi,
+    con vocabulario muy generico (ej. "cuenta de usuario del sistema") puede
+    acumularse una cola larga de secciones vagamente relacionadas dentro del
+    umbral total; MAX_CANDIDATOS_AMBIGUOS_MOSTRADOS acota cuantas se
+    presentan al usuario, priorizando siempre las de menor distancia, para
+    no abrumarlo con una lista larga de opciones poco relevantes.
     """
     candidatos_intro = []
     secciones_vistas = set()
@@ -1567,7 +1578,7 @@ def _detectar_ambiguedad_por_dispersion(chunks):
     if len(empatados) < MIN_CANDIDATOS_AMBIGUOS:
         return None
 
-    return empatados
+    return empatados[:MAX_CANDIDATOS_AMBIGUOS_MOSTRADOS]
 
 
 def answer_question(question, contexto_error=None, confirmacion=None, historial=None, nationality=None):
