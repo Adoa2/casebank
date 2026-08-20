@@ -36,7 +36,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 GEMINI_EMBED_MODEL = "gemini-embedding-001"
 # Debe coincidir con GEMINI_GENERATION_MODEL en app/config.py
-GEMINI_GENERATION_MODEL = "gemini-flash-lite-latest"
+GEMINI_GENERATION_MODEL = "gemini-3.5-flash-lite"
 
 GEMINI_EMBED_URL = (
     f"https://generativelanguage.googleapis.com/v1beta/models/"
