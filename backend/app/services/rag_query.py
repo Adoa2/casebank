@@ -262,7 +262,9 @@ SINONIMOS_DOMINIO = {
     "nuevo préstamo": ["apertura de préstamo"],
     "abrir cuenta": ["apertura de cuenta"],
     "abrir prestamo": ["apertura de préstamo"],
-    "abrir préstamo": ["apertura de préstamo"],   
+    "abrir préstamo": ["apertura de préstamo"],
+    "agregar": ["ingresar"],
+    "ingresar": ["agregar"],
 }
 
 
@@ -766,6 +768,16 @@ APERTURA_INTENT_REGEX = {
     18: re.compile(r"\b(agregar|abrir|nuevo|nueva|crear|registrar|aperturar)\b.*\b(dpf|plazo fijo|deposito a plazo|depósito a plazo)\b", re.IGNORECASE),
 }
 
+AFILIADO_INTENT_REGEX = re.compile(
+    r"\b(agregar|ingresar|registrar|dar de alta|crear|nuevo|nueva)\b.*\b(afiliado|socio|cooperativista)\b",
+    re.IGNORECASE,
+)
+
+_AFILIADO_INTENT_EXCLUSIONES_REGEX = re.compile(
+    r"\b(referido|referidos|grupo|empresa|ong|dependiente|conyuge|cónyuge|beneficiario)\b",
+    re.IGNORECASE,
+)
+
 
 def _forzar_chunk_apertura(chunks, pregunta):
     for seccion_id, patron in APERTURA_INTENT_REGEX.items():
@@ -784,6 +796,48 @@ def _forzar_chunk_apertura(chunks, pregunta):
             chunk_intro["metadata"]["es_apertura_forzada"] = True
             chunks = [chunk_intro] + chunks
             _debug(f"_forzar_chunk_apertura: forzado chunk intro de seccion {seccion_id} por intencion detectada en la pregunta")
+    return chunks
+
+
+def _es_intencion_afiliado_general(pregunta):
+    """
+    True cuando la pregunta pide dar de alta un afiliado/socio nuevo en
+    terminos generales (ej. "como agregar un afiliado", "ingresar un
+    socio"), sin mencionar ninguna de las variantes especificas del manual
+    (referido, grupo/empresa, dependiente, conyuge, beneficiario), que ya
+    tienen su propia seccion y no deben ser reemplazadas por el chunk
+    general de la seccion 13.
+    """
+    return bool(AFILIADO_INTENT_REGEX.search(pregunta)) and not _AFILIADO_INTENT_EXCLUSIONES_REGEX.search(pregunta)
+
+
+def _forzar_chunk_afiliado(chunks, pregunta):
+    """
+    Fuerza el chunk intro de la seccion 13 ("Ingresar nuevo afiliado o
+    modificar uno existente") cuando la pregunta pide dar de alta un
+    afiliado/socio en terminos generales. Sin esto, secciones como "Agregar
+    socios referidos" o "Agregar un miembro de un grupo o empresa" ganan por
+    afinidad lexica con la palabra "agregar" en el titulo, aunque la seccion
+    13 sea la respuesta correcta para el caso general (ver sesion del
+    2026-08-20, caso "como agregar un afiliado").
+    """
+    if not _es_intencion_afiliado_general(pregunta):
+        return chunks
+
+    ya_presente = any(
+        c["metadata"]["origen"] == "manual"
+        and c["metadata"]["seccion_id"] == "13"
+        and _es_titulo_intro(c["metadata"].get("titulo"))
+        for c in chunks
+    )
+    if ya_presente:
+        return chunks
+
+    chunk_intro = _obtener_chunk_seccion(13)
+    if chunk_intro:
+        chunk_intro["metadata"]["es_apertura_forzada"] = True
+        chunks = [chunk_intro] + chunks
+        _debug("_forzar_chunk_afiliado: forzado chunk intro de seccion 13 por intencion general de afiliado detectada en la pregunta")
     return chunks
 
 def _fusionar_chunks(*listas_chunks):
@@ -992,7 +1046,7 @@ def _fuentes_unicas(chunks_citados, chunks_disponibles=None):
 
         fuentes.append({
             "seccion_id": None if meta["origen"] == "actualizacion" else meta["seccion_id"],
-            "titulo": meta["titulo"],
+            "titulo": _titulo_para_mostrar(meta["titulo"]),
             "pagina": rango.get("pagina_inicio", meta["pagina_inicio"]),
             "pagina_fin": rango.get("pagina_fin", meta["pagina_fin"]),
             "url": meta.get("archivo_url"),
@@ -1237,7 +1291,7 @@ def _obtener_temas_relacionados(chunks, max_temas=3):
         titulo_normalizado = titulo.lower()
         if not titulo or seccion in secciones_vistas or titulo_normalizado in titulos_vistos:
             continue
-        temas.append(titulo)
+        temas.append(_titulo_para_mostrar(titulo))
         secciones_vistas.add(seccion)
         titulos_vistos.add(titulo_normalizado)
         if len(temas) >= max_temas:
@@ -1446,6 +1500,30 @@ def _es_titulo_intro(titulo):
     return base_norm == sub_norm
 
 
+def _titulo_para_mostrar(titulo):
+    """
+    Limpia el titulo antes de mostrarlo al usuario (opciones de aclaracion,
+    fuentes citadas). Cuando dividir_en_subsecciones genero un titulo con
+    " — " autoreferenciado (ver _es_titulo_intro, mismo artefacto: el titulo
+    base termina en dos puntos y el regex de sub-encabezados se detecto a si
+    mismo), el titulo crudo queda duplicado, ej. "X: — X", lo cual resulta
+    confuso para el usuario final. En ese caso se muestra solo la parte
+    base, sin la duplicacion. La causa raiz vive en build_vector_db.py y
+    requeriria un reproceso completo para corregirse en el origen; esto es
+    una limpieza solo de presentacion, no modifica los datos indexados.
+    """
+    if not titulo:
+        return titulo
+    if " — " not in titulo:
+        return titulo
+    base, sub = titulo.split(" — ", 1)
+    base_norm = base.strip().rstrip(":").strip().lower()
+    sub_norm = sub.strip().rstrip(":").strip().lower()
+    if base_norm == sub_norm:
+        return base.strip().rstrip(":").strip()
+    return titulo
+
+
 def _detectar_ambiguedad_por_dispersion(chunks):
     """
     Red de respaldo para cuando analizar_pregunta (LLM) no marco
@@ -1622,12 +1700,13 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
         + str([(c["metadata"]["seccion_id"], c["metadata"]["titulo"], round(c["distance"], 4)) for c in chunks_crudos])
     )
 
-    intencion_apertura_clara = any(
-        patron.search(pregunta_efectiva) for patron in APERTURA_INTENT_REGEX.values()
+    intencion_apertura_clara = (
+        any(patron.search(pregunta_efectiva) for patron in APERTURA_INTENT_REGEX.values())
+        or _es_intencion_afiliado_general(pregunta_efectiva)
     )
     empatados = None if intencion_apertura_clara else _detectar_ambiguedad_por_dispersion(chunks_crudos)
     if empatados:
-        opciones = [c["metadata"]["titulo"] for c in empatados]
+        opciones = [_titulo_para_mostrar(c["metadata"]["titulo"]) for c in empatados]
         _debug(
             "answer_question: ambiguedad detectada por dispersion -> "
             + str([(c["metadata"]["seccion_id"], c["metadata"]["titulo"]) for c in empatados])
@@ -1654,6 +1733,7 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
         chunks = chunks_reordenados
 
     chunks = _forzar_chunk_apertura(chunks, pregunta_efectiva)
+    chunks = _forzar_chunk_afiliado(chunks, pregunta_efectiva)
     chunks = _agregar_chunks_prerequisito(chunks)
     chunks = sorted(chunks, key=lambda c: not c["metadata"].get("es_prerequisito", False))
 
