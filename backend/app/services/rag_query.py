@@ -385,14 +385,34 @@ Reglas para contexto y aclaracion:
   necesario de la conversacion. Ejemplo: despues de "como creo un usuario", la
   pregunta "y como lo modifico" se convierte en "como modifico un usuario".
 - Si el mensaje actual ya es independiente, conserva su significado sin ampliarlo.
-- Marca "requiere_aclaracion" como true UNICAMENTE cuando ni el mensaje actual ni
-  la conversacion permiten elegir entre dos o mas interpretaciones realmente
-  distintas. No pidas aclaracion por detalles menores que el manual puede resolver.
-- Ejemplo ambiguo: "como creo una cuenta" puede significar cuenta de ahorro de un
-  socio, cuenta de usuario o cuenta contable. Ejemplo claro: "como creo una cuenta
-  de ahorro para un socio" no necesita aclaracion.
+- Marca "requiere_aclaracion" como true UNICAMENTE cuando el termino generico usado
+  (ej. "cuenta") por si solo no basta para saber a que modulo del sistema pertenece,
+  y esos modulos son realmente distintos entre si (uno contable, otro de un socio,
+  otro de configuracion del sistema). No pidas aclaracion por detalles menores que
+  el manual puede resolver, y NO la pidas cuando el mensaje ya incluye una palabra
+  especifica de producto (credito, prestamo, ahorro, DPF, plazo fijo) que identifica
+  un unico procedimiento en el manual, aunque ese procedimiento tenga varios pasos o
+  sub-variantes.
+- Ejemplo AMBIGUO (si requiere aclaracion): "como creo una cuenta" o "agregar cuenta"
+  -> puede ser cuenta de ahorro de un socio, cuenta de usuario del sistema, o cuenta
+  contable del plan de cuentas. Son modulos distintos del sistema, no variantes del
+  mismo procedimiento.
+- Ejemplos CLAROS (NO requieren aclaracion, aunque parezcan generales):
+  "agregar credito", "agregar prestamo", "nuevo prestamo" -> siempre se refieren a la
+  apertura de una cuenta de prestamo, un unico procedimiento.
+  "agregar cuenta de ahorro", "abrir ahorro" -> siempre se refieren a la apertura de
+  una cuenta de ahorro, un unico procedimiento.
+    "como registro un socio" -> tiene una via principal y evidente (dar de alta un
+  afiliado nuevo); las variantes (asamblea, grupo, referido) son casos especiales
+  que se explican como nota al final, no ameritan interrumpir con una pregunta.
+  NOTA: preguntas mas genericas como "nuevo afiliado" pueden terminar mostrando
+  opciones igualmente por un mecanismo aparte del sistema (deteccion de
+  ambiguedad por cercania de resultados), independiente de esta regla.
 - Si requiere aclaracion, escribe una pregunta breve y ofrece de 2 a 4 opciones
-  concretas. Si no, pregunta_aclaracion debe ser null y opciones_aclaracion [].
+  concretas, usando los nombres reales de los modulos del manual (ahorro, prestamo,
+  DPF, cuenta de usuario del sistema, cuenta contable) en vez de opciones inventadas
+  como "linea de credito" o "credito contable" que no existen como tales en CaseBank.
+  Si no requiere aclaracion, pregunta_aclaracion debe ser null y opciones_aclaracion [].
 
 Reglas para "correccion":
 - Si el mensaje tiene errores ortograficos, de tipeo, letras faltantes o
@@ -1381,6 +1401,68 @@ def _resolver_confirmacion_error(contexto_error, confirmacion):
         "pendiente_confirmacion": None,
     }
 
+def _es_titulo_intro(titulo):
+    """
+    True si el titulo corresponde al tramo intro real de una seccion (sin
+    sub-titulo), incluso cuando dividir_en_subsecciones genero un titulo con
+    " — " autoreferenciado (ej. "X: — X"), artefacto conocido del chunking
+    cuando el titulo base termina en dos puntos y el regex de sub-encabezados
+    se detecta a si mismo. En ese caso base y "sub-titulo" son practicamente
+    identicos, y el chunk sigue siendo el tramo intro, no un sub-procedimiento
+    real distinto.
+    """
+    if not titulo:
+        return False
+    if " — " not in titulo:
+        return True
+    base, sub = titulo.split(" — ", 1)
+    base_norm = base.strip().rstrip(":").strip().lower()
+    sub_norm = sub.strip().rstrip(":").strip().lower()
+    return base_norm == sub_norm
+
+UMBRAL_AMBIGUEDAD_GAP = 0.02
+MIN_CANDIDATOS_AMBIGUOS = 2
+
+
+def _detectar_ambiguedad_por_dispersion(chunks):
+    """
+    Red de respaldo para cuando analizar_pregunta (LLM) no marco
+    requiere_aclaracion pero los primeros candidatos "intro" (procedimientos
+    distintos, no sub-pasos del mismo, y sin contar dos veces la misma
+    seccion) quedan muy cerca en distancia entre si. Calibrado con casos
+    reales: gap ~0.015 en preguntas ambiguas conocidas (ej. "como registro
+    un socio") vs gap >=0.025 en preguntas claras, aunque generales (ej.
+    "agregar prestamo", "como agrego un usuario"). Opera sobre chunks ya
+    ordenados por distancia (post boost de sinonimos).
+    """
+    candidatos_intro = []
+    secciones_vistas = set()
+    for c in chunks:
+        if c["metadata"]["origen"] != "manual":
+            continue
+        if not _es_titulo_intro(c["metadata"].get("titulo")):
+            continue
+        seccion_id = c["metadata"]["seccion_id"]
+        if seccion_id in secciones_vistas:
+            continue
+        secciones_vistas.add(seccion_id)
+        candidatos_intro.append(c)
+
+    if len(candidatos_intro) < MIN_CANDIDATOS_AMBIGUOS:
+        return None
+
+    empatados = [candidatos_intro[0]]
+    for c in candidatos_intro[1:]:
+        if c["distance"] - candidatos_intro[0]["distance"] <= UMBRAL_AMBIGUEDAD_GAP:
+            empatados.append(c)
+        else:
+            break
+
+    if len(empatados) < MIN_CANDIDATOS_AMBIGUOS:
+        return None
+
+    return empatados
+
 
 def answer_question(question, contexto_error=None, confirmacion=None, historial=None, nationality=None):
     """
@@ -1517,6 +1599,26 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
         "answer_question: resultados tras boost por sinonimos -> "
         + str([(c["metadata"]["seccion_id"], c["metadata"]["titulo"], round(c["distance"], 4)) for c in chunks_crudos])
     )
+
+    intencion_apertura_clara = any(
+        patron.search(pregunta_efectiva) for patron in APERTURA_INTENT_REGEX.values()
+    )
+    empatados = None if intencion_apertura_clara else _detectar_ambiguedad_por_dispersion(chunks_crudos)
+    if empatados:
+        opciones = [c["metadata"]["titulo"] for c in empatados]
+        _debug(
+            "answer_question: ambiguedad detectada por dispersion -> "
+            + str([(c["metadata"]["seccion_id"], c["metadata"]["titulo"]) for c in empatados])
+        )
+        return {
+            "respuesta": "Encontré varios procedimientos que podrían aplicar a tu consulta. ¿Cuál necesitas?",
+            "fuentes": [],
+            "imagenes": [],
+            "imagen_evidencia": None,
+            "pendiente_confirmacion": None,
+            "opciones_aclaracion": opciones,
+            "sugerir_soporte": False,
+        }
 
     def _umbral_para(chunk):
         return MAX_DISTANCE_ERROR if chunk["metadata"]["origen"] == "error" else MAX_DISTANCE_ABSOLUTE
