@@ -4,6 +4,7 @@ const NAV_ITEMS = [
   { id: 'inicio', label: 'Inicio', minRole: 1, icon: 'home' },
   { id: 'usuarios', label: 'Usuarios', minRole: 2, icon: 'users' },
   { id: 'videos', label: 'Administrar Videos', minRole: 2, icon: 'video' },
+  { id: 'actualizaciones', label: 'Actualizaciones PDF', minRole: 2, icon: 'document' },
   { id: 'errores-frecuentes', label: 'Errores Frecuentes', minRole: 1, icon: 'warning' },
 ]
 
@@ -26,6 +27,9 @@ function NavIcon({ name }) {
         <path d="m10 9 5 3-5 3Z" />
       </svg>
     )
+  }
+  if (name === 'document') {
+    return <svg className="h-6 w-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M6 2h8l4 4v16H6z" /><path d="M14 2v5h5M9 12h6m-6 4h6" /></svg>
   }
   return (
     <svg className="h-6 w-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -57,11 +61,11 @@ export default function AdminSidebar({ activeSection, onSelectSection, role = 0 
 
       <nav aria-label="Panel administrativo">
         <ul className="flex gap-2 overflow-x-auto pb-1 lg:block lg:space-y-2 lg:overflow-visible lg:pb-0">
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.filter((item) => item.id !== 'actualizaciones' || role >= 2).map((item) => {
             const active = item.id === activeSection
             const locked = role < item.minRole
             return (
-              <li key={item.id} className={item.id === 'inicio' ? 'shrink-0' : 'hidden lg:block'}>
+              <li key={item.id} className="shrink-0 lg:block">
                 <button
                   type="button"
                   onClick={() => onSelectSection(item.id)}

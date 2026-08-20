@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .database import models
 from .database.db import engine
 from .database.db import ensure_schema_columns
-from .routers import auth, chat, manual, admin_users, errors, videos
+from .routers import auth, chat, manual, admin_users, errors, videos, updates
 
 models.Base.metadata.create_all(bind=engine)
 ensure_schema_columns()
@@ -34,6 +34,10 @@ tags_metadata = [
         "name": "Videos formativos",
         "description": "CRUD de videos formativos vinculados a secciones del manual. Requiere privilegio mayor.",
     },
+    {
+        "name": "Actualizaciones",
+        "description": "Administracion e indexacion de documentos PDF. Requiere privilegio mayor.",
+    },
 ]
 
 app = FastAPI(
@@ -61,6 +65,7 @@ api_router.include_router(chat.router)
 api_router.include_router(admin_users.router)
 api_router.include_router(errors.router)
 api_router.include_router(videos.router)
+api_router.include_router(updates.router)
 
 @api_router.get(
     "/",

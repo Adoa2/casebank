@@ -534,8 +534,8 @@ def embed_query(pregunta, max_reintentos=MAX_REINTENTOS, timeout=REQUEST_TIMEOUT
     return datos["embedding"]["values"]
 
 
-def search_relevant_chunks(pregunta, n_results=N_RESULTS, max_reintentos=MAX_REINTENTOS, timeout=REQUEST_TIMEOUT_SEGUNDOS):
-    """Busca en Postgres/pgvector los chunks del manual y los errores aprobados mas relevantes."""
+def search_relevant_chunks(pregunta, nationality=None, n_results=N_RESULTS, max_reintentos=MAX_REINTENTOS, timeout=REQUEST_TIMEOUT_SEGUNDOS):
+    """Busca chunks del manual, errores y actualizaciones aplicables al usuario."""
     _debug(f"search_relevant_chunks: texto enviado a embed_query -> {pregunta!r}")
 
     query_embedding = embed_query(pregunta, max_reintentos=max_reintentos, timeout=timeout)
@@ -547,28 +547,46 @@ def search_relevant_chunks(pregunta, n_results=N_RESULTS, max_reintentos=MAX_REI
         """
         SELECT 'manual' AS origen, seccion_id, titulo, pagina_inicio, pagina_fin, contenido, imagenes,
                FALSE AS requiere_ticket, FALSE AS tiene_evidencia, NULL::text AS imagen_url,
+               NULL::text AS archivo_url,
                embedding <=> %s::vector AS distance,
                ctid::text AS row_id
         FROM manual_chunks
         UNION ALL
         SELECT 'error' AS origen, ec.error_id::text AS seccion_id, er.titulo AS titulo, NULL::integer AS pagina_inicio,
                NULL::integer AS pagina_fin, ec.contenido, NULL::jsonb AS imagenes,
-               er.requiere_ticket, er.tiene_evidencia, er.imagen_url,
+               er.requiere_ticket, er.tiene_evidencia, er.imagen_url, NULL::text AS archivo_url,
                ec.embedding <=> %s::vector AS distance,
                ec.ctid::text AS row_id
         FROM error_chunks ec
         JOIN error_reports er ON er.id = ec.error_id
+        UNION ALL
+        SELECT 'actualizacion' AS origen, ud.id::text AS seccion_id, ud.titulo,
+               uc.pagina_inicio, uc.pagina_fin, uc.contenido, NULL::jsonb AS imagenes,
+               FALSE AS requiere_ticket, FALSE AS tiene_evidencia, NULL::text AS imagen_url,
+               ud.archivo_url,
+               uc.embedding <=> %s::vector AS distance,
+               uc.ctid::text AS row_id
+        FROM update_chunks uc
+        JOIN update_documents ud ON ud.id = uc.update_id
+        WHERE ud.is_active = TRUE
+          AND (ud.aplicabilidad = 'ambas' OR ud.aplicabilidad = %s)
         ORDER BY distance
         LIMIT %s;
         """,
-        (embedding_literal, embedding_literal, n_results),
+        (
+            embedding_literal,
+            embedding_literal,
+            embedding_literal,
+            "honduras" if nationality == "hondurena" else "dominicana" if nationality == "dominicana" else "__ninguna__",
+            n_results,
+        ),
     )
     filas = cur.fetchall()
     cur.close()
     conn.close()
 
     chunks = []
-    for origen, seccion_id, titulo, pagina_inicio, pagina_fin, contenido, imagenes, requiere_ticket, tiene_evidencia, imagen_url, distance, row_id in filas:
+    for origen, seccion_id, titulo, pagina_inicio, pagina_fin, contenido, imagenes, requiere_ticket, tiene_evidencia, imagen_url, archivo_url, distance, row_id in filas:
         chunks.append({
             "documento": contenido,
             "metadata": {
@@ -581,6 +599,7 @@ def search_relevant_chunks(pregunta, n_results=N_RESULTS, max_reintentos=MAX_REI
                 "requiere_ticket": bool(requiere_ticket),
                 "tiene_evidencia": bool(tiene_evidencia),
                 "imagen_url": imagen_url,
+                "archivo_url": archivo_url,
                 "row_id": row_id,
             },
             "distance": float(distance),
@@ -926,7 +945,7 @@ def _fuentes_unicas(chunks_citados, chunks_disponibles=None):
         if meta["origen"] == "error":
             continue
 
-        clave = meta["seccion_id"]
+        clave = (meta["origen"], meta["seccion_id"])
         actual = rangos.setdefault(clave, {"pagina_inicio": None, "pagina_fin": None})
 
         if meta["pagina_inicio"] is not None:
@@ -943,7 +962,7 @@ def _fuentes_unicas(chunks_citados, chunks_disponibles=None):
         if meta["origen"] == "error":
             continue  # los errores frecuentes aportan contenido, pero no se citan como fuente
 
-        clave = meta["seccion_id"]
+        clave = (meta["origen"], meta["seccion_id"])
         if clave in vistas:
             continue
         vistas.add(clave)
@@ -951,10 +970,12 @@ def _fuentes_unicas(chunks_citados, chunks_disponibles=None):
         rango = rangos.get(clave, {})
 
         fuentes.append({
-            "seccion_id": clave,
+            "seccion_id": None if meta["origen"] == "actualizacion" else meta["seccion_id"],
             "titulo": meta["titulo"],
             "pagina": rango.get("pagina_inicio", meta["pagina_inicio"]),
             "pagina_fin": rango.get("pagina_fin", meta["pagina_fin"]),
+            "url": meta.get("archivo_url"),
+            "tipo": meta["origen"],
         })
 
     return fuentes
@@ -1361,7 +1382,7 @@ def _resolver_confirmacion_error(contexto_error, confirmacion):
     }
 
 
-def answer_question(question, contexto_error=None, confirmacion=None, historial=None):
+def answer_question(question, contexto_error=None, confirmacion=None, historial=None, nationality=None):
     """
     Funcion principal del RAG: busca contexto relevante, genera la respuesta
     y arma la lista de fuentes (seccion_id + titulo + pagina) e imagenes
@@ -1433,7 +1454,7 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
     _t_inicio = time.time()
     with ThreadPoolExecutor(max_workers=2) as executor:
         futuro_analisis = executor.submit(analizar_pregunta, question, historial)
-        futuro_chunks = executor.submit(search_relevant_chunks, question)
+        futuro_chunks = executor.submit(search_relevant_chunks, question, nationality)
         analisis = futuro_analisis.result()
         chunks_crudos = futuro_chunks.result()
     _debug(f"tiempo analisis+busqueda_base: {time.time() - _t_inicio:.2f}s")
@@ -1478,6 +1499,7 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
         try:
             chunks_expandidos = search_relevant_chunks(
                 texto_expandido,
+                nationality=nationality,
                 max_reintentos=REINTENTOS_BEST_EFFORT,
                 timeout=TIMEOUT_BEST_EFFORT_SEGUNDOS,
             )

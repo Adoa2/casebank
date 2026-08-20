@@ -242,3 +242,39 @@ class VideoResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- Documentos de actualizaciones ---
+
+class UpdateDocumentUpdate(BaseModel):
+    titulo: Optional[str] = Field(None, min_length=3, max_length=180)
+    descripcion: Optional[str] = Field(None, min_length=5, max_length=3000)
+    palabras_clave: Optional[str] = Field(None, min_length=2, max_length=1000)
+    aplicabilidad: Optional[Literal["honduras", "dominicana", "ambas"]] = None
+    seccion_id: Optional[int] = None
+    capitulo: Optional[str] = Field(None, min_length=1, max_length=500)
+    seccion: Optional[str] = Field(None, min_length=1, max_length=500)
+    subseccion: Optional[str] = Field(None, max_length=500)
+    is_active: Optional[bool] = None
+
+
+class UpdateDocumentResponse(BaseModel):
+    id: int
+    titulo: str
+    descripcion: str
+    palabras_clave: str
+    aplicabilidad: Literal["honduras", "dominicana", "ambas"]
+    seccion_id: Optional[int] = None
+    capitulo: Optional[str] = None
+    seccion: Optional[str] = None
+    subseccion: Optional[str] = None
+    archivo_url: str
+    archivo_nombre: str
+    is_active: bool
+    created_by: int
+    created_by_name: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
