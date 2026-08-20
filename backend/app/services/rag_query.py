@@ -773,6 +773,12 @@ AFILIADO_INTENT_REGEX = re.compile(
     re.IGNORECASE,
 )
 
+TIPOS_INTENT_REGEX = re.compile(
+    r"\b(que|cuales|cuantos?|cuantas?)\s+(tipos?|clases?)\b"
+    r"|\b(tipos?|clases?)\s+(?:de\s+)?[a-záéíóúñ]+\s+(hay|existen|tiene|maneja|genera|se manejan)\b",
+    re.IGNORECASE,
+)
+
 _AFILIADO_INTENT_EXCLUSIONES_REGEX = re.compile(
     r"\b(referido|referidos|grupo|empresa|ong|dependiente|conyuge|cónyuge|beneficiario)\b",
     re.IGNORECASE,
@@ -1704,7 +1710,8 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
         any(patron.search(pregunta_efectiva) for patron in APERTURA_INTENT_REGEX.values())
         or _es_intencion_afiliado_general(pregunta_efectiva)
     )
-    empatados = None if intencion_apertura_clara else _detectar_ambiguedad_por_dispersion(chunks_crudos)
+    intencion_tipos_clara = bool(TIPOS_INTENT_REGEX.search(pregunta_efectiva))
+    empatados = None if (intencion_apertura_clara or intencion_tipos_clara) else _detectar_ambiguedad_por_dispersion(chunks_crudos)
     if empatados:
         opciones = [_titulo_para_mostrar(c["metadata"]["titulo"]) for c in empatados]
         _debug(
@@ -1724,13 +1731,21 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
     def _umbral_para(chunk):
         return MAX_DISTANCE_ERROR if chunk["metadata"]["origen"] == "error" else MAX_DISTANCE_ABSOLUTE
 
-    candidatos_bajo_umbral = [c for c in chunks_crudos if c["distance"] <= _umbral_para(c)]
-    chunks_reordenados = rerank_chunks(pregunta_efectiva, candidatos_bajo_umbral)
-    if chunks_reordenados is None:
+    if intencion_tipos_clara:
         chunks_relevantes = filtrar_por_relevancia(chunks_crudos)
         chunks = [c for c in chunks_relevantes if c["distance"] <= _umbral_para(c)]
+        _debug(
+            "answer_question: intencion de tipos/clases detectada, se usa filtrar_por_relevancia "
+            "en vez de rerank_chunks para agrupar variantes relacionadas en una sola respuesta"
+        )
     else:
-        chunks = chunks_reordenados
+        candidatos_bajo_umbral = [c for c in chunks_crudos if c["distance"] <= _umbral_para(c)]
+        chunks_reordenados = rerank_chunks(pregunta_efectiva, candidatos_bajo_umbral)
+        if chunks_reordenados is None:
+            chunks_relevantes = filtrar_por_relevancia(chunks_crudos)
+            chunks = [c for c in chunks_relevantes if c["distance"] <= _umbral_para(c)]
+        else:
+            chunks = chunks_reordenados
 
     chunks = _forzar_chunk_apertura(chunks, pregunta_efectiva)
     chunks = _forzar_chunk_afiliado(chunks, pregunta_efectiva)
