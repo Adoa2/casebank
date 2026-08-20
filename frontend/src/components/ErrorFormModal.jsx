@@ -73,6 +73,13 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
   const fileInputRef = useRef(null)
+  const [tieneDiagnostico, setTieneDiagnostico] = useState(initialData?.tiene_diagnostico || false)
+  const [diagnosticoTitulo, setDiagnosticoTitulo] = useState(initialData?.diagnostico_titulo || '')
+  const [diagnosticoOpciones, setDiagnosticoOpciones] = useState(
+    initialData?.diagnostico_opciones?.length
+      ? initialData.diagnostico_opciones.map((opcion) => ({ etiqueta: opcion.etiqueta, respuesta: opcion.respuesta }))
+      : [{ etiqueta: '', respuesta: '' }, { etiqueta: '', respuesta: '' }]
+  )
 
   const inputClass = 'w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-[#17213e] outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100'
 
@@ -102,6 +109,17 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
     if (step === 2 && tieneEvidencia && !imagenUrl) {
       setError('Sube la imagen de evidencia o desmarca esa opción para continuar.')
       return false
+    }
+    if (step === 2 && tieneDiagnostico) {
+      if (!diagnosticoTitulo.trim()) {
+        setError('Escribe el título de la pregunta de diagnóstico.')
+        return false
+      }
+      const opcionesValidas = diagnosticoOpciones.filter((opcion) => opcion.etiqueta.trim() && opcion.respuesta.trim())
+      if (opcionesValidas.length < 2) {
+        setError('Agrega al menos dos opciones de diagnóstico con su respuesta.')
+        return false
+      }
     }
     return true
   }
@@ -170,6 +188,18 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
     }
   }
 
+  function handleDiagnosticoOpcionChange(index, campo, valor) {
+    setDiagnosticoOpciones((prev) => prev.map((opcion, i) => (i === index ? { ...opcion, [campo]: valor } : opcion)))
+  }
+
+  function agregarDiagnosticoOpcion() {
+    setDiagnosticoOpciones((prev) => [...prev, { etiqueta: '', respuesta: '' }])
+  }
+
+  function quitarDiagnosticoOpcion(index) {
+    setDiagnosticoOpciones((prev) => (prev.length <= 2 ? prev : prev.filter((_, i) => i !== index)))
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
     if (!validateStep(0)) {
@@ -193,6 +223,13 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
         requiere_ticket: requiereTicket,
         tiene_evidencia: tieneEvidencia,
         imagen_url: tieneEvidencia ? imagenUrl : null,
+        tiene_diagnostico: tieneDiagnostico,
+        diagnostico_titulo: tieneDiagnostico ? diagnosticoTitulo.trim() : null,
+        diagnostico_opciones: tieneDiagnostico
+          ? diagnosticoOpciones
+              .filter((opcion) => opcion.etiqueta.trim() && opcion.respuesta.trim())
+              .map((opcion) => ({ etiqueta: opcion.etiqueta.trim(), respuesta: opcion.respuesta.trim() }))
+          : [],
       })
     } catch (err) {
       setError(err.message || 'No se pudo guardar el error.')
@@ -275,6 +312,61 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
                     </div>
                   )}
                 </div>
+
+                <div className={`rounded-xl border p-4 transition ${tieneDiagnostico ? 'border-blue-300 bg-blue-50/30' : 'border-slate-200 bg-slate-50/60'}`}>
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input type="checkbox" checked={tieneDiagnostico} onChange={(event) => setTieneDiagnostico(event.target.checked)} className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-200" />
+                    <span className="text-xs leading-5 text-slate-500">
+                      <strong className="block text-sm text-[#17213e]">Agregar diagnóstico interactivo</strong>
+                      Cuando el usuario confirme que es este error, Casey le preguntará qué acción está realizando y le dará la respuesta exacta según el caso, en vez de una solución única.
+                    </span>
+                  </label>
+
+                  {tieneDiagnostico && (
+                    <div className="mt-4 space-y-4">
+                      <Field label="Pregunta" required hint="Se muestra como título antes de las opciones, ej. '¿Qué acción está realizando?'.">
+                        <input type="text" value={diagnosticoTitulo} onChange={(event) => setDiagnosticoTitulo(event.target.value)} placeholder="¿Qué acción está realizando?" className={inputClass} />
+                      </Field>
+
+                      <div className="space-y-3">
+                        {diagnosticoOpciones.map((opcion, index) => (
+                          <div key={index} className="rounded-lg border border-slate-200 bg-white p-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-xs font-semibold text-slate-500">Opción {index + 1}</p>
+                              {diagnosticoOpciones.length > 2 && (
+                                <button type="button" onClick={() => quitarDiagnosticoOpcion(index)} className="text-xs font-semibold text-red-600 hover:underline">
+                                  Quitar
+                                </button>
+                              )}
+                            </div>
+                            <input
+                              type="text"
+                              value={opcion.etiqueta}
+                              onChange={(event) => handleDiagnosticoOpcionChange(index, 'etiqueta', event.target.value)}
+                              placeholder="Ej. Otorgamiento de crédito"
+                              className={`${inputClass} mt-2`}
+                            />
+                            <textarea
+                              value={opcion.respuesta}
+                              onChange={(event) => handleDiagnosticoOpcionChange(index, 'respuesta', event.target.value)}
+                              rows={2}
+                              placeholder="Respuesta exacta para esta opción..."
+                              className={`${inputClass} mt-2 min-h-[70px] resize-y`}
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={agregarDiagnosticoOpcion}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-blue-300 px-3 py-2 text-xs font-semibold text-blue-600 transition hover:bg-blue-50"
+                      >
+                        + Agregar otra opción
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -291,6 +383,10 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
                   <ReviewItem label="Procedimiento" value={procedimiento} wide />
                   <ReviewItem label="Soporte" value={requiereTicket ? 'Requiere ticket de soporte' : 'No requiere ticket'} />
                   <ReviewItem label="Evidencia" value={tieneEvidencia ? 'Imagen adjunta' : 'Sin imagen'} />
+                  <ReviewItem
+                    label="Diagnóstico interactivo"
+                    value={tieneDiagnostico ? `Sí — ${diagnosticoOpciones.filter((o) => o.etiqueta.trim() && o.respuesta.trim()).length} opciones` : 'No configurado'}
+                  />
                 </div>
               </div>
             )}

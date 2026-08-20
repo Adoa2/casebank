@@ -80,6 +80,7 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(false)
   const [activeConfirmation, setActiveConfirmation] = useState(null)
+  const [activeDiagnostico, setActiveDiagnostico] = useState(null)
   const [lightboxUrl, setLightboxUrl] = useState(null)
   const messagesEndRef = useRef(null)
   const selectedClarificationsRef = useRef(new Set())
@@ -90,20 +91,27 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
     })
 
     return () => cancelAnimationFrame(frame)
-  }, [messages, loading, activeConfirmation])
+  }, [messages, loading, activeConfirmation, activeDiagnostico])
 
   function handleClear() {
     setMessages([...INITIAL_MESSAGES])
     setActiveConfirmation(null)
+    setActiveDiagnostico(null)
     selectedClarificationsRef.current.clear()
   }
 
   async function sendMessage(value, opts = {}) {
-    const { contextoError = null, confirmacion = null, displayText = null } = opts
+    const {
+      contextoError = null,
+      confirmacion = null,
+      contextoDiagnostico = null,
+      opcionDiagnosticoId = null,
+      displayText = null,
+    } = opts
     const text = (displayText ?? value).trim()
     if (!text || loading) return
 
-    if (!contextoError && text.length < 3) {
+    if (!contextoError && !contextoDiagnostico && text.length < 3) {
       const userMessage = { id: `u-${Date.now()}`, role: 'user', text }
       const avisoMessage = {
         id: `e-${Date.now()}`,
@@ -120,6 +128,7 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
     setMessages((prev) => [...prev, userMessage])
     setDraft('')
     setActiveConfirmation(null)
+    setActiveDiagnostico(null)
     setLoading(true)
 
     try {
@@ -130,6 +139,8 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
       const body = { pregunta: (value ?? text).trim(), historial }
       if (contextoError) body.contexto_error = contextoError
       if (confirmacion !== null) body.confirmacion = confirmacion
+      if (contextoDiagnostico) body.contexto_diagnostico = contextoDiagnostico
+      if (opcionDiagnosticoId !== null) body.opcion_diagnostico_id = opcionDiagnosticoId
 
       const res = await fetch(`${API_BASE_URL}/api/chat`, {
         method: 'POST',
@@ -149,6 +160,7 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
       }
       setMessages((prev) => [...prev, assistantMessage])
       setActiveConfirmation(data.pendiente_confirmacion || null)
+      setActiveDiagnostico(data.pendiente_diagnostico || null)
     } catch (err) {
       const errorMessage = {
         id: `e-${Date.now()}`,
@@ -158,6 +170,7 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
       }
       setMessages((prev) => [...prev, errorMessage])
       setActiveConfirmation(null)
+      setActiveDiagnostico(null)
     } finally {
       setLoading(false)
     }
@@ -178,6 +191,18 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
     })
   }
 
+  function handleDiagnosticoChoice(opcion) {
+    if (!activeDiagnostico || loading) return
+    sendMessage(opcion.etiqueta, {
+      contextoDiagnostico: {
+        error_id: activeDiagnostico.error_id,
+        pregunta_original: activeDiagnostico.pregunta_original,
+      },
+      opcionDiagnosticoId: opcion.id,
+      displayText: opcion.etiqueta,
+    })
+  }
+
   function handleClarificationChoice(messageId, opcion) {
     if (loading || selectedClarificationsRef.current.has(messageId)) return
     selectedClarificationsRef.current.add(messageId)
@@ -189,7 +214,7 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
     sendMessage(opcion)
   }
 
-  const inputDisabled = loading || !!activeConfirmation
+  const inputDisabled = loading || !!activeConfirmation || !!activeDiagnostico
 
   return (
     <aside className="w-full h-full flex flex-col bg-white">
@@ -325,7 +350,24 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
           </div>
         )}
 
-        {messages.length === 1 && !loading && !activeConfirmation && (
+        {activeDiagnostico && !loading && (
+          <div className="flex justify-start">
+            <div className="flex max-w-[88%] flex-col gap-2 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50 px-4 py-3">
+              {activeDiagnostico.opciones.map((opcion) => (
+                <button
+                  key={opcion.id}
+                  type="button"
+                  onClick={() => handleDiagnosticoChoice(opcion)}
+                  className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-left text-xs font-medium text-blue-950 transition hover:border-brand-blue hover:bg-blue-50"
+                >
+                  {opcion.etiqueta}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {messages.length === 1 && !loading && !activeConfirmation && !activeDiagnostico && (
           <section className="pt-2">
             <h3 className="mb-2.5 px-1 text-sm font-bold text-brand-blue">Preguntas sugeridas</h3>
             <div className="space-y-2">
@@ -363,7 +405,7 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
       </div>
 
       <form onSubmit={handleSend} className="border-t border-line p-3">
-        {activeConfirmation && (
+        {(activeConfirmation || activeDiagnostico) && (
           <p className="mb-2 px-1 text-xs text-slate-400">
             Responde con los botones de arriba para continuar.
           </p>

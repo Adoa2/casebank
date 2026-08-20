@@ -129,10 +129,20 @@ class UserAdminUpdate(BaseModel):
     is_active: Optional[bool] = None
     password: Optional[str] = Field(None, min_length=8)
 
+class DiagnosticoOpcionCreate(BaseModel):
+    """Un par pregunta-respuesta del diagnóstico interactivo de un error."""
+    etiqueta: str = Field(..., min_length=1, max_length=200, description="Ej. 'Otorgamiento de crédito'.")
+    respuesta: str = Field(..., min_length=1, description="Respuesta exacta que Casey mostrará si el usuario elige esta opción.")
 
-# --- Errores frecuentes ---
 
-# --- Errores frecuentes ---
+class DiagnosticoOpcionResponse(BaseModel):
+    id: int
+    etiqueta: str
+    respuesta: str
+    orden: int
+
+    class Config:
+        from_attributes = True
 
 class ErrorReportCreate(BaseModel):
     """Datos para registrar un nuevo error frecuente (queda en estado 'pendiente')."""
@@ -160,6 +170,21 @@ class ErrorReportCreate(BaseModel):
         description="URL publica de la imagen de evidencia (subida previamente via "
                     "POST /errors/upload-imagen). Requerido si tiene_evidencia es True.",
     )
+    tiene_diagnostico: bool = Field(
+        False,
+        description="Si es True, tras confirmar que es este error, Casey pregunta al usuario "
+                    "que accion esta realizando y responde segun la opcion elegida, en vez de "
+                    "generar causa/solucion con el LLM.",
+    )
+    diagnostico_titulo: Optional[str] = Field(
+        None,
+        description="Pregunta mostrada como titulo antes de las opciones, ej. "
+                    "'¿Que accion esta realizando?'. Requerido si tiene_diagnostico es True.",
+    )
+    diagnostico_opciones: list[DiagnosticoOpcionCreate] = Field(
+        default_factory=list,
+        description="Pares etiqueta/respuesta del diagnostico. Minimo 2 si tiene_diagnostico es True.",
+    )
 
 class ErrorReportUpdate(BaseModel):
     """Datos editables de un error frecuente. Todos opcionales."""
@@ -173,6 +198,9 @@ class ErrorReportUpdate(BaseModel):
     requiere_ticket: Optional[bool] = None
     tiene_evidencia: Optional[bool] = None
     imagen_url: Optional[str] = None
+    tiene_diagnostico: Optional[bool] = None
+    diagnostico_titulo: Optional[str] = None
+    diagnostico_opciones: Optional[list[DiagnosticoOpcionCreate]] = None
 
 class ErrorReportResponse(BaseModel):
     id: int
@@ -194,6 +222,9 @@ class ErrorReportResponse(BaseModel):
     reviewed_by_name: Optional[str] = None
     created_at: datetime
     reviewed_at: Optional[datetime]
+    tiene_diagnostico: bool
+    diagnostico_titulo: Optional[str]
+    diagnostico_opciones: list[DiagnosticoOpcionResponse] = []
 
     class Config:
         from_attributes = True

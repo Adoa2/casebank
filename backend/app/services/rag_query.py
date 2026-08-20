@@ -682,6 +682,124 @@ def _obtener_chunk_error(error_id):
         },
         "distance": 0.0,
     }
+def _obtener_diagnostico_error(error_id):
+    """
+    Recupera, si existe, el diagnostico interactivo configurado para un error
+    (titulo de la pregunta + opciones). Devuelve None si el error no tiene
+    diagnostico configurado, para que el llamador siga con el flujo normal
+    de causa/solucion generada por el LLM.
+    """
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT tiene_diagnostico, diagnostico_titulo FROM error_reports WHERE id = %s;",
+            (error_id,),
+        )
+        fila = cur.fetchone()
+        if not fila or not fila[0]:
+            return None
+
+        cur.execute(
+            """
+            SELECT id, etiqueta
+            FROM error_diagnostico_opciones
+            WHERE error_id = %s
+            ORDER BY orden;
+            """,
+            (error_id,),
+        )
+        opciones = [{"id": id_, "etiqueta": etiqueta} for id_, etiqueta in cur.fetchall()]
+    finally:
+        cur.close()
+        conn.close()
+
+    if len(opciones) < 2:
+        return None
+
+    return {"titulo": fila[1], "opciones": opciones}
+
+
+def _obtener_opcion_diagnostico(error_id, opcion_id):
+    """Recupera la respuesta puntual de una opcion de diagnostico, validando que pertenezca al error dado."""
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT edo.respuesta, er.requiere_ticket
+            FROM error_diagnostico_opciones edo
+            JOIN error_reports er ON er.id = edo.error_id
+            WHERE edo.id = %s AND edo.error_id = %s
+            LIMIT 1;
+            """,
+            (opcion_id, error_id),
+        )
+        fila = cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+
+    if not fila:
+        return None
+    respuesta, requiere_ticket = fila
+    return {"respuesta": respuesta, "requiere_ticket": bool(requiere_ticket)}
+
+
+def _iniciar_diagnostico(pregunta_original, error_id, diagnostico):
+    """Arma la respuesta que presenta la pregunta de diagnostico y sus opciones al usuario."""
+    return {
+        "respuesta": diagnostico["titulo"],
+        "fuentes": [],
+        "imagenes": [],
+        "imagen_evidencia": None,
+        "pendiente_confirmacion": None,
+        "pendiente_diagnostico": {
+            "error_id": error_id,
+            "pregunta_original": pregunta_original,
+            "opciones": diagnostico["opciones"],
+        },
+    }
+
+
+def _resolver_seleccion_diagnostico(contexto_diagnostico, opcion_id):
+    """
+    Resuelve la eleccion del usuario dentro del diagnostico interactivo. La
+    respuesta se muestra tal cual quedo cargada por el admin, sin pasar por
+    el LLM, para que sea siempre la misma (igual que las demas respuestas de
+    errores frecuentes, pero aqui es aun mas importante: cada opcion tiene
+    una respuesta especifica y verificada por un tecnico, y regenerarla con
+    el LLM reintroduciria el mismo riesgo de indeterminismo que se corrigio
+    con GENERATION_TEMPERATURE para "registro de socio").
+    """
+    error_id = contexto_diagnostico.get("error_id")
+    opcion = _obtener_opcion_diagnostico(error_id, opcion_id)
+
+    if opcion is None:
+        return {
+            "respuesta": "No pude encontrar esa opción. ¿Podrías intentar de nuevo?",
+            "fuentes": [],
+            "imagenes": [],
+            "imagen_evidencia": None,
+            "pendiente_confirmacion": None,
+            "pendiente_diagnostico": None,
+        }
+
+    respuesta = _sanitizar_formato(opcion["respuesta"])
+    if opcion["requiere_ticket"]:
+        respuesta = (
+            respuesta.rstrip()
+            + f"\n\nSi necesitas que se corrija directamente, abre un ticket de soporte aquí: {SUPPORT_TICKET_URL}"
+        )
+
+    return {
+        "respuesta": respuesta,
+        "fuentes": [],
+        "imagenes": [],
+        "imagen_evidencia": None,
+        "pendiente_confirmacion": None,
+        "pendiente_diagnostico": None,
+    }
 
 def _obtener_chunk_seccion(seccion_id):
     """
@@ -1442,6 +1560,10 @@ def _resolver_confirmacion_error(contexto_error, confirmacion):
     intento = contexto_error.get("intento", 1)
 
     if confirmacion:
+        diagnostico = _obtener_diagnostico_error(error_id_actual)
+        if diagnostico:
+            return _iniciar_diagnostico(pregunta_original, error_id_actual, diagnostico)
+
         chunk = _obtener_chunk_error(error_id_actual)
         if chunk is None:
             return {

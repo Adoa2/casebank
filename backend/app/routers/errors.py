@@ -206,12 +206,49 @@ def listar_pendientes(
 
 
 @router.post(
-    "/{error_id}/revisar",
+    "",
     response_model=schemas.ErrorReportResponse,
-    summary="Aprobar o rechazar un error",
-    description="Aprueba o rechaza un error pendiente. Si se aprueba, se genera su embedding "
-                "y se indexa para que la IA lo use al responder. Requiere privilegio mayor.",
+    status_code=status.HTTP_201_CREATED,
+    summary="Registrar error frecuente",
+    description="Crea un nuevo error frecuente en estado 'pendiente', a la espera de aprobación. "
+                "Requiere privilegio de administrador.",
 )
+def crear_error(
+    data: schemas.ErrorReportCreate,
+    db_session: Session = Depends(db.get_db),
+    current_user: models.User = Depends(auth.get_current_admin),
+):
+    if data.tiene_evidencia and not data.imagen_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Debes subir una imagen de evidencia antes de guardar el error.",
+        )
+
+    opciones_validas = [o for o in data.diagnostico_opciones if o.etiqueta.strip() and o.respuesta.strip()]
+    if data.tiene_diagnostico:
+        if not data.diagnostico_titulo or not data.diagnostico_titulo.strip():
+            raise HTTPException(status_code=400, detail="Escribe el título de la pregunta de diagnóstico.")
+        if len(opciones_validas) < 2:
+            raise HTTPException(status_code=400, detail="Agrega al menos dos opciones de diagnóstico con su respuesta.")
+
+    payload = data.model_dump(exclude={"diagnostico_opciones"})
+    nuevo = models.ErrorReport(**payload, created_by=current_user.id)
+    db_session.add(nuevo)
+    db_session.flush()
+
+    if data.tiene_diagnostico:
+        for indice, opcion in enumerate(opciones_validas):
+            db_session.add(models.ErrorDiagnosticoOpcion(
+                error_id=nuevo.id,
+                etiqueta=opcion.etiqueta.strip(),
+                respuesta=opcion.respuesta.strip(),
+                orden=indice,
+            ))
+
+    db_session.commit()
+    db_session.refresh(nuevo)
+    return nuevo
+
 def revisar_error(
     error_id: int,
     data: schemas.ErrorReportReview,
@@ -259,7 +296,7 @@ def editar_error(
     if not error:
         raise HTTPException(status_code=404, detail="Error no encontrado")
 
-    datos = data.model_dump(exclude_unset=True)
+    datos = data.model_dump(exclude_unset=True, exclude={"diagnostico_opciones"})
 
     tiene_evidencia_final = datos.get("tiene_evidencia", error.tiene_evidencia)
     imagen_url_final = datos.get("imagen_url", error.imagen_url)
@@ -269,8 +306,29 @@ def editar_error(
             detail="Debes subir una imagen de evidencia antes de guardar el error.",
         )
 
+    tiene_diagnostico_final = datos.get("tiene_diagnostico", error.tiene_diagnostico)
+    diagnostico_titulo_final = datos.get("diagnostico_titulo", error.diagnostico_titulo)
+    if tiene_diagnostico_final and not (diagnostico_titulo_final and diagnostico_titulo_final.strip()):
+        raise HTTPException(status_code=400, detail="Escribe el título de la pregunta de diagnóstico.")
+
     for campo, valor in datos.items():
         setattr(error, campo, valor)
+
+    if data.diagnostico_opciones is not None:
+        opciones_validas = [o for o in data.diagnostico_opciones if o.etiqueta.strip() and o.respuesta.strip()]
+        if tiene_diagnostico_final and len(opciones_validas) < 2:
+            raise HTTPException(status_code=400, detail="Agrega al menos dos opciones de diagnóstico con su respuesta.")
+
+        db_session.query(models.ErrorDiagnosticoOpcion).filter(
+            models.ErrorDiagnosticoOpcion.error_id == error.id
+        ).delete()
+        for indice, opcion in enumerate(opciones_validas):
+            db_session.add(models.ErrorDiagnosticoOpcion(
+                error_id=error.id,
+                etiqueta=opcion.etiqueta.strip(),
+                respuesta=opcion.respuesta.strip(),
+                orden=indice,
+            ))
 
     db_session.commit()
     db_session.refresh(error)

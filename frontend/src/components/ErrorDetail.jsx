@@ -56,6 +56,7 @@ function Icon({ name, className = 'h-5 w-5' }) {
     user: <><circle cx="12" cy="7" r="3" /><path d="M5 21v-2c0-3.3 2.3-5 7-5s7 1.7 7 5v2" /></>,
     article: <><path d="M6 3h9l3 3v15H6V3Z" /><path d="M14 3v4h4M9 11h6m-6 4h6" /></>,
     ticket: <><path d="M5 4h14v16l-3-2-2 2-2-2-2 2-2-2-3 2V4Z" /><path d="M9 9h6m-6 4h6" /></>,
+    branch: <><circle cx="6" cy="6" r="2" /><circle cx="6" cy="18" r="2" /><circle cx="18" cy="12" r="2" /><path d="M6 8v8M8 6h4a4 4 0 0 1 4 4v0M8 18h4a4 4 0 0 0 4-4v0" /></>,
   }
   return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
 }
@@ -92,6 +93,7 @@ export default function ErrorDetail({ error, canReview, canEdit, userNames = {},
   const status = STATUS[error.estado] || STATUS.pendiente
   const creatorName = error.created_by_name || userNames[error.created_by] || 'No disponible'
   const reviewerName = error.reviewed_by_name || userNames[error.reviewed_by] || (error.reviewed_by ? 'No disponible' : 'Pendiente')
+  const diagnosticoOpciones = error.diagnostico_opciones || []
 
   async function handleReview(aprobar) {
     setActionError(null)
@@ -166,6 +168,37 @@ export default function ErrorDetail({ error, canReview, canEdit, userNames = {},
               <InfoCard icon="check" iconStyle="bg-emerald-50 text-emerald-600" title="Solución recomendada" value={error.solucion} helper="Respuesta que recibirá el usuario para resolver el problema." wide />
               {error.requiere_ticket && <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50/60 p-4 text-sm text-blue-700"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white"><Icon name="ticket" className="h-5 w-5" /></span><div><strong>Requiere ticket de soporte</strong><p className="mt-1 text-xs leading-5 text-blue-600">El asistente incluirá automáticamente el enlace para abrir un ticket.</p></div></div>}
               {error.tiene_evidencia && error.imagen_url && <div className="rounded-xl border border-slate-200 p-4 sm:p-5"><h3 className="text-sm font-semibold text-[#17213e]">Imagen de evidencia</h3><p className="mt-1 text-xs text-slate-500">Referencia visual que se mostrará antes de brindar la solución.</p><a href={error.imagen_url} target="_blank" rel="noopener noreferrer" className="mt-4 block w-fit"><img src={error.imagen_url} alt="Evidencia del error" className="max-h-72 rounded-xl border border-slate-200 object-contain" /></a></div>}
+
+              {error.tiene_diagnostico && (
+                <div className="rounded-xl border border-slate-200 p-4 sm:p-5">
+                  <div className="flex items-start gap-3">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600"><Icon name="branch" className="h-5 w-5" /></span>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold text-[#17213e]">Diagnóstico interactivo</h3>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                        Tras confirmar que es este error, Casey pregunta lo siguiente y responde según la opción elegida.
+                      </p>
+                    </div>
+                  </div>
+
+                  <p className="mt-4 rounded-lg bg-blue-50/60 px-3.5 py-2.5 text-sm font-semibold text-[#17213e]">
+                    {error.diagnostico_titulo || 'Sin título configurado.'}
+                  </p>
+
+                  {diagnosticoOpciones.length ? (
+                    <ul className="mt-3 space-y-3">
+                      {diagnosticoOpciones.map((opcion) => (
+                        <li key={opcion.id} className="rounded-lg border border-slate-200 bg-white p-3.5">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">{opcion.etiqueta}</p>
+                          <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-5 text-[#25304d]">{opcion.respuesta}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-3 text-sm text-slate-400">No hay opciones configuradas.</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

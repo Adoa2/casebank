@@ -32,6 +32,10 @@ class MensajeHistorial(BaseModel):
     role: Literal["user", "assistant"]
     text: str = Field(..., min_length=1, max_length=1200)
 
+class ContextoDiagnostico(BaseModel):
+    """Estado del flujo de diagnostico interactivo, reenviado tal cual por el frontend."""
+    error_id: int = Field(..., description="ID del error cuyo diagnostico se esta resolviendo.")
+    pregunta_original: str = Field(..., description="Pregunta original que origino la confirmacion del error.")
 
 class ChatQuery(BaseModel):
     pregunta: str = Field(
@@ -56,6 +60,15 @@ class ChatQuery(BaseModel):
         max_length=8,
         description="Mensajes recientes usados para interpretar preguntas de seguimiento.",
     )
+    contexto_diagnostico: Optional[ContextoDiagnostico] = Field(
+        None,
+        description="Presente cuando el usuario esta eligiendo una opcion dentro del "
+                    "diagnostico interactivo de un error ('¿que accion esta realizando?').",
+    )
+    opcion_diagnostico_id: Optional[int] = Field(
+        None,
+        description="ID de la opcion de diagnostico elegida. Solo se usa junto con contexto_diagnostico.",
+    )
 
 
 class FuenteManual(BaseModel):
@@ -75,8 +88,6 @@ class FuenteManual(BaseModel):
         description="Numero de pagina donde termina esa seccion en el manual. Es None si la fuente es un error "
                     "o si la seccion ocupa una sola pagina.",
     )
-    url: Optional[str] = Field(None, description="URL del PDF cuando la fuente es una actualización.")
-    tipo: Optional[str] = Field(None, description="Origen de la fuente: manual o actualización.")
 
 
 class PendienteConfirmacionResponse(BaseModel):
@@ -86,6 +97,15 @@ class PendienteConfirmacionResponse(BaseModel):
     candidatos_restantes: List[int]
     intento: int
 
+class OpcionDiagnosticoResponse(BaseModel):
+    id: int
+    etiqueta: str
+
+
+class PendienteDiagnosticoResponse(BaseModel):
+    error_id: int
+    pregunta_original: str
+    opciones: List[OpcionDiagnosticoResponse]
 
 class ChatRespuesta(BaseModel):
     respuesta: str = Field(..., description="Respuesta generada por el asistente en lenguaje natural.")
@@ -110,6 +130,11 @@ class ChatRespuesta(BaseModel):
         False,
         description="Indica que el chat debe mostrar un acceso para crear un ticket de soporte.",
     )
+    pendiente_diagnostico: Optional[PendienteDiagnosticoResponse] = Field(
+        None,
+        description="Presente cuando Casey esta mostrando las opciones del diagnostico "
+                    "interactivo de un error y espera que el usuario elija una.",
+    )
 
 
 # --- RUTAS ---
@@ -128,13 +153,15 @@ def chat_con_manual(
 ):
     try:
         contexto = data.contexto_error.model_dump() if data.contexto_error else None
+        contexto_diagnostico = data.contexto_diagnostico.model_dump() if data.contexto_diagnostico else None
         historial = [mensaje.model_dump() for mensaje in data.historial]
         resultado = answer_question(
             data.pregunta,
             contexto_error=contexto,
             confirmacion=data.confirmacion,
             historial=historial,
-            nationality=current_user.nationality,
+            contexto_diagnostico=contexto_diagnostico,
+            opcion_diagnostico_id=data.opcion_diagnostico_id,
         )
     except RuntimeError:
         # rag_query.py agoto los reintentos por rate limit (429) de Gemini

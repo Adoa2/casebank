@@ -65,7 +65,14 @@ class ErrorReport(Base):
 
     creator = relationship("User", foreign_keys=[created_by])
     reviewer = relationship("User", foreign_keys=[reviewed_by])
-
+    tiene_diagnostico = Column(Boolean, nullable=False, default=False)
+    diagnostico_titulo = Column(String, nullable=True)
+    diagnostico_opciones = relationship(
+        "ErrorDiagnosticoOpcion",
+        back_populates="error",
+        cascade="all, delete-orphan",
+        order_by="ErrorDiagnosticoOpcion.orden",
+    )
     @property
     def created_by_name(self):
         return self.creator.username if self.creator else None
@@ -74,7 +81,17 @@ class ErrorReport(Base):
     def reviewed_by_name(self):
         return self.reviewer.username if self.reviewer else None
 
+class ErrorDiagnosticoOpcion(Base):
+    __tablename__ = "error_diagnostico_opciones"
 
+    id = Column(Integer, primary_key=True, index=True)
+    error_id = Column(Integer, ForeignKey("error_reports.id", ondelete="CASCADE"), nullable=False)
+    etiqueta = Column(String, nullable=False)
+    respuesta = Column(Text, nullable=False)
+    orden = Column(Integer, nullable=False, default=0)
+
+    error = relationship("ErrorReport", back_populates="diagnostico_opciones")
+    
 class Video(Base):
     __tablename__ = "videos"
 
