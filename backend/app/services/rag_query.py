@@ -402,7 +402,7 @@ Reglas para contexto y aclaracion:
   apertura de una cuenta de prestamo, un unico procedimiento.
   "agregar cuenta de ahorro", "abrir ahorro" -> siempre se refieren a la apertura de
   una cuenta de ahorro, un unico procedimiento.
-    "como registro un socio" -> tiene una via principal y evidente (dar de alta un
+  "como registro un socio" -> tiene una via principal y evidente (dar de alta un
   afiliado nuevo); las variantes (asamblea, grupo, referido) son casos especiales
   que se explican como nota al final, no ameritan interrumpir con una pregunta.
   NOTA: preguntas mas genericas como "nuevo afiliado" pueden terminar mostrando
@@ -781,6 +781,7 @@ def _forzar_chunk_apertura(chunks, pregunta):
             continue
         chunk_intro = _obtener_chunk_seccion(seccion_id)
         if chunk_intro:
+            chunk_intro["metadata"]["es_apertura_forzada"] = True
             chunks = [chunk_intro] + chunks
             _debug(f"_forzar_chunk_apertura: forzado chunk intro de seccion {seccion_id} por intencion detectada en la pregunta")
     return chunks
@@ -1032,6 +1033,7 @@ Mensaje del usuario: {pregunta}
 Responde en espanol:"""
 
     chunks_prerequisito = [c for c in chunks if c["metadata"].get("es_prerequisito")]
+    chunks_apertura_forzada = [c for c in chunks if c["metadata"].get("es_apertura_forzada")]
 
     bloques = [f"[FUENTE {i}]\n{c['documento']}" for i, c in enumerate(chunks, start=1)]
     contexto = "\n\n---\n\n".join(bloques)
@@ -1115,6 +1117,24 @@ Debes integrar siempre sus pasos como los PRIMEROS de tu respuesta numerada, fus
 en una sola secuencia continua con el resto de los pasos, y debes incluir su numero en
 FUENTES_USADAS aunque el resto del contexto ya parezca suficiente."""
 
+    aviso_apertura_forzada = ""
+    if chunks_apertura_forzada:
+        numeros_apertura = ", ".join(
+            str(i) for i, c in enumerate(chunks, start=1) if c["metadata"].get("es_apertura_forzada")
+        )
+        aviso_apertura_forzada = f"""
+
+Las fuentes numeradas {numeros_apertura} describen especificamente el procedimiento
+de apertura/registro que el usuario esta pidiendo, detectado con alta confianza a
+partir de su pregunta. Estas fuentes tienen PRIORIDAD sobre cualquier otra fuente
+del contexto que solo comparta palabras sueltas (como "agregar" o "credito") pero
+describa una accion distinta, como registrar una transaccion sobre una cuenta ya
+existente, consultar un historial, o una calificacion. Responde usando el
+procedimiento de estas fuentes prioritarias salvo que el texto exacto de la
+pregunta del usuario mencione explicitamente una transaccion, un pago, un abono,
+o una accion sobre una cuenta ya existente (en cuyo caso usa la fuente mas
+adecuada a eso en su lugar)."""
+
     prompt = f"""Eres Casey, el asistente virtual de CaseBank. Respondes preguntas sobre el uso
 del sistema con base en el Manual de Usuario y en soluciones registradas por soporte.
 Tu tono es calido, cercano y servicial, como el de un companero de trabajo que
@@ -1162,7 +1182,7 @@ explicacion fluida y conversacional (no como una plantilla rigida con
 encabezados tipo "Causa:" / "Solucion:"). Por ejemplo, en vez de separar
 "Causa: X. Solucion: Y", escribe algo como "Eso pasa porque X. Para
 solucionarlo, sigue estos pasos:" y luego los pasos numerados. Nunca respondas
-unicamente con la causa si el contexto tambien contiene la solucion.{aviso_sinonimos}{aviso_multiples_casos}{aviso_citas}{aviso_saludo}{aviso_ticket}{aviso_prerequisito}
+unicamente con la causa si el contexto tambien contiene la solucion.{aviso_sinonimos}{aviso_multiples_casos}{aviso_citas}{aviso_saludo}{aviso_ticket}{aviso_prerequisito}{aviso_apertura_forzada}
 
 Contexto del manual:
 {contexto}
@@ -1401,6 +1421,11 @@ def _resolver_confirmacion_error(contexto_error, confirmacion):
         "pendiente_confirmacion": None,
     }
 
+
+UMBRAL_AMBIGUEDAD_GAP = 0.02
+MIN_CANDIDATOS_AMBIGUOS = 2
+
+
 def _es_titulo_intro(titulo):
     """
     True si el titulo corresponde al tramo intro real de una seccion (sin
@@ -1419,9 +1444,6 @@ def _es_titulo_intro(titulo):
     base_norm = base.strip().rstrip(":").strip().lower()
     sub_norm = sub.strip().rstrip(":").strip().lower()
     return base_norm == sub_norm
-
-UMBRAL_AMBIGUEDAD_GAP = 0.02
-MIN_CANDIDATOS_AMBIGUOS = 2
 
 
 def _detectar_ambiguedad_por_dispersion(chunks):
