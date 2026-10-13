@@ -2,7 +2,7 @@ import random
 import string
 from datetime import datetime, timedelta
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, JSON
 from sqlalchemy.orm import relationship
 
 from .db import Base
@@ -133,3 +133,27 @@ class UpdateDocument(Base):
     @property
     def created_by_name(self):
         return self.creator.username if self.creator else None
+
+
+class VideoGenerationJob(Base):
+    __tablename__ = "video_generation_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    titulo = Column(String, nullable=False)
+    descripcion_inconveniente = Column(Text, nullable=False)
+    solucion = Column(Text, nullable=False)
+    puntos_a_considerar = Column(Text, nullable=True)
+    pasos_json = Column(JSON, nullable=True)  # [{"texto": str, "imagen_url": str|None}, ...], en orden
+    imagenes = Column(JSON, nullable=True, default=list)  # URLs de imagenes de respaldo subidas (compatibilidad/registro)
+    guion_json = Column(JSON, nullable=True)  # guion final usado para el timeline, para auditoria/debug
+    shotstack_render_id = Column(String, nullable=True, index=True)
+    estado = Column(String, nullable=False, default="pendiente")  # pendiente | procesando | completado | fallido
+    video_url = Column(String, nullable=True)
+    video_id = Column(Integer, ForeignKey("videos.id", ondelete="SET NULL"), nullable=True)
+    error_mensaje = Column(Text, nullable=True)
+    creado_por = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    creator = relationship("User", foreign_keys=[creado_por])
+    video = relationship("Video", foreign_keys=[video_id])

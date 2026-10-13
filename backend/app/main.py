@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .database import models
 from .database.db import engine
 from .database.db import ensure_schema_columns
-from .routers import auth, chat, manual, admin_users, errors, videos, updates
+from .routers import auth, chat, manual, admin_users, errors, videos, updates, video_generation
 
 models.Base.metadata.create_all(bind=engine)
 ensure_schema_columns()
@@ -38,6 +38,10 @@ tags_metadata = [
         "name": "Actualizaciones",
         "description": "Administracion e indexacion de documentos PDF. Requiere privilegio mayor.",
     },
+    {
+        "name": "Generación de video tutoriales",
+        "description": "Genera video tutoriales automáticamente a partir de un reporte de error, usando Shotstack.",
+    },
 ]
 
 app = FastAPI(
@@ -66,6 +70,7 @@ api_router.include_router(admin_users.router)
 api_router.include_router(errors.router)
 api_router.include_router(videos.router)
 api_router.include_router(updates.router)
+api_router.include_router(video_generation.router)
 
 @api_router.get(
     "/",

@@ -4,6 +4,7 @@ const NAV_ITEMS = [
   { id: 'inicio', label: 'Inicio', minRole: 1, icon: 'home' },
   { id: 'usuarios', label: 'Usuarios', minRole: 2, icon: 'users' },
   { id: 'videos', label: 'Administrar Videos', minRole: 2, icon: 'video' },
+  { id: 'video-tutoriales', label: 'Video Tutoriales', minRole: 2, icon: 'magic' },
   { id: 'actualizaciones', label: 'Actualizaciones PDF', minRole: 2, icon: 'document' },
   { id: 'errores-frecuentes', label: 'Errores Frecuentes', minRole: 1, icon: 'warning' },
 ]
@@ -25,6 +26,13 @@ function NavIcon({ name }) {
       <svg className="h-6 w-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
         <rect x="3" y="5" width="18" height="14" rx="2" />
         <path d="m10 9 5 3-5 3Z" />
+      </svg>
+    )
+  }
+  if (name === 'magic') {
+    return (
+      <svg className="h-6 w-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8" strokeLinecap="round" />
       </svg>
     )
   }
