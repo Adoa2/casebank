@@ -1,3 +1,5 @@
+// Panel decorativo de la columna izquierda en las vistas de autenticación:
+// muestra marca, descripción de Casey y carrusel del equipo técnico.
 import { useEffect, useState } from 'react'
 import caseyImage from '../assets/casey_saludo.png'
 import logoImage from '../assets/logo_black.png'
@@ -25,12 +27,14 @@ function findProfile(name) {
   return entry?.[1]
 }
 
+/** Panel decorativo de autenticación: presentación de Casey y carrusel del equipo técnico. */
 export default function BrandPanel() {
   const [carouselSlide, setCarouselSlide] = useState(0)
   const teamPages = Math.ceil(team.length / 5)
   const totalSlides = teamPages + 1
   const visibleTeam = carouselSlide > 0 ? team.slice((carouselSlide - 1) * 5, carouselSlide * 5) : []
 
+  // Avance automático cada 10 s; reinicia si cambia totalSlides
   useEffect(() => {
     const interval = window.setInterval(() => {
       setCarouselSlide((current) => (current + 1) % totalSlides)

@@ -1,3 +1,4 @@
+// Modal de creación y edición de videos formativos con combos encadenados de sección del manual.
 import { useEffect, useMemo, useState } from 'react'
 import { fetchManualStructure } from '../api/manual'
 import { buildJerarquiaAnidada } from '../utils/manualTree'
@@ -17,6 +18,7 @@ function Field({ label, hint, children }) {
   return <div><label className="mb-1.5 block text-sm font-semibold text-[#17213e]">{label} <span className="text-red-500">*</span></label>{children}{hint && <p className="mt-1.5 text-xs text-slate-500">{hint}</p>}</div>
 }
 
+/** Modal para crear o editar un video formativo vinculado a una sección del manual. */
 export default function VideoFormModal({ mode = 'create', initialData, onClose, onSubmit }) {
   const isEdit = mode === 'edit'
   const [titulo, setTitulo] = useState(initialData?.titulo || '')

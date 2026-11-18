@@ -1,3 +1,4 @@
+/** Convierte la lista plana de secciones en un árbol dos niveles (capítulo > sub-secciones). */
 export function buildManualTree(secciones) {
   const chapters = []
   let currentChapter = null
@@ -13,6 +14,7 @@ export function buildManualTree(secciones) {
       continue
     }
 
+    // Secciones sin capítulo padre van bajo un nodo "Introducción" implícito
     if (!currentChapter) {
       currentChapter = { id: 'sec-sin-capitulo', title: 'Introducción', subchapters: [] }
       chapters.push(currentChapter)
@@ -33,10 +35,7 @@ export function buildManualTree(secciones) {
   return chapters
 }
 
-// Reconstruye la jerarquia real (capitulo > seccion > subseccion > ...)
-// usando el campo "nivel", en vez de aplanar todo bajo el capitulo como
-// hace buildManualTree. Se usa para los combos encadenados del formulario
-// de videos formativos.
+/** Reconstruye la jerarquía real (capítulo > sección > subsección) para combos encadenados de videos. */
 export function buildJerarquiaAnidada(secciones) {
   const raiz = []
   const pila = [] // { nivel, nodo }
@@ -49,6 +48,7 @@ export function buildJerarquiaAnidada(secciones) {
       hijos: [],
     }
 
+    // Desapilar todos los nodos con nivel >= al actual para encontrar el padre correcto
     while (pila.length && pila[pila.length - 1].nivel >= seccion.nivel) {
       pila.pop()
     }

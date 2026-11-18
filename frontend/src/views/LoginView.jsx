@@ -1,15 +1,18 @@
+// Formulario de inicio de sesión con manejo de error y aviso de bienvenida.
 import { useEffect, useState } from 'react'
 import AuthField from '../components/AuthField'
 import AuthMessage from '../components/AuthMessage'
 import { login } from '../api/auth'
 import { setAuthData } from '../api/authToken'
 
+/** Vista de inicio de sesión: formulario de credenciales con manejo de errores y redirección. */
 export default function LoginView({ notice, onConsumeNotice, onGoRegister, onGoForgot, onLoginSuccess }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [message, setMessage] = useState(null)
   const [loading, setLoading] = useState(false)
 
+  // Mostrar aviso de otra pantalla (p.ej. "cuenta registrada") al entrar
   useEffect(() => {
     if (notice) {
       setMessage(notice)

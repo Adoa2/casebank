@@ -1,3 +1,5 @@
+// Barra superior del dashboard con título de sección, logo y botón de inicio.
+/** Barra flotante de herramientas de página con botón de regreso al inicio. */
 export default function PageToolbar({ onGoHome }) {
   return (
     <div className="grid grid-cols-2 items-center gap-3 border-b border-line bg-white px-3 py-3 sm:grid-cols-[1fr_auto_1fr] sm:px-6 sm:py-4">

@@ -1,3 +1,4 @@
+# Gestión de errores frecuentes: CRUD, subida de evidencia y aprobación con indexado en RAG.
 import time
 import uuid
 from datetime import datetime
@@ -96,12 +97,17 @@ def subir_imagen_evidencia(
     file: UploadFile = File(...),
     current_user: models.User = Depends(auth.get_current_admin),
 ):
+    """
+    Sube una imagen (JPG/PNG ≤ 5 MB) a Supabase Storage con nombre UUID
+    y devuelve la URL pública para usarla en imagen_url del error.
+    """
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         raise HTTPException(
             status_code=500,
             detail="Supabase Storage no esta configurado (SUPABASE_URL/SUPABASE_SERVICE_KEY faltantes).",
         )
 
+    # Solo JPG/PNG para mantener consistencia visual en el chat
     extension = EXTENSIONES_PERMITIDAS.get(file.content_type)
     if not extension:
         raise HTTPException(
@@ -113,6 +119,7 @@ def subir_imagen_evidencia(
     if len(contenido) > MAX_TAMANO_IMAGEN_BYTES:
         raise HTTPException(status_code=400, detail="La imagen no debe superar los 5 MB.")
 
+    # UUID como nombre evita colisiones y oculta metadatos del cliente
     nombre_archivo = f"{uuid.uuid4().hex}.{extension}"
     url_subida = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_STORAGE_BUCKET}/{nombre_archivo}"
 
@@ -149,12 +156,17 @@ def crear_error(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_admin),
 ):
+    """
+    Crea un error en estado 'pendiente'. Si tiene_diagnostico, persiste las opciones
+    en ErrorDiagnosticoOpcion con su orden. El error queda pendiente hasta que un revisor lo apruebe.
+    """
     if data.tiene_evidencia and not data.imagen_url:
         raise HTTPException(
             status_code=400,
             detail="Debes subir una imagen de evidencia antes de guardar el error.",
         )
 
+    # Descartar opciones vacías antes de validar el mínimo de 2
     opciones_validas = [o for o in data.diagnostico_opciones if o.pregunta.strip() and o.respuesta.strip()]
     if data.tiene_diagnostico and len(opciones_validas) < 2:
         raise HTTPException(status_code=400, detail="Agrega al menos dos opciones de diagnóstico, cada una con su pregunta y respuesta.")
@@ -162,7 +174,7 @@ def crear_error(
     payload = data.model_dump(exclude={"diagnostico_opciones"})
     nuevo = models.ErrorReport(**payload, creado_por=current_user.id)
     db_session.add(nuevo)
-    db_session.flush()
+    db_session.flush()  # obtener nuevo.id antes de insertar las opciones
 
     if data.tiene_diagnostico:
         for indice, opcion in enumerate(opciones_validas):
@@ -188,6 +200,7 @@ def listar_errores(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_admin),
 ):
+    """Devuelve todos los errores (cualquier estado) ordenados del más reciente al más antiguo."""
     return (
         db_session.query(models.ErrorReport)
         .options(
@@ -209,6 +222,7 @@ def listar_pendientes(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_reviewer),
 ):
+    """Devuelve solo los errores en estado 'pendiente', para la cola de revisión."""
     return (
         db_session.query(models.ErrorReport)
         .options(
@@ -234,6 +248,10 @@ def revisar_error(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_reviewer),
 ):
+    """
+    Aprueba o rechaza un error pendiente. Si se aprueba, genera su embedding
+    y lo inserta en fragmentos_errores para que la IA lo use al responder.
+    """
     error = db_session.query(models.ErrorReport).filter(models.ErrorReport.id == error_id).first()
     if not error:
         raise HTTPException(status_code=404, detail="Error no encontrado")
@@ -246,6 +264,7 @@ def revisar_error(
     db_session.commit()
     db_session.refresh(error)
 
+    # El indexado es independiente del commit; si falla no deshacemos la aprobación
     if data.aprobar:
         try:
             _indexar_error(error)
@@ -272,10 +291,16 @@ def editar_error(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_admin),
 ):
+    """
+    Actualiza campos del error. Si ya estaba aprobado, re-indexa el embedding
+    para que la IA use el contenido actualizado. Las opciones de diagnóstico
+    se reemplazan completas (delete + insert) si se envía el campo.
+    """
     error = db_session.query(models.ErrorReport).filter(models.ErrorReport.id == error_id).first()
     if not error:
         raise HTTPException(status_code=404, detail="Error no encontrado")
 
+    # Solo actualizar campos que el cliente envió explícitamente
     datos = data.model_dump(exclude_unset=True, exclude={"diagnostico_opciones"})
 
     tiene_evidencia_final = datos.get("tiene_evidencia", error.tiene_evidencia)
@@ -296,6 +321,7 @@ def editar_error(
         if tiene_diagnostico_final and len(opciones_validas) < 2:
             raise HTTPException(status_code=400, detail="Agrega al menos dos opciones de diagnóstico, cada una con su pregunta y respuesta.")
 
+        # Reemplazar opciones completas para evitar manejo de diffs
         db_session.query(models.ErrorDiagnosticoOpcion).filter(
             models.ErrorDiagnosticoOpcion.reporte_id == error.id
         ).delete()
@@ -310,6 +336,7 @@ def editar_error(
     db_session.commit()
     db_session.refresh(error)
 
+    # Re-indexar solo si ya estaba visible para la IA
     if error.estado == "aprobado":
         try:
             _indexar_error(error)
@@ -334,6 +361,7 @@ def eliminar_error(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_admin),
 ):
+    """Elimina el error; los embeddings en fragmentos_errores se borran por ON DELETE CASCADE."""
     error = db_session.query(models.ErrorReport).filter(models.ErrorReport.id == error_id).first()
     if not error:
         raise HTTPException(status_code=404, detail="Error no encontrado")

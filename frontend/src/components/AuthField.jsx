@@ -1,5 +1,7 @@
+// Campo de formulario reutilizable para vistas de autenticación, con soporte de mostrar/ocultar contraseña.
 import { useState } from 'react'
 
+/** Campo de formulario con icono, label y toggle mostrar/ocultar para campos de contraseña. */
 export default function AuthField({
   id,
   label,
@@ -13,6 +15,7 @@ export default function AuthField({
   ...rest
 }) {
   const [revealed, setRevealed] = useState(false)
+  // Cambiar input a text/password según el toggle de visibilidad
   const isPassword = type === 'password'
 
   return (
@@ -26,6 +29,7 @@ export default function AuthField({
             <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="8" r="3.5" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></svg>
           )}
         </span>
+        {/* Cuando el toggle está activo, cambiar type a 'text' para mostrar el texto plano */}
         <input
           id={id}
           name={id}

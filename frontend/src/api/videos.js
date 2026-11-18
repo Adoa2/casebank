@@ -1,3 +1,4 @@
+// CRUD de videos formativos y consulta por sección.
 import { API_BASE_URL } from '../config'
 import { authHeaders, parseApiResponse } from './authToken'
 
@@ -8,6 +9,7 @@ export async function listVideos() {
   return parseApiResponse(res)
 }
 
+/** Devuelve los videos vinculados a una sección específica del manual. */
 export async function listVideosBySeccion(seccionId) {
   const res = await fetch(`${API_BASE_URL}/api/videos/por-seccion/${seccionId}`, {
     headers: authHeaders(),
@@ -15,6 +17,7 @@ export async function listVideosBySeccion(seccionId) {
   return parseApiResponse(res)
 }
 
+/** Crea un video formativo vinculado a una sección del manual. */
 export async function createVideo(data) {
   const res = await fetch(`${API_BASE_URL}/api/videos`, {
     method: 'POST',
@@ -24,6 +27,7 @@ export async function createVideo(data) {
   return parseApiResponse(res)
 }
 
+/** Actualiza los datos de un video existente. */
 export async function updateVideo(id, data) {
   const res = await fetch(`${API_BASE_URL}/api/videos/${id}`, {
     method: 'PUT',
@@ -33,6 +37,7 @@ export async function updateVideo(id, data) {
   return parseApiResponse(res)
 }
 
+/** Elimina un video del sistema. */
 export async function deleteVideo(id) {
   const res = await fetch(`${API_BASE_URL}/api/videos/${id}`, {
     method: 'DELETE',

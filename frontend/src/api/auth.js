@@ -1,3 +1,5 @@
+// Llamadas a la API de autenticación (registro, login, recuperación de contraseña).
+// No usa authToken.js porque estas rutas no requieren JWT.
 import { API_BASE_URL } from '../config'
 
 const FIELD_MESSAGES = {
@@ -7,6 +9,7 @@ const FIELD_MESSAGES = {
   contrasena: 'La contraseña debe incluir 8 caracteres, mayúscula, minúscula, número y carácter especial.',
 }
 
+/** Extrae el mensaje de error del cuerpo de la respuesta y lo convierte en un Error. */
 async function parseError(res, fallback) {
   const data = await res.json().catch(() => ({}))
 
@@ -22,6 +25,7 @@ async function parseError(res, fallback) {
   return new Error(fallback)
 }
 
+/** Autentica con nombre de usuario y contraseña. Devuelve el token JWT y datos del usuario. */
 export async function login(username, password) {
   const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
     method: 'POST',
@@ -36,6 +40,7 @@ export async function login(username, password) {
   return res.json()
 }
 
+/** Crea una nueva cuenta de usuario en el sistema. */
 export async function register(nombre_usuario, correo, contrasena, nacionalidad) {
   const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
     method: 'POST',
@@ -50,6 +55,7 @@ export async function register(nombre_usuario, correo, contrasena, nacionalidad)
   return res.json()
 }
 
+/** Solicita el envío de un código de recuperación al correo del usuario. */
 export async function forgotPassword(correo) {
   const res = await fetch(`${API_BASE_URL}/api/auth/forgot-password`, {
     method: 'POST',
@@ -64,6 +70,7 @@ export async function forgotPassword(correo) {
   return res.json()
 }
 
+/** Verifica el código recibido por correo y establece la nueva contraseña. */
 export async function resetPassword(correo, codigo, nuevaContrasena) {
   const res = await fetch(`${API_BASE_URL}/api/auth/reset-password`, {
     method: 'POST',

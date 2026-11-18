@@ -1,3 +1,5 @@
+# Modelos ORM de la base de datos (SQLAlchemy).
+# Mapean las tablas de PostgreSQL y son usados por todos los routers y servicios.
 import random
 import string
 from datetime import datetime, timedelta
@@ -9,6 +11,7 @@ from .db import Base
 
 
 class User(Base):
+    """Cuenta de usuario del sistema. rol: 0 = usuario, 1 = admin, 2 = privilegio mayor."""
     __tablename__ = "usuarios"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -22,6 +25,7 @@ class User(Base):
 
 
 class PasswordResetCode(Base):
+    """Código de 6 dígitos para recuperación de contraseña, válido 15 minutos."""
     __tablename__ = "codigos_recuperacion_contrasena"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -35,14 +39,20 @@ class PasswordResetCode(Base):
 
     @staticmethod
     def generate_code() -> str:
+        """Genera un código numérico de 6 dígitos."""
         return "".join(random.choices(string.digits, k=6))
 
     @staticmethod
     def new_expiration(minutes: int = 15) -> datetime:
+        """Devuelve la fecha de expiración a partir de ahora."""
         return datetime.utcnow() + timedelta(minutes=minutes)
 
 
 class ErrorReport(Base):
+    """
+    Error frecuente del sistema. Flujo: pendiente → aprobado (indexado en RAG) | rechazado.
+    Si tiene_diagnostico es True, Casey pregunta la acción antes de dar la solución.
+    """
     __tablename__ = "reportes_errores"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -76,14 +86,17 @@ class ErrorReport(Base):
 
     @property
     def creado_por_nombre(self):
+        """Nombre del usuario que creó el error (desde la relación ORM)."""
         return self.creator.nombre_usuario if self.creator else None
 
     @property
     def revisado_por_nombre(self):
+        """Nombre del usuario que revisó el error (desde la relación ORM)."""
         return self.reviewer.nombre_usuario if self.reviewer else None
 
 
 class ErrorDiagnosticoOpcion(Base):
+    """Una opción del diagnóstico interactivo de un error: etiqueta que ve el usuario + respuesta que Casey muestra."""
     __tablename__ = "error_diagnostico_opciones"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -96,6 +109,7 @@ class ErrorDiagnosticoOpcion(Base):
 
 
 class Video(Base):
+    """Video formativo vinculado a una sección del manual (seccion_id)."""
     __tablename__ = "videos"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -112,6 +126,10 @@ class Video(Base):
 
 
 class UpdateDocument(Base):
+    """
+    Documento PDF de actualización del manual, con sus fragmentos indexados en RAG.
+    aplicabilidad controla qué usuarios lo ven: 'honduras' | 'dominicana' | 'ambas'.
+    """
     __tablename__ = "documentos_actualizacion"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -135,6 +153,7 @@ class UpdateDocument(Base):
 
     @property
     def creado_por_nombre(self):
+        """Nombre del usuario que subió el documento (desde la relación ORM)."""
         return self.creator.nombre_usuario if self.creator else None
 
 

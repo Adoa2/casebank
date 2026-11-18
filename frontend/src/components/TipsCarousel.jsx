@@ -1,3 +1,4 @@
+// Carrusel de consejos de uso que se muestra en la pantalla de bienvenida del dashboard.
 import { useEffect, useState } from 'react'
 
 const TIPS = [
@@ -12,10 +13,12 @@ const TIPS = [
 
 const TIP_DURATION = 7000
 
+/** Carrusel de consejos de uso del sistema para la página de inicio del manual. */
 export default function TipsCarousel() {
   const [index, setIndex] = useState(0)
   const [isPaused, setIsPaused] = useState(false)
 
+  // Reiniciar el timer cada vez que cambia el índice (encadenamiento en lugar de setInterval)
   useEffect(() => {
     if (isPaused) return undefined
 

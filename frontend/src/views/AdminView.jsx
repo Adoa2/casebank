@@ -1,3 +1,4 @@
+// Shell del panel de administración: enruta entre Home, Usuarios, Errores, Videos y Actualizaciones.
 import { useState } from 'react'
 import Header from '../components/Header'
 import AdminSidebar from '../components/AdminSidebar'
@@ -9,11 +10,13 @@ import VideosSection from '../components/VideosSection'
 import AdminHome from '../components/AdminHome'
 import UpdatesSection from '../components/UpdatesSection'
 
+/** Vista principal del panel administrativo: orquesta el sidebar y la sección activa. */
 export default function AdminView({ onLogout, onGoDashboard, role = 0 }) {
   const [activeSection, setActiveSection] = useState('inicio')
   const [isViewingDetail, setIsViewingDetail] = useState(false)
 
   function handleSelectSection(id) {
+    // Bloquear navegación a secciones con restricción de rol antes de intentar cargarlas
     if ((id === 'usuarios' || id === 'videos' || id === 'actualizaciones') && role < 2) return
     setIsViewingDetail(false)
     setActiveSection(id)

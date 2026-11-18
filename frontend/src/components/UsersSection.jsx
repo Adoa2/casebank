@@ -1,3 +1,4 @@
+// Tabla CRUD de usuarios del sistema en el panel de administración.
 import { useEffect, useMemo, useState } from 'react'
 import { listUsers, createUser, updateUser, deleteUser } from '../api/adminUsers'
 import { getUsername } from '../api/authToken'
@@ -78,6 +79,7 @@ function NationalityBadge({ nationality }) {
 }
 
 function ActionButtons({ user, isSelf, busy, onEdit, onToggle, onDelete }) {
+  // Bloquear desactivar/eliminar si el usuario es la sesión activa
   const baseClass = 'grid h-9 w-9 place-items-center rounded-lg border transition focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:cursor-not-allowed disabled:opacity-30'
   return (
     <div className="flex items-center justify-end gap-2">
@@ -118,6 +120,7 @@ function ActionButtons({ user, isSelf, busy, onEdit, onToggle, onDelete }) {
   )
 }
 
+/** Sección admin de usuarios: tabla con búsqueda, filtros de rol/estado y CRUD completo. */
 export default function UsersSection() {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -129,6 +132,7 @@ export default function UsersSection() {
   const [actionError, setActionError] = useState(null)
   const [busyId, setBusyId] = useState(null)
 
+  // Identificar al usuario activo para bloquear acciones sobre sí mismo
   const currentUsername = getUsername()
 
   async function loadUsers() {

@@ -1,3 +1,4 @@
+// Pantalla de inicio del panel admin: métricas resumen de usuarios, errores y actualizaciones.
 import { useEffect, useMemo, useState } from 'react'
 import { listUsers } from '../api/adminUsers'
 import { listErrors } from '../api/errors'
@@ -58,6 +59,7 @@ function formatDate(value) {
   return new Date(value).toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+/** Dashboard de inicio del panel admin: métricas resumen, accesos rápidos y actividad reciente. */
 export default function AdminHome({ role, onNavigate, onGoManual }) {
   const [data, setData] = useState({ users: [], videos: [], errors: [] })
   const [loading, setLoading] = useState(true)
@@ -67,6 +69,7 @@ export default function AdminHome({ role, onNavigate, onGoManual }) {
 
   useEffect(() => {
     let active = true
+    // Cargar datos en paralelo; el flag `active` evita actualizar estado en un componente desmontado
     async function loadDashboard() {
       setLoading(true)
       setLoadError(null)
@@ -87,6 +90,7 @@ export default function AdminHome({ role, onNavigate, onGoManual }) {
     return () => { active = false }
   }, [privileged])
 
+  // Mezcla usuarios, videos y errores en una timeline unificada ordenada por fecha
   const activities = useMemo(() => {
     const entries = [
       ...data.users.map((user) => ({ id: `user-${user.id}`, type: 'users', title: 'Se registró un nuevo usuario', detail: user.nombre_usuario, date: user.creado_en })),

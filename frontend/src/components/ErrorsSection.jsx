@@ -1,3 +1,4 @@
+// Tabla CRUD de errores frecuentes con flujo de revisión (aprobar/rechazar) y diagnóstico interactivo.
 import { useEffect, useMemo, useState } from 'react'
 import { listErrors, createError, updateError, deleteError, reviewError } from '../api/errors'
 import { listUsers } from '../api/adminUsers'
@@ -67,6 +68,7 @@ function ViewButton({ onClick }) {
   )
 }
 
+/** Sección admin de errores frecuentes: lista, vista de detalle, aprobación/rechazo y CRUD. */
 export default function ErrorsSection({ onDetailChange }) {
   const [errors, setErrors] = useState([])
   const [loading, setLoading] = useState(true)
@@ -77,6 +79,7 @@ export default function ErrorsSection({ onDetailChange }) {
   const [selectedError, setSelectedError] = useState(null)
   const [userNames, setUserNames] = useState({})
 
+  // rol >= 2 puede aprobar/rechazar; rol >= 1 puede editar y eliminar
   const canReview = getRole() >= 2
   const canEdit = getRole() >= 1
   const viewingDetail = Boolean(selectedError)

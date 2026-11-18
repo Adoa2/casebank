@@ -1,3 +1,4 @@
+// Vista de detalle de un error: pestañas con descripción, causa, solución e imagen de evidencia.
 import { useState } from 'react'
 
 const TABS = [
@@ -86,11 +87,13 @@ function ActionButton({ tone = 'neutral', icon, children, ...props }) {
   return <button type="button" className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg border px-4 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:cursor-not-allowed disabled:opacity-50 ${styles[tone]}`} {...props}><Icon name={icon} className="h-4 w-4" />{children}</button>
 }
 
+/** Vista detalle de un error con pestañas: descripción/causa, solución/diagnóstico y auditoría. */
 export default function ErrorDetail({ error, canReview, canEdit, userNames = {}, onBack, onReview, onEdit, onDelete }) {
   const [activeTab, setActiveTab] = useState('general')
   const [reviewing, setReviewing] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [actionError, setActionError] = useState(null)
+  // Derivar metadatos del error para evitar re-cálculos en el render
   const keywords = (error.palabras_clave || '').split(',').map((keyword) => keyword.trim()).filter(Boolean)
   const status = STATUS[error.estado] || STATUS.pendiente
   const creatorName = error.creado_por_nombre || userNames[error.creado_por] || 'No disponible'
@@ -153,6 +156,7 @@ export default function ErrorDetail({ error, canReview, canEdit, userNames = {},
           {TABS.map((tab) => <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold transition ${activeTab === tab.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-[#17213e] hover:text-blue-600'}`}>{tab.label}</button>)}
         </nav>
 
+        {/* Contenido de la pestaña activa */}
         <div className="px-5 py-5 sm:px-7 sm:py-6">
           {activeTab === 'general' && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

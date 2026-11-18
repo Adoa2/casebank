@@ -1,3 +1,4 @@
+# CRUD de usuarios del sistema accesible solo para administradores.
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -21,6 +22,7 @@ def listar_usuarios(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_admin),
 ):
+    """Devuelve todos los usuarios ordenados por id."""
     return db_session.query(models.User).order_by(models.User.id).all()
 
 
@@ -36,6 +38,7 @@ def crear_usuario(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_admin),
 ):
+    """Crea un usuario verificando unicidad de correo y nombre de usuario."""
     existe = db_session.query(models.User).filter(
         (func.lower(models.User.correo) == data.correo.lower())
         | (func.lower(models.User.nombre_usuario) == data.nombre_usuario.lower())
@@ -69,6 +72,7 @@ def actualizar_usuario(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_admin),
 ):
+    """Actualiza solo los campos provistos (correo, rol, estado, contraseña)."""
     usuario = db_session.query(models.User).filter(models.User.id == user_id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
@@ -100,6 +104,7 @@ def eliminar_usuario(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_admin),
 ):
+    """Elimina un usuario. Impide que el admin se elimine a sí mismo."""
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="No puedes eliminar tu propia cuenta")
 

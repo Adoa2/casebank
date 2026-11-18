@@ -1,3 +1,5 @@
+# Conexión a la base de datos y dependencia de sesión para FastAPI.
+# Incluye la creación manual de las tablas pgvector que SQLAlchemy no puede generar automáticamente.
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, inspect, text
@@ -43,6 +45,7 @@ def ensure_schema_columns():
 
 
 def get_db():
+    """Dependencia de FastAPI que provee y cierra una sesión de base de datos por request."""
     db = SessionLocal()
     try:
         yield db

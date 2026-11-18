@@ -1,3 +1,5 @@
+# Esquemas Pydantic para validación de entrada y serialización de salida de la API.
+# Separados de los modelos ORM para no exponer campos internos de la base de datos.
 from datetime import datetime
 import re
 from typing import Literal, Optional
@@ -32,6 +34,7 @@ class UserCreate(BaseModel):
     @field_validator("contrasena")
     @classmethod
     def validate_password_strength(cls, contrasena: str) -> str:
+        """Exige mayúscula, minúscula, dígito y carácter especial en la contraseña."""
         requirements = (
             re.search(r"[A-ZÁÉÍÓÚÑ]", contrasena),
             re.search(r"[a-záéíóúñ]", contrasena),
@@ -53,6 +56,7 @@ class UserResponse(BaseModel):
     nacionalidad: str = Field(..., description="Nacionalidad del usuario.")
 
     class Config:
+        """Habilita la construcción desde instancias ORM."""
         from_attributes = True
 
 
@@ -108,6 +112,7 @@ class UserAdminResponse(BaseModel):
     creado_en: datetime
 
     class Config:
+        """Habilita la construcción desde instancias ORM."""
         from_attributes = True
 
 
@@ -137,12 +142,14 @@ class DiagnosticoOpcionCreate(BaseModel):
 
 
 class DiagnosticoOpcionResponse(BaseModel):
+    """Opción de diagnóstico serializada para la respuesta de la API."""
     id: int
     pregunta: str
     respuesta: str
     orden: int
 
     class Config:
+        """Habilita la construcción desde instancias ORM."""
         from_attributes = True
 
 
@@ -208,6 +215,7 @@ class ErrorReportUpdate(BaseModel):
 
 
 class ErrorReportResponse(BaseModel):
+    """Error frecuente serializado para la API, incluyendo sus opciones de diagnóstico."""
     id: int
     titulo: str
     modulo: str
@@ -232,6 +240,7 @@ class ErrorReportResponse(BaseModel):
     diagnostico_opciones: list[DiagnosticoOpcionResponse] = []
 
     class Config:
+        """Habilita la construcción desde instancias ORM."""
         from_attributes = True
 
 
@@ -268,6 +277,7 @@ class VideoUpdate(BaseModel):
 
 
 class VideoResponse(BaseModel):
+    """Video formativo serializado para la API."""
     id: int
     titulo: str
     enlace: str
@@ -279,12 +289,14 @@ class VideoResponse(BaseModel):
     creado_en: datetime
 
     class Config:
+        """Habilita la construcción desde instancias ORM."""
         from_attributes = True
 
 
 # --- Documentos de actualizaciones ---
 
 class UpdateDocumentUpdate(BaseModel):
+    """Campos editables de un documento de actualización. Todos opcionales."""
     titulo: Optional[str] = Field(None, min_length=3, max_length=180)
     descripcion: Optional[str] = Field(None, min_length=5, max_length=3000)
     palabras_clave: Optional[str] = Field(None, min_length=2, max_length=1000)
@@ -297,6 +309,7 @@ class UpdateDocumentUpdate(BaseModel):
 
 
 class UpdateDocumentResponse(BaseModel):
+    """Documento de actualización serializado para la API, con datos del creador."""
     id: int
     titulo: str
     descripcion: str
@@ -315,4 +328,5 @@ class UpdateDocumentResponse(BaseModel):
     actualizado_en: datetime
 
     class Config:
+        """Habilita la construcción desde instancias ORM."""
         from_attributes = True

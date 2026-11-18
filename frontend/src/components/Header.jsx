@@ -1,6 +1,9 @@
+// Barra superior con logo, accesos directos (Inicio, Admin, Soporte) y botón de cierre de sesión.
 import logo from '../assets/logo.png'
 
+/** Barra superior de navegación: logo, enlace de soporte, acceso admin y botón de cerrar sesión. */
 export default function Header({ onLogout, isAdmin = false, onGoAdmin, onGoHome, showSupport = true, showLogo = true, adminShell = false }) {
+  // Detener propagación para evitar que clics en la barra activen manejadores del padre
   function handleAdminClick(e) {
     e.stopPropagation()
     onGoAdmin()
@@ -20,6 +23,7 @@ export default function Header({ onLogout, isAdmin = false, onGoAdmin, onGoHome,
     <header className={`header-gradient flex flex-shrink-0 items-center gap-2 px-3 shadow-sm sm:px-7 ${adminShell ? 'h-[72px] justify-end lg:h-20 lg:px-10' : 'h-16 justify-between'}`}>
       {showLogo && <img src={logo} alt="CaseBank" className="h-9 w-auto max-w-[145px] object-contain object-left sm:h-11 sm:max-w-none" />}
 
+      {/* Acciones visibles condicionalmente según el contexto (dashboard vs panel admin) */}
       <div className="flex items-center gap-1 sm:gap-2">
         {onGoHome && (
           <button

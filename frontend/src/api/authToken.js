@@ -1,15 +1,17 @@
-// frontend/src/api/authToken.js
-
+// Gestión del token JWT y datos de sesión en localStorage.
+// Centraliza lectura, escritura y limpieza para que ningún componente acceda directamente a localStorage.
 const TOKEN_KEY = 'casebank_token'
 const USERNAME_KEY = 'casebank_username'
 const ROLE_KEY = 'casebank_role'
 
 export const UNAUTHORIZED_EVENT = 'casebank:unauthorized'
 
+/** Devuelve el token JWT almacenado en localStorage, o null si no hay sesión activa. */
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY)
 }
 
+/** Devuelve el nombre de usuario de la sesión activa. */
 export function getUsername() {
   return localStorage.getItem(USERNAME_KEY)
 }
@@ -27,12 +29,14 @@ export function setAuthData({ access_token, nombre_usuario, rol }) {
   if (rol !== undefined && rol !== null) localStorage.setItem(ROLE_KEY, String(rol))
 }
 
+/** Elimina el token y los datos de sesión del localStorage. */
 export function clearAuthData() {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(USERNAME_KEY)
   localStorage.removeItem(ROLE_KEY)
 }
 
+/** Construye el objeto headers con el token Bearer para peticiones autenticadas. */
 export function authHeaders(extra = {}) {
   const token = getToken()
   return {
@@ -41,11 +45,16 @@ export function authHeaders(extra = {}) {
   }
 }
 
+/** Limpia la sesión y emite UNAUTHORIZED_EVENT para que App.jsx redirigir al login. */
 export function handleUnauthorized() {
   clearAuthData()
   window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
 }
 
+/**
+ * Interpreta la respuesta de la API: maneja 401 con cierre de sesión automático
+ * y convierte otros errores HTTP en excepciones con el mensaje del backend.
+ */
 export async function parseApiResponse(res) {
   if (res.status === 401) {
     handleUnauthorized()

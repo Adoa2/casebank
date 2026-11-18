@@ -47,6 +47,8 @@ GEMINI_GENERATE_URL = (
     f"{GEMINI_GENERATION_MODEL}:generateContent"
 )
 
+# EMBED_DIMENSION debe ser 768 en todos los puntos del sistema: build_vector_db.py,
+# errors.py y updates.py. Cambiar este valor requiere reindexar toda la base vectorial.
 EMBED_DIMENSION = 768  # debe coincidir con el usado en build_vector_db.py
 MAX_REINTENTOS = 5
 
@@ -277,6 +279,7 @@ SINONIMOS_DOMINIO = {
 
 
 def _debug(mensaje):
+    """Imprime mensajes de diagnóstico cuando DEBUG_RAG está activado."""
     if DEBUG_RAG:
         print(f"[DEBUG RAG] {mensaje}")
 
@@ -329,6 +332,7 @@ def _post_con_reintentos(url, body, max_reintentos=MAX_REINTENTOS, timeout=REQUE
                 timeout=timeout,
             )
         except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            # En Vercel serverless las conexiones colgadas son más frecuentes que en local
             ultimo_error = e
             espera = 2 ** intento
             print(f"  Timeout/error de conexion con Gemini ({type(e).__name__}), reintentando en {espera}s...")
@@ -372,6 +376,7 @@ def analizar_pregunta(pregunta, historial=None):
     flujo normal continua sin este enriquecimiento.
     """
     historial = historial or []
+    # Incluir solo los últimos 8 mensajes para no crecer el prompt indefinidamente
     historial_reciente = "\n".join(
         f"{'Usuario' if mensaje.get('role') == 'user' else 'Casey'}: {mensaje.get('text', '')[:1200]}"
         for mensaje in historial[-8:]
@@ -569,6 +574,7 @@ def search_relevant_chunks(pregunta, nationality=None, n_results=N_RESULTS, max_
     _debug(f"search_relevant_chunks: texto enviado a embed_query -> {pregunta!r}")
 
     query_embedding = embed_query(pregunta, max_reintentos=max_reintentos, timeout=timeout)
+    # pgvector necesita el vector como literal de texto [v1,v2,...]
     embedding_literal = "[" + ",".join(str(v) for v in query_embedding) + "]"
 
     conn = psycopg2.connect(DATABASE_URL)
@@ -651,6 +657,7 @@ def _obtener_chunk_error(error_id):
     porque el usuario confirmo que es el suyo, o porque se va a probar como
     siguiente candidato).
     """
+    # LIMIT 1: solo necesitamos un fragmento para obtener los metadatos del error
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
     try:
@@ -724,6 +731,7 @@ def _obtener_diagnostico_error(error_id):
         cur.close()
         conn.close()
 
+    # Requiere al menos 2 opciones para que el diagnóstico tenga sentido
     if len(opciones) < 2:
         return None
 
@@ -796,6 +804,7 @@ def _resolver_seleccion_diagnostico(contexto_diagnostico, opcion_id):
         }
 
     respuesta = _sanitizar_formato(opcion["respuesta"])
+    # Anexar URL de soporte si la opción lo requiere, como en el flujo normal de errores
     if opcion["requiere_ticket"]:
         respuesta = (
             respuesta.rstrip()
@@ -839,6 +848,7 @@ def _obtener_chunk_seccion(seccion_id):
     if not fila:
         return None
 
+    # Desestructurar en variables nombradas para claridad antes de construir el dict
     titulo, pagina_inicio, pagina_fin, contenido, imagenes, row_id = fila
     return {
         "documento": contenido,
@@ -872,6 +882,7 @@ SECCIONES_PREREQUISITO = {}
 
 
 def _agregar_chunks_prerequisito(chunks):
+    """Inyecta chunks-ancla de prerequisito (SECCIONES_PREREQUISITO) si no están ya presentes."""
     ids_presentes = {int(c["metadata"]["seccion_id"]) for c in chunks if c["metadata"]["origen"] == "manual"}
     agregados = []
 
@@ -880,6 +891,7 @@ def _agregar_chunks_prerequisito(chunks):
             continue
 
         titulo = c["metadata"].get("titulo") or ""
+        # Los sub-chunks con " — " ya tienen título compuesto; solo los capítulos-raíz definen prerequisitos
         if " — " in titulo:
             continue
 
@@ -928,6 +940,7 @@ _AFILIADO_INTENT_EXCLUSIONES_REGEX = re.compile(
 
 
 def _forzar_chunk_apertura(chunks, pregunta):
+    """Fuerza chunks intro de apertura (APERTURA_INTENT_REGEX) al frente de la lista si detecta la intención."""
     for seccion_id, patron in APERTURA_INTENT_REGEX.items():
         if not patron.search(pregunta):
             continue
@@ -1047,6 +1060,7 @@ def _aplicar_boost_sinonimos(chunks, pregunta):
     for c in chunks:
         titulo = (c["metadata"].get("titulo") or "").lower()
         distance = c["distance"]
+        # Reducir distancia si el título del chunk contiene un sinónimo relevante
         if titulo and any(t in titulo for t in terminos_relevantes):
             distance = max(0.0, distance - BOOST_SINONIMO_TITULO)
         ajustados.append({**c, "distance": distance})
@@ -1089,6 +1103,7 @@ def rerank_chunks(pregunta, chunks, max_chunks=MAX_CHUNKS_USADOS):
     if not chunks:
         return []
 
+    # Limitar a 12 candidatos para no exceder el contexto del prompt de reranking
     candidatos = chunks[:12]
     bloques = []
     for indice, chunk in enumerate(candidatos, start=1):
@@ -1164,6 +1179,7 @@ def _fuentes_unicas(chunks_citados, chunks_disponibles=None):
     """
     disponibles = chunks_disponibles if chunks_disponibles is not None else chunks_citados
 
+    # Pre-calcular el rango completo de páginas por sección usando todos los fragmentos recuperados
     rangos = {}
     for c in disponibles:
         meta = c["metadata"]
@@ -1239,6 +1255,7 @@ Responde en espanol:"""
     chunks_prerequisito = [c for c in chunks if c["metadata"].get("es_prerequisito")]
     chunks_apertura_forzada = [c for c in chunks if c["metadata"].get("es_apertura_forzada")]
 
+    # Numerar las fuentes en el prompt para que el modelo pueda referirlas en FUENTES_USADAS
     bloques = [f"[FUENTE {i}]\n{c['documento']}" for i, c in enumerate(chunks, start=1)]
     contexto = "\n\n---\n\n".join(bloques)
 
@@ -1494,6 +1511,7 @@ def _extraer_fuentes_usadas(respuesta, total_chunks):
         return respuesta_limpia, set()
 
     indices = set()
+    # Parsear índices separados por coma o espacio; ignorar no-numéricos y fuera de rango
     for parte in re.split(r"[,\s]+", crudo):
         parte = parte.strip()
         if parte.isdigit():
@@ -1582,6 +1600,7 @@ def _resolver_confirmacion_error(contexto_error, confirmacion):
     intento = contexto_error.get("intento", 1)
 
     if confirmacion:
+        # Si el error tiene diagnóstico interactivo configurado, usarlo en vez de generar con LLM
         opciones_diagnostico = _obtener_diagnostico_error(error_id_actual)
         if opciones_diagnostico:
             return _iniciar_diagnostico(pregunta_original, error_id_actual, opciones_diagnostico)
@@ -1700,6 +1719,7 @@ def _detectar_ambiguedad_por_dispersion(chunks):
     presentan al usuario, priorizando siempre las de menor distancia, para
     no abrumarlo con una lista larga de opciones poco relevantes.
     """
+    # Solo los chunks "intro" (primer chunk de cada sección) son comparables para medir dispersión
     candidatos_intro = []
     secciones_vistas = set()
     for c in chunks:
@@ -1716,6 +1736,7 @@ def _detectar_ambiguedad_por_dispersion(chunks):
     if len(candidatos_intro) < MIN_CANDIDATOS_AMBIGUOS:
         return None
 
+    # Medir gap siempre contra el mejor candidato, no contra el anterior
     empatados = [candidatos_intro[0]]
     for c in candidatos_intro[1:]:
         if c["distance"] - candidatos_intro[0]["distance"] <= UMBRAL_AMBIGUEDAD_GAP:
@@ -1802,6 +1823,7 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
         return respuesta_estructurada
 
     _t_inicio = time.time()
+    # Lanzar análisis de pregunta y búsqueda vectorial en paralelo para reducir latencia
     with ThreadPoolExecutor(max_workers=2) as executor:
         futuro_analisis = executor.submit(analizar_pregunta, question, historial)
         futuro_chunks = executor.submit(search_relevant_chunks, question, nationality)
@@ -1900,6 +1922,7 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
         }
 
     def _umbral_para(chunk):
+        """Umbral de distancia diferenciado: errores admiten mayor distancia que chunks del manual."""
         return MAX_DISTANCE_ERROR if chunk["metadata"]["origen"] == "error" else MAX_DISTANCE_ABSOLUTE
 
     if intencion_tipos_clara:
@@ -1925,6 +1948,7 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
 
     _debug(f"answer_question: chunks tras umbral MAX_DISTANCE_ABSOLUTE={MAX_DISTANCE_ABSOLUTE} -> {len(chunks)} chunk(s)")
 
+    # Errores con imagen de evidencia abren el flujo de confirmación antes de generar respuesta
     candidatos_evidencia = sorted(
         (c for c in chunks if c["metadata"]["origen"] == "error" and c["metadata"].get("tiene_evidencia")),
         key=lambda c: c["distance"],
@@ -1960,6 +1984,7 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
 
     opciones_aclaracion = []
     sugerir_soporte = False
+    # Cuando el modelo no encontró información, ofrecer temas relacionados o sugerir soporte
     if sin_informacion or not chunks:
         fuentes = []
         imagenes = []

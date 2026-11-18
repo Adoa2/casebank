@@ -1,6 +1,8 @@
+// Índice lateral del manual: árbol de capítulos y sub-secciones con scroll automático al elemento activo.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import caseyQuestionImage from '../assets/casey_preg.png'
 
+/** Árbol de navegación del manual: capítulos y subapartados colapsables con búsqueda integrada. */
 export default function ManualSidebar({ chapters, loading, error, selectedId, resetSignal, onSelect, onCollapse }) {
   const [openChapters, setOpenChapters] = useState(new Set())
   const [query, setQuery] = useState('')

@@ -1,3 +1,4 @@
+# CRUD de videos formativos vinculados a secciones del manual. Requiere privilegio mayor (rol >= 2).
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -23,6 +24,7 @@ def crear_video(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_reviewer),
 ):
+    """Registra un nuevo video formativo asignando el id del usuario actual como creador."""
     nuevo = models.Video(**data.model_dump(), creado_por=current_user.id)
     db_session.add(nuevo)
     db_session.commit()
@@ -41,6 +43,7 @@ def listar_videos(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_reviewer),
 ):
+    """Devuelve todos los videos, del más reciente al más antiguo."""
     return db_session.query(models.Video).order_by(models.Video.creado_en.desc()).all()
 
 
@@ -56,6 +59,7 @@ def listar_videos_por_seccion(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    """Devuelve los videos de una sección específica, ordenados cronológicamente."""
     return db_session.query(models.Video).filter(
         models.Video.seccion_id == seccion_id
     ).order_by(models.Video.creado_en.asc()).all()
@@ -73,6 +77,7 @@ def editar_video(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_reviewer),
 ):
+    """Actualiza solo los campos provistos del video."""
     video = db_session.query(models.Video).filter(models.Video.id == video_id).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video no encontrado")
@@ -96,6 +101,7 @@ def eliminar_video(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_reviewer),
 ):
+    """Elimina el video de la base de datos."""
     video = db_session.query(models.Video).filter(models.Video.id == video_id).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video no encontrado")

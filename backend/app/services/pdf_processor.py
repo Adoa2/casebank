@@ -1,4 +1,5 @@
-# app/services/pdf_processor.py
+# Extrae texto estructurado e imágenes del PDF del manual usando PyMuPDF.
+# Genera manual_structure.json con secciones mapeadas al índice digital (TOC) del PDF.
 import fitz  # PyMuPDF
 import hashlib
 import os
@@ -117,6 +118,7 @@ def _calcular_gap_tipico_documento(doc):
     interlineado (gap < 150% de la altura de línea).  Fallback: None.
     """
     gaps = []
+    # Solo páginas de contenido para no contaminar con interlineados de portada/índice
     scan = [i for i in range(len(doc)) if i + 1 >= PRIMERA_PAGINA_CONTENIDO][:100]
     for page_idx in scan:
         page = doc[page_idx]
@@ -133,6 +135,7 @@ def _calcular_gap_tipico_documento(doc):
             if prev is not None:
                 gap = block["bbox"][1] - prev["bbox"][3]
                 h_line = max(1, block["bbox"][3] - block["bbox"][1])
+                # Gaps menores a 1.5× la altura de línea son plausibles de interlineado
                 if 0 < gap <= h_line * 1.5:
                     gaps.append(gap)
             prev = block
@@ -150,6 +153,7 @@ def _construir_exclusiones(doc):
     total = len(doc)
     content_pages = [i for i in range(total) if i + 1 >= PRIMERA_PAGINA_CONTENIDO]
     n_content = len(content_pages)
+    # Un elemento aparece en header/footer si sale en al menos _MIN_PAGES_FRAC de páginas
     threshold = n_content * _MIN_PAGES_FRAC
 
     img_zones  = defaultdict(list)
@@ -165,6 +169,7 @@ def _construir_exclusiones(doc):
             y_top_rel = bbox[1] / h
             y_bot_rel = bbox[3] / h
 
+            # Clasificar el bloque en la franja de la página donde aparece
             if y_bot_rel <= _HEADER_FRAC:
                 zone = "header"
             elif y_top_rel >= (1 - _FOOTER_FRAC):
@@ -184,6 +189,7 @@ def _construir_exclusiones(doc):
                 img_bytes = block.get("image")
                 if not img_bytes:
                     continue
+                # Usar MD5 del contenido binario como clave de deduplicación
                 digest = hashlib.md5(img_bytes).hexdigest()
                 img_zones[digest].append(zone)
 
@@ -194,6 +200,7 @@ def _construir_exclusiones(doc):
                     for span in line.get("spans", [])
                 ).strip()
                 if raw:
+                    # Normalizar dígitos para agrupar "Página 3" con "Página 42"
                     text_zones[_normalizar_repeticion(raw)].append(zone)
 
     excluded_img_hashes = set()
@@ -440,6 +447,11 @@ def extract_page_content(
 
 
 def process_pdf_high_performance(pdf_path: str, output_dir: str):
+    """
+    Orquesta todo el procesamiento del PDF: pre-scan de cabeceras/pies,
+    extracción de texto e imágenes por página, mapeo al TOC y escritura
+    de manual_structure.json en output_dir.
+    """
     print(f"Abriendo documento maestro: {pdf_path}")
 
     if not os.path.exists(pdf_path):
@@ -452,6 +464,7 @@ def process_pdf_high_performance(pdf_path: str, output_dir: str):
     document = fitz.open(pdf_path)
     total_pages = len(document)
 
+    # El script depende completamente del índice digital; sin él no puede armar secciones
     toc = document.get_toc()
     if not toc:
         print("\nADVERTENCIA: El PDF no trae índice digital (get_toc() vino vacío).")
@@ -512,6 +525,7 @@ def process_pdf_high_performance(pdf_path: str, output_dir: str):
         if pagina_inicio < PRIMERA_PAGINA_CONTENIDO:
             continue
 
+        # La sección termina donde empieza la siguiente con página mayor
         pagina_fin = total_pages
         for j in range(i + 1, len(toc)):
             if toc[j][2] > pagina_inicio:

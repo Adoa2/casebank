@@ -1,3 +1,4 @@
+// Obtiene la estructura JSON del manual (secciones, niveles, contenido e imágenes).
 import { API_BASE_URL } from '../config'
 import { authHeaders, parseApiResponse } from './authToken'
 

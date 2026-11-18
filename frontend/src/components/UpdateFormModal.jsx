@@ -1,3 +1,4 @@
+// Modal de creación y edición de documentos de actualización, con selector de aplicabilidad (Honduras / R. Dominicana / Ambas).
 import { useEffect, useState } from 'react'
 import hondurasFlag from '../assets/honduras.png'
 import dominicanaFlag from '../assets/republica-dominicana.png'
@@ -15,6 +16,7 @@ function descendants(node) {
   return node.hijos.flatMap((child) => [child, ...descendants(child)])
 }
 
+/** Modal para crear o editar un documento de actualización PDF. */
 export default function UpdateFormModal({ initialData, onClose, onSubmit }) {
   const editing = Boolean(initialData)
   const [form, setForm] = useState({
@@ -33,6 +35,7 @@ export default function UpdateFormModal({ initialData, onClose, onSubmit }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  // Cargar la jerarquía del manual para los combos de capítulo/sección al montar
   useEffect(() => {
     let cancelled = false
     fetchManualStructure()

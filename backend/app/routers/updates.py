@@ -1,3 +1,4 @@
+# Gestión de documentos de actualización: carga, indexado en RAG y reemplazo de PDF en Supabase Storage.
 import time
 import uuid
 from typing import List
@@ -35,6 +36,7 @@ GEMINI_BATCH_URL = (
 
 
 def _validate_text(value: str, label: str, minimum: int = 2) -> str:
+    """Valida que un campo de texto no esté vacío ni sea demasiado corto."""
     clean = (value or "").strip()
     if len(clean) < minimum:
         raise HTTPException(status_code=400, detail=f"{label} es obligatorio.")
@@ -42,6 +44,7 @@ def _validate_text(value: str, label: str, minimum: int = 2) -> str:
 
 
 def _validate_applicability(value: str) -> str:
+    """Valida que la aplicabilidad sea uno de los valores permitidos."""
     clean = (value or "").strip().lower()
     if clean not in VALID_APPLICABILITY:
         raise HTTPException(
@@ -52,6 +55,11 @@ def _validate_applicability(value: str) -> str:
 
 
 def _ensure_storage_bucket():
+    """
+    Crea el bucket de Supabase Storage si no existe.
+    Se llama solo cuando Supabase responde 400/404 con 'bucket' en el mensaje;
+    así funciona con claves que pueden subir objetos pero no administrar buckets.
+    """
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         raise HTTPException(status_code=500, detail="Supabase Storage no está configurado.")
 
@@ -80,6 +88,7 @@ def _ensure_storage_bucket():
             detail="No se pudo conectar con Supabase para crear el almacenamiento de PDF.",
         ) from exc
     response_text = created.text.lower()
+    # 400/409 con "already exists" es OK: el bucket ya existe, no es un error real
     already_exists = created.status_code in (400, 409) and any(
         marker in response_text for marker in ("already exists", "duplicate", "ya existe")
     )
@@ -95,6 +104,10 @@ def _ensure_storage_bucket():
 
 
 def _upload_pdf(content: bytes) -> tuple[str, str]:
+    """
+    Sube el PDF a Supabase Storage. Devuelve (ruta_almacenamiento, url_publica).
+    Intenta usar un bucket existente; solo crea uno nuevo si Supabase indica que no lo encuentra.
+    """
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         raise HTTPException(status_code=500, detail="Supabase Storage no está configurado.")
 
@@ -102,6 +115,7 @@ def _upload_pdf(content: bytes) -> tuple[str, str]:
     storage_path = f"{uuid.uuid4().hex}.pdf"
 
     def upload():
+        """Envía el PDF a Supabase Storage; retorna el objeto Response de requests."""
         return requests.post(
             f"{base_url}/storage/v1/object/{STORAGE_BUCKET}/{storage_path}",
             headers={
@@ -148,6 +162,7 @@ def _upload_pdf(content: bytes) -> tuple[str, str]:
 
 
 def _delete_pdf(storage_path: str):
+    """Elimina un PDF de Supabase Storage. Fallo silencioso si la ruta está vacía o las credenciales faltan."""
     if not storage_path or not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         return
     requests.delete(
@@ -161,6 +176,7 @@ def _delete_pdf(storage_path: str):
 
 
 def _read_pdf(file: UploadFile) -> tuple[bytes, list[dict]]:
+    """Lee y valida el PDF subido. Devuelve (bytes, lista de páginas con texto extraído)."""
     name = file.filename or "actualizacion.pdf"
     if not name.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Solo se permiten archivos PDF.")
@@ -180,6 +196,7 @@ def _read_pdf(file: UploadFile) -> tuple[bytes, list[dict]]:
     except Exception as exc:
         raise HTTPException(status_code=400, detail="No se pudo leer el PDF.") from exc
 
+    # Rechazar PDFs escaneados (sin capa de texto) que no sirven al RAG
     if not any(page["text"] for page in pages):
         raise HTTPException(
             status_code=400,
@@ -189,12 +206,17 @@ def _read_pdf(file: UploadFile) -> tuple[bytes, list[dict]]:
 
 
 def _split_pages(pages: list[dict], heading: str) -> list[dict]:
+    """
+    Divide el texto del PDF en chunks de máximo MAX_CHUNK_CHARS con solapamiento.
+    Antepone el encabezado del documento a cada chunk para enriquecer el contexto del RAG.
+    """
     chunks = []
     for page in pages:
         text = page["text"]
         start = 0
         while start < len(text):
             end = min(start + MAX_CHUNK_CHARS, len(text))
+            # Preferir corte en salto de línea para no partir frases
             if end < len(text):
                 break_at = text.rfind("\n", start, end)
                 if break_at > start + 600:
@@ -208,14 +230,20 @@ def _split_pages(pages: list[dict], heading: str) -> list[dict]:
                 })
             if end >= len(text):
                 break
+            # Solapamiento: retroceder CHUNK_OVERLAP caracteres para mantener contexto entre chunks
             start = max(end - CHUNK_OVERLAP, start + 1)
     return chunks[:80]
 
 
 def _embed_documents(texts: list[str]) -> list[list[float]]:
+    """
+    Genera embeddings de 768 dimensiones en lotes via Gemini batchEmbedContents.
+    Reintenta con backoff ante rate limit (429).
+    """
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY no está configurada.")
     embeddings = []
+    # Enviar en lotes de EMBED_BATCH_SIZE para no exceder el límite por request de Gemini
     for offset in range(0, len(texts), EMBED_BATCH_SIZE):
         batch = texts[offset:offset + EMBED_BATCH_SIZE]
         payload = {
@@ -226,6 +254,7 @@ def _embed_documents(texts: list[str]) -> list[list[float]]:
                 "outputDimensionality": EMBED_DIMENSION,
             } for text in batch]
         }
+        # Backoff exponencial ante rate limit de Gemini (máx. 5 intentos)
         for attempt in range(5):
             response = requests.post(
                 GEMINI_BATCH_URL,
@@ -245,6 +274,10 @@ def _embed_documents(texts: list[str]) -> list[list[float]]:
 
 
 def _index_document(document: models.UpdateDocument, pages: list[dict]):
+    """
+    Trocea el PDF del documento, genera sus embeddings y los inserta en fragmentos_actualizacion.
+    Hace TRUNCATE + reinsert del documento para mantener el índice actualizado ante ediciones.
+    """
     heading = (
         f"Actualización: {document.titulo}\n"
         f"Descripción: {document.descripcion}\n"
@@ -257,6 +290,7 @@ def _index_document(document: models.UpdateDocument, pages: list[dict]):
     connection = psycopg2.connect(DATABASE_URL)
     cursor = connection.cursor()
     try:
+        # DELETE + INSERT es más simple que UPSERT cuando el número de chunks puede cambiar
         cursor.execute("DELETE FROM fragmentos_actualizacion WHERE actualizacion_id = %s", (document.id,))
         for chunk, embedding in zip(chunks, embeddings):
             vector = "[" + ",".join(str(value) for value in embedding) + "]"
@@ -278,6 +312,7 @@ def _index_document(document: models.UpdateDocument, pages: list[dict]):
 
 
 def _load_pages_from_storage(document: models.UpdateDocument) -> list[dict]:
+    """Descarga el PDF desde Supabase Storage y extrae su texto, para re-indexar tras un cambio de metadatos."""
     response = requests.get(document.archivo_url, timeout=45)
     response.raise_for_status()
     pseudo_file = UploadFile(filename=document.archivo_nombre, file=__import__("io").BytesIO(response.content))
@@ -290,6 +325,7 @@ def list_updates(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_reviewer),
 ):
+    """Devuelve todos los documentos de actualización, del más reciente al más antiguo."""
     return (
         db_session.query(models.UpdateDocument)
         .options(joinedload(models.UpdateDocument.creator))
@@ -312,6 +348,10 @@ def create_update(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_reviewer),
 ):
+    """
+    Recibe el formulario multipart, sube el PDF a Supabase Storage, persiste el registro
+    en la BD y lo indexa en fragmentos_actualizacion. Si el indexado falla, deshace la subida.
+    """
     title = _validate_text(titulo, "El título", 3)
     description = _validate_text(descripcion, "La descripción", 5)
     keywords = _validate_text(palabras_clave, "Las palabras clave")
@@ -336,6 +376,7 @@ def create_update(
     db_session.add(document)
     db_session.commit()
     db_session.refresh(document)
+    # Si el indexado falla, deshacer el registro y el archivo para no dejar huérfanos
     try:
         _index_document(document, pages)
     except Exception as exc:
@@ -354,6 +395,11 @@ def update_metadata(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_reviewer),
 ):
+    """
+    Actualiza los metadatos del documento. Si cambia algún campo del encabezado de chunk
+    (título, descripción, palabras clave, capítulo, sección), descarga el PDF de Storage
+    y re-indexa los fragmentos para mantener el RAG actualizado.
+    """
     document = db_session.query(models.UpdateDocument).filter(models.UpdateDocument.id == document_id).first()
     if not document:
         raise HTTPException(status_code=404, detail="Actualización no encontrada.")
@@ -366,6 +412,7 @@ def update_metadata(
         changes["palabras_clave"] = _validate_text(changes["palabras_clave"], "Las palabras clave")
     if "aplicabilidad" in changes:
         changes["aplicabilidad"] = _validate_applicability(changes["aplicabilidad"])
+    # Re-indexar si cambió algún campo que forma parte del encabezado de cada chunk
     needs_reindex = bool({
         "titulo", "descripcion", "palabras_clave", "capitulo", "seccion", "subseccion"
     } & changes.keys())
@@ -388,6 +435,10 @@ def replace_pdf(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_reviewer),
 ):
+    """
+    Reemplaza el PDF de un documento existente. Sube el nuevo archivo, re-indexa y
+    borra el archivo anterior de Supabase. Si el indexado falla, restaura los datos originales.
+    """
     document = db_session.query(models.UpdateDocument).filter(models.UpdateDocument.id == document_id).first()
     if not document:
         raise HTTPException(status_code=404, detail="Actualización no encontrada.")
@@ -401,6 +452,7 @@ def replace_pdf(
     document.archivo_nombre = file.filename or "actualizacion.pdf"
     db_session.commit()
     db_session.refresh(document)
+    # Restaurar referencias antiguas si el indexado del nuevo PDF falla
     try:
         _index_document(document, pages)
     except Exception as exc:
@@ -418,6 +470,7 @@ def delete_update(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_reviewer),
 ):
+    """Elimina el documento y su PDF de Supabase; los fragmentos se borran por ON DELETE CASCADE."""
     document = db_session.query(models.UpdateDocument).filter(models.UpdateDocument.id == document_id).first()
     if not document:
         raise HTTPException(status_code=404, detail="Actualización no encontrada.")

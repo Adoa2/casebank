@@ -1,3 +1,4 @@
+// Lightbox de imágenes del manual: carga la imagen via /api/manual/image y la muestra a pantalla completa.
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { API_BASE_URL } from '../config'
@@ -7,6 +8,7 @@ const ZOOM_MIN = 1
 const ZOOM_MAX = 3
 const ZOOM_STEP = 0.5
 
+/** Overlay de pantalla completa para ver una imagen ampliada; acepta nombreArchivo (autenticado) o imageUrl directo. */
 export default function ImageLightbox({ nombreArchivo, imageUrl, onClose }) {
   const [blobUrl, setBlobUrl] = useState(imageUrl || null)
   const [error, setError] = useState(false)
@@ -22,6 +24,7 @@ export default function ImageLightbox({ nombreArchivo, imageUrl, onClose }) {
     setPos({ x: 0, y: 0 })
     setError(false)
 
+    // imageUrl directo (p.ej. evidencia de error) no necesita descarga autenticada
     if (imageUrl) {
       setBlobUrl(imageUrl)
       return

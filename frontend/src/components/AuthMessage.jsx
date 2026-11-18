@@ -1,9 +1,11 @@
+// Componente de alerta inline para vistas de autenticación: error, éxito e informativo.
 const STYLES = {
   error: 'bg-red-50 border-red-200 text-red-700',
   success: 'bg-green-50 border-green-200 text-green-700',
   info: 'bg-blue-50 border-blue-200 text-blue-700',
 }
 
+/** Alerta inline para formularios de autenticación. Acepta type: 'error' | 'success' | 'info'. */
 export default function AuthMessage({ text, type }) {
   if (!text) return null
 

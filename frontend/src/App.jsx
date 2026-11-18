@@ -1,3 +1,4 @@
+// Componente raíz: define las rutas de la aplicación y gestiona el estado global de autenticación.
 import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation, useNavigationType } from 'react-router-dom'
 import BrandPanel from './components/BrandPanel'
@@ -11,6 +12,7 @@ import AdminView from './views/AdminView'
 import { getRole, clearAuthData, UNAUTHORIZED_EVENT } from './api/authToken'
 import logoImage from './assets/logo_black.png'
 
+/** Layout de dos columnas para las vistas de autenticación (login, registro, etc.). */
 function AuthLayout({ cardClassName, children }) {
   return (
     <div className="grid min-h-screen min-h-dvh grid-cols-1 lg:grid-cols-[57%_43%]">
@@ -26,6 +28,7 @@ function AuthLayout({ cardClassName, children }) {
   )
 }
 
+/** Ruta /reset: exige que el correo venga en location.state para evitar acceso directo. */
 function ResetRoute({ onBackToLogin, onReset }) {
   const location = useLocation()
   const correo = location.state?.correo
@@ -37,6 +40,11 @@ function ResetRoute({ onBackToLogin, onReset }) {
   return <ResetPasswordView correo={correo} onBackToLogin={onBackToLogin} onReset={onReset} />
 }
 
+/**
+ * Ruta /login con lógica de retroceso: si el usuario navega hacia atrás
+ * estando autenticado (POP), se cierra la sesión para evitar que quede
+ * atrapado en la pantalla de login con un token válido.
+ */
 function LoginRoute({ authenticated, onLogout, notice, onConsumeNotice, onGoRegister, onGoForgot, onLoginSuccess }) {
   const navigationType = useNavigationType() // 'PUSH' | 'POP' | 'REPLACE'
 
@@ -63,6 +71,7 @@ function LoginRoute({ authenticated, onLogout, notice, onConsumeNotice, onGoRegi
   )
 }
 
+/** Componente raíz: gestiona autenticación global, rol y rutas protegidas de la SPA. */
 export default function App() {
   const [authenticated, setAuthenticated] = useState(() => Boolean(localStorage.getItem('casebank_token')))
   const [role, setRole] = useState(() => getRole())
@@ -87,6 +96,7 @@ export default function App() {
     navigate('/login', { replace: true })
   }
 
+  // Escuchar el evento global de sesión expirada emitido por parseApiResponse
   useEffect(() => {
     function onUnauthorized() {
       setAuthenticated(false)

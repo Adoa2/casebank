@@ -1,3 +1,4 @@
+// Tabla CRUD de documentos de actualización del manual con subida y reemplazo de PDF.
 import { useEffect, useMemo, useState } from 'react'
 import { createUpdate, deleteUpdate, listUpdates, replaceUpdatePdf, updateUpdate } from '../api/updates'
 import hondurasFlag from '../assets/honduras.png'
@@ -13,6 +14,7 @@ function Country({ value }) {
 
 const formatDate = (value) => value ? new Date(value).toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'
 
+/** Sección admin de actualizaciones PDF: listado, creación, edición, reemplazo y eliminación. */
 export default function UpdatesSection() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -27,6 +29,7 @@ export default function UpdatesSection() {
     return query ? items.filter((item) => [item.titulo, item.descripcion, item.palabras_clave].some((value) => value?.toLowerCase().includes(query))) : items
   }, [items, search])
 
+  // Separar el archivo PDF de los metadatos para manejarlos en endpoints distintos
   async function save(payload) {
     const { file, ...metadata } = payload
     if (editing) {

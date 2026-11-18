@@ -1,4 +1,4 @@
-# app/routers/chat.py
+# Endpoint del asistente de IA Casey: recibe preguntas, gestiona flujos de confirmación y diagnóstico.
 from typing import List, Literal, Optional
 
 import psycopg2
@@ -29,6 +29,7 @@ class ContextoErrorConfirmacion(BaseModel):
 
 
 class MensajeHistorial(BaseModel):
+    """Un turno del historial de conversación (usuario o asistente), para contextualizar seguimientos."""
     role: Literal["user", "assistant"]
     text: str = Field(..., min_length=1, max_length=1200)
 
@@ -38,6 +39,7 @@ class ContextoDiagnostico(BaseModel):
     pregunta_original: str = Field(..., description="Pregunta original que origino la confirmacion del error.")
 
 class ChatQuery(BaseModel):
+    """Payload de una consulta al asistente, con contextos opcionales para flujos de confirmación y diagnóstico."""
     pregunta: str = Field(
         ...,
         min_length=3,
@@ -72,6 +74,7 @@ class ChatQuery(BaseModel):
 
 
 class FuenteManual(BaseModel):
+    """Referencia a una sección del manual o a un error frecuente usado como fuente de la respuesta."""
     seccion_id: Optional[int] = Field(
         None,
         description="ID de la seccion del manual (coincide con el id devuelto por GET /api/manual), "
@@ -98,16 +101,19 @@ class PendienteConfirmacionResponse(BaseModel):
     intento: int
 
 class OpcionDiagnosticoResponse(BaseModel):
+    """Opción de diagnóstico enviada al frontend para que el usuario elija."""
     id: int
     pregunta: str
 
 
 class PendienteDiagnosticoResponse(BaseModel):
+    """Estado del flujo de diagnóstico interactivo cuando Casey espera que el usuario elija una opción."""
     error_id: int
     pregunta_original: str
     opciones: List[OpcionDiagnosticoResponse]
 
 class ChatRespuesta(BaseModel):
+    """Respuesta completa del asistente, incluyendo fuentes, flujos pendientes y sugerencias."""
     respuesta: str = Field(..., description="Respuesta generada por el asistente en lenguaje natural.")
     fuentes: List[FuenteManual] = Field(..., description="Secciones del manual usadas para construir la respuesta.")
     imagenes: List[str] = Field(..., description="Nombres de archivo de las imagenes relacionadas con la respuesta.")
@@ -151,6 +157,7 @@ def chat_con_manual(
     data: ChatQuery,
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    """Despacha la consulta a answer_question y traduce sus errores a respuestas HTTP apropiadas."""
     try:
         contexto = data.contexto_error.model_dump() if data.contexto_error else None
         contexto_diagnostico = data.contexto_diagnostico.model_dump() if data.contexto_diagnostico else None

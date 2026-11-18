@@ -1,3 +1,4 @@
+// Formulario de recuperación de contraseña: solicita el correo y envía el código por email.
 import { useState } from 'react'
 import AuthField from '../components/AuthField'
 import AuthMessage from '../components/AuthMessage'
@@ -5,6 +6,7 @@ import { forgotPassword } from '../api/auth'
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+/** Vista de recuperación de contraseña: solicita el envío del código de verificación al correo. */
 export default function ForgotPasswordView({ onBackToLogin, onCodeSent }) {
   const [correo, setCorreo] = useState('')
   const [message, setMessage] = useState(null)
@@ -15,7 +17,7 @@ export default function ForgotPasswordView({ onBackToLogin, onCodeSent }) {
     setMessage(null)
 
     const trimmedCorreo = correo.trim()
-
+    // Validar formato de correo antes de hacer la petición al backend
     if (!EMAIL_REGEX.test(trimmedCorreo)) {
       setMessage({ text: 'Ingresa un correo electrónico válido.', type: 'error' })
       return

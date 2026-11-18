@@ -1,3 +1,5 @@
+# Constantes de configuración globales leídas desde variables de entorno.
+# Centraliza claves y parámetros para que ningún módulo acceda directamente a os.getenv.
 import os
 from dotenv import load_dotenv
 

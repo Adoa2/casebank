@@ -1,3 +1,4 @@
+// Formulario de registro de nueva cuenta de usuario.
 import { useState } from 'react'
 import AuthField from '../components/AuthField'
 import AuthMessage from '../components/AuthMessage'
@@ -12,6 +13,7 @@ const PASSWORD_RULES = [
   { label: 'Un carácter especial', test: (value) => /[^A-Za-zÁÉÍÓÚÑáéíóúñ0-9\s]/.test(value) },
 ]
 
+/** Vista de registro de nueva cuenta con validación de contraseña y selección de nacionalidad. */
 export default function RegisterView({ onBackToLogin, onRegistered }) {
   const [nombreUsuario, setNombreUsuario] = useState('')
   const [correo, setCorreo] = useState('')
@@ -27,6 +29,7 @@ export default function RegisterView({ onBackToLogin, onRegistered }) {
 
     const trimmedCorreo = correo.trim()
 
+    // Validaciones client-side en el orden más probable de error
     if (!nacionalidad) {
       setMessage({ text: 'Selecciona una nacionalidad.', type: 'error' })
       return

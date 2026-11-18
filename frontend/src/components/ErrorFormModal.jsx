@@ -1,3 +1,4 @@
+// Modal de creación y edición de errores frecuentes, con soporte para diagnóstico interactivo y subida de imagen.
 import { useEffect, useRef, useState } from 'react'
 import { uploadImagenError } from '../api/errors'
 
@@ -55,8 +56,10 @@ function ReviewItem({ label, value, wide = false }) {
   )
 }
 
+/** Modal multipaso para crear o editar un error frecuente, con subida opcional de imagen de evidencia. */
 export default function ErrorFormModal({ mode = 'create', initialData, onClose, onSubmit }) {
   const isEdit = mode === 'edit'
+  // Estado del formulario inicializado con datos existentes si es edición
   const [activeStep, setActiveStep] = useState(0)
   const [titulo, setTitulo] = useState(initialData?.titulo || '')
   const [modulo, setModulo] = useState(initialData?.modulo || '')
@@ -205,6 +208,7 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
 
   async function handleSubmit(event) {
     event.preventDefault()
+    // Validar pasos antes de enviar; redirigir al primer paso inválido
     if (!validateStep(0)) {
       setActiveStep(0)
       return

@@ -1,4 +1,4 @@
-# app/routers/manual.py
+# Endpoints de lectura del manual: estructura JSON e imágenes extraídas del PDF.
 import json
 import os
 from typing import List
@@ -19,6 +19,7 @@ IMAGES_DIR = os.path.join(BASE_DIR, "..", "..", "data", "extracted_assets")
 
 
 class SeccionManual(BaseModel):
+    """Sección del manual extraída del PDF, con su contenido y lista de imágenes."""
     id: int = Field(..., description="Identificador secuencial de la seccion.")
     nivel: int = Field(..., description="Nivel de jerarquia (1 = capitulo, hasta 4 = subseccion mas profunda).")
     titulo: str = Field(..., description="Titulo de la seccion tal como aparece en el manual.")
@@ -38,6 +39,7 @@ class SeccionManual(BaseModel):
     response_description="Lista completa de secciones del manual, en el orden del documento original.",
 )
 def obtener_manual(current_user: models.User = Depends(auth.get_current_user)):
+    """Lee manual_structure.json y lo devuelve como lista de secciones."""
     if not os.path.exists(JSON_PATH):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -62,6 +64,7 @@ def obtener_imagen(
     nombre_archivo: str,
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    """Sirve una imagen del manual. Sanitiza el nombre para prevenir path traversal."""
     # Seguridad: os.path.basename descarta cualquier intento de path traversal
     nombre_seguro = os.path.basename(nombre_archivo)
     if nombre_seguro != nombre_archivo:

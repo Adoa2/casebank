@@ -1,3 +1,4 @@
+// Modal lightbox de videos formativos de una sección del manual con reproductor embebido.
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -19,9 +20,11 @@ function obtenerUrlReproducible(url) {
   }
 }
 
+/** Modal de galería de videos formativos de una sección con reproductor inline. */
 export default function VideoGalleryModal({ videos, onClose }) {
   const [activo, setActivo] = useState(null)
 
+  // Bloquear el scroll del body mientras el modal está abierto
   useEffect(() => {
     const overflowOriginal = document.body.style.overflow
     document.body.style.overflow = 'hidden'

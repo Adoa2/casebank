@@ -1,3 +1,4 @@
+// Menú lateral del panel de administración con navegación entre secciones.
 import logo from '../assets/logo.png'
 
 const NAV_ITEMS = [
@@ -11,6 +12,7 @@ const NAV_ITEMS = [
 ]
 
 function NavIcon({ name }) {
+  // Cada rama devuelve el SVG correspondiente al nombre de sección
   if (name === 'home') {
     return <svg className="h-6 w-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8" /><path d="M5 10v10h14V10M9 20v-6h6v6" /></svg>
   }
@@ -57,7 +59,9 @@ function LockIcon() {
   )
 }
 
+/** Sidebar de navegación del panel admin: filtra secciones según el rol del usuario. */
 export default function AdminSidebar({ activeSection, onSelectSection, role = 0 }) {
+  // Ocultar ítems con minRole > rol del usuario actual
   return (
     <aside className="admin-sidebar flex w-full shrink-0 flex-col border-b border-white/10 px-3 py-3 text-white lg:h-full lg:w-[270px] lg:border-b-0 lg:px-4 lg:py-0 xl:w-[300px]">
       <div className="flex h-14 items-center px-2 lg:h-20 lg:px-3">
@@ -68,8 +72,10 @@ export default function AdminSidebar({ activeSection, onSelectSection, role = 0 
         Panel administrativo
       </span>
 
+      {/* Filtrar ítems de nav según el rol: "Actualizaciones" requiere rol >= 2 */}
       <nav aria-label="Panel administrativo">
-        <ul className="flex gap-2 overflow-x-auto pb-1 lg:block lg:space-y-2 lg:overflow-visible lg:pb-0">
+        {/* Ocultar "Actualizaciones" para roles sin privilegio suficiente */}
+      <ul className="flex gap-2 overflow-x-auto pb-1 lg:block lg:space-y-2 lg:overflow-visible lg:pb-0">
           {NAV_ITEMS.filter((item) => item.id !== 'actualizaciones' || role >= 2).map((item) => {
             const active = item.id === activeSection
             const locked = role < item.minRole

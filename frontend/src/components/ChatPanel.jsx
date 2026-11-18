@@ -1,3 +1,5 @@
+// Panel del asistente Casey: muestra el historial de mensajes, gestiona el flujo
+// de diagnóstico interactivo y el flujo de confirmación de error reportado.
 import { useEffect, useRef, useState } from 'react'
 import { API_BASE_URL } from '../config'
 import { authHeaders, parseApiResponse } from '../api/authToken'
@@ -75,6 +77,7 @@ function formatearRangoPaginas(fuente) {
   return fuente.pagina
 }
 
+/** Panel del asistente Casey: maneja historial, confirmación de errores y diagnóstico interactivo. */
 export default function ChatPanel({ onSelectSource, onCollapse }) {
   const [messages, setMessages] = useState(INITIAL_MESSAGES)
   const [draft, setDraft] = useState('')
@@ -100,6 +103,7 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
     selectedClarificationsRef.current.clear()
   }
 
+  // Envía un mensaje al backend /api/chat; acepta opciones para flujos de confirmación y diagnóstico
   async function sendMessage(value, opts = {}) {
     const {
       contextoError = null,
@@ -132,6 +136,7 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
     setLoading(true)
 
     try {
+      // Excluir el saludo inicial y los mensajes de error del cliente del historial enviado al backend
       const historial = messages
         .filter((message) => message.id !== 'welcome' && !message.id.startsWith('e-'))
         .slice(-8)

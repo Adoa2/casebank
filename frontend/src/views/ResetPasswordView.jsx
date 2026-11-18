@@ -1,8 +1,10 @@
+// Formulario de restablecimiento de contraseña: valida el código de 6 dígitos y establece la nueva contraseña.
 import { useState } from 'react'
 import AuthField from '../components/AuthField'
 import AuthMessage from '../components/AuthMessage'
 import { resetPassword } from '../api/auth'
 
+/** Vista de restablecimiento de contraseña: verifica el código y establece la nueva contraseña. */
 export default function ResetPasswordView({ correo, onBackToLogin, onReset }) {
   const [codigo, setCodigo] = useState('')
   const [nuevaContrasena, setNuevaContrasena] = useState('')
@@ -13,6 +15,7 @@ export default function ResetPasswordView({ correo, onBackToLogin, onReset }) {
   async function handleSubmit(e) {
     e.preventDefault()
 
+    // Verificar coincidencia de contraseñas antes de llamar al backend
     if (nuevaContrasena !== nuevaContrasenaConfirm) {
       setMessage({ text: 'Las contraseñas no coinciden.', type: 'error' })
       return

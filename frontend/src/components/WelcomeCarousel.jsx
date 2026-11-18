@@ -1,3 +1,4 @@
+// Pantalla de bienvenida al abrir el dashboard: explica las funciones principales con animación de Casey.
 import { useEffect, useState } from 'react'
 import caseyDer from '../assets/casey_der.png'
 import caseyIzq from '../assets/casey_izq.png'
@@ -28,12 +29,14 @@ const SLIDES = [
   },
 ]
 
+/** Carrusel de bienvenida de la portada del manual con autoplay y navegación manual. */
 export default function WelcomeCarousel() {
   const [index, setIndex] = useState(0)
   const [isPaused, setIsPaused] = useState(false)
   const slide = SLIDES[index]
   const username = getUsername()?.trim()
 
+  // Duración configurable por diapositiva; reinicia el timer al cambiar el índice
   useEffect(() => {
     if (isPaused) return undefined
 

@@ -1,3 +1,4 @@
+// CRUD de documentos de actualización del manual: listado, creación, edición y reemplazo de PDF.
 import { API_BASE_URL } from '../config'
 import { authHeaders, parseApiResponse } from './authToken'
 
@@ -6,6 +7,7 @@ export async function listUpdates() {
   return parseApiResponse(response)
 }
 
+/** Crea un documento de actualización enviando los campos y el PDF como multipart/form-data. */
 export async function createUpdate(data) {
   const form = new FormData()
   Object.entries(data).forEach(([key, value]) => {
@@ -17,6 +19,7 @@ export async function createUpdate(data) {
   return parseApiResponse(response)
 }
 
+/** Actualiza los metadatos (encabezado, descripción, etc.) de un documento de actualización. */
 export async function updateUpdate(id, data) {
   const response = await fetch(`${API_BASE_URL}/api/updates/${id}`, {
     method: 'PUT',
@@ -26,6 +29,7 @@ export async function updateUpdate(id, data) {
   return parseApiResponse(response)
 }
 
+/** Reemplaza el PDF de un documento de actualización existente y re-indexa sus fragmentos. */
 export async function replaceUpdatePdf(id, file) {
   const form = new FormData()
   form.append('file', file)
@@ -35,6 +39,7 @@ export async function replaceUpdatePdf(id, file) {
   return parseApiResponse(response)
 }
 
+/** Elimina un documento de actualización y su PDF de Supabase. */
 export async function deleteUpdate(id) {
   const response = await fetch(`${API_BASE_URL}/api/updates/${id}`, {
     method: 'DELETE', headers: authHeaders(),

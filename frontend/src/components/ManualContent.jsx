@@ -1,3 +1,5 @@
+// Renderiza el contenido de una sección del manual: texto con negritas, imágenes inline,
+// listas detectadas automáticamente, rutas de navegación del sistema y galería de videos.
 import { useEffect, useMemo, useState } from 'react'
 import ImageLightbox from './ImageLightbox'
 import AuthImage from './AuthImage'
@@ -205,6 +207,7 @@ function agruparPartes(partes) {
 
 function ImagenManual({ nombre, titulo, onZoom, integrada = false }) {
   const [dimensions, setDimensions] = useState(null)
+  // Iconos decorativos (≤64px) se omiten; controles pequeños se muestran inline
   const esIconoDecorativo =
     dimensions && dimensions.width <= 64 && dimensions.height <= 64
   const esControlPequeno =
@@ -251,6 +254,7 @@ function ImagenManual({ nombre, titulo, onZoom, integrada = false }) {
   )
 }
 
+/** Renderiza el contenido de una sección del manual: texto, imágenes autenticadas y galería de videos. */
 export default function ManualContent({ chapter, subchapter, onGoHome }) {
   const [imagenActiva, setImagenActiva] = useState(null)
   const [videos, setVideos] = useState([])

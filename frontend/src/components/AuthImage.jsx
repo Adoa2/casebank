@@ -1,7 +1,9 @@
+// Carga una imagen del manual via /api/manual/image autenticada con JWT, mostrando un skeleton durante la carga.
 import { useEffect, useState } from 'react'
 import { API_BASE_URL } from '../config'
 import { authHeaders } from '../api/authToken'
 
+/** Descarga una imagen del manual a través del endpoint autenticado y la muestra via blob URL. */
 export default function AuthImage({ nombreArchivo, alt, onDimensions }) {
   const [blobUrl, setBlobUrl] = useState(null)
   const [error, setError] = useState(false)
@@ -35,6 +37,7 @@ export default function AuthImage({ nombreArchivo, alt, onDimensions }) {
 
     cargarImagen()
 
+    // Revocar la blob URL al desmontar para liberar memoria del navegador
     return () => {
       cancelado = true
       if (urlActual) URL.revokeObjectURL(urlActual)

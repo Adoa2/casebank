@@ -101,6 +101,7 @@ def dividir_en_chunks(texto, max_chars=CHUNK_MAX_CHARS, overlap=CHUNK_OVERLAP):
     inicio = 0
     while inicio < len(texto):
         fin = inicio + max_chars
+        # Preferir corte en párrafo; si no hay, en punto seguido de espacio
         if fin < len(texto):
             corte = texto.rfind("\n\n", inicio, fin)
             if corte == -1 or corte <= inicio:
@@ -116,6 +117,7 @@ def dividir_en_chunks(texto, max_chars=CHUNK_MAX_CHARS, overlap=CHUNK_OVERLAP):
         if corte >= len(texto):
             break
 
+        # Retroceder 'overlap' caracteres, pero arrancar desde el siguiente párrafo si existe
         inicio_solapado = max(inicio + 1, corte - overlap)
         limite_parrafo = texto.find("\n\n", inicio_solapado, corte)
         inicio = limite_parrafo + 2 if limite_parrafo != -1 else inicio_solapado
@@ -136,11 +138,13 @@ def construir_chunks(secciones):
         contenido = (seccion.get("contenido") or "").strip()
         if not contenido:
             continue
+        # Limpiar antes de chunking para que los marcadores [IMG:...] no contaminen el texto
         contenido = limpiar_marcadores_imagen(contenido)
         if not contenido:
             continue
 
         titulo_base = seccion.get("titulo", "")
+        # Detectar sub-procedimientos dentro de la sección para mejorar la granularidad del RAG
         subsecciones = dividir_en_subsecciones(contenido)
 
         for sub_idx, (subtitulo, texto_sub) in enumerate(subsecciones):
@@ -152,6 +156,7 @@ def construir_chunks(secciones):
             partes = dividir_en_chunks(texto_sub)
 
             for idx, parte in enumerate(partes):
+                # Anteponer el título al texto del chunk para enriquecer el contexto semántico
                 texto_embedding = f"{titulo_chunk}\n\n{parte}" if titulo_chunk else parte
 
                 chunks.append({
@@ -169,6 +174,7 @@ def construir_chunks(secciones):
 
 
 def cargar_checkpoint():
+    """Lee el checkpoint local de embeddings ya generados. Migra formato antiguo si es necesario."""
     if os.path.exists(CHECKPOINT_PATH):
         with open(CHECKPOINT_PATH, "r", encoding="utf-8") as f:
             datos = json.load(f)
@@ -187,11 +193,13 @@ def cargar_checkpoint():
 
 
 def guardar_checkpoint(checkpoint):
+    """Persiste el checkpoint en disco después de cada lote para tolerar interrupciones."""
     with open(CHECKPOINT_PATH, "w", encoding="utf-8") as f:
         json.dump(checkpoint, f)
 
 
 def construir_request_body(chunks_lote, modelo):
+    """Arma el payload de batchEmbedContents para un lote de chunks."""
     requests_body = []
     for chunk in chunks_lote:
         item = {
@@ -230,6 +238,7 @@ def embed_lote(chunks_lote, modelo):
             json={"requests": requests_body},
         )
 
+        # 429 = rate limit; 5xx = error transitorio de Gemini
         if respuesta.status_code in (429, 500, 503):
             espera = 2 ** intento
             print(f"  [{modelo}] {respuesta.status_code}, esperando {espera}s antes de reintentar...")
@@ -242,6 +251,7 @@ def embed_lote(chunks_lote, modelo):
         datos = respuesta.json()
         return [e["values"] for e in datos["embeddings"]]
 
+    # None señaliza al llamador que la cuota del modelo se agotó → intentar fallback
     print(f"  [{modelo}] se agotaron los reintentos, se considera cuota agotada para este modelo.")
     return None
 
@@ -259,6 +269,7 @@ def obtener_embeddings(chunks, batch_size=EMBED_BATCH_SIZE):
     """
     checkpoint = cargar_checkpoint()
     total = len(chunks)
+    # Saltar chunks cuyo embedding ya fue generado en una ejecución anterior
     pendientes = [c for c in chunks if c["chunk_key"] not in checkpoint]
 
     if len(pendientes) < total:
@@ -273,6 +284,7 @@ def obtener_embeddings(chunks, batch_size=EMBED_BATCH_SIZE):
         embeddings_lote = embed_lote(lote, modelo_actual)
 
         if embeddings_lote is None:
+            # Fallback automático si el modelo primario agota su cuota diaria
             if modelo_actual == GEMINI_EMBED_MODEL_PRIMARIO:
                 print(f"  Cuota de {GEMINI_EMBED_MODEL_PRIMARIO} agotada. "
                       f"Cambiando a {GEMINI_EMBED_MODEL_FALLBACK} para lo que falta...")
@@ -291,6 +303,7 @@ def obtener_embeddings(chunks, batch_size=EMBED_BATCH_SIZE):
                 "embedding": embedding,
                 "modelo": modelo_actual,
             }
+        # Guardar tras cada lote para que una interrupción no pierda lo ya generado
         guardar_checkpoint(checkpoint)
         modelos_usados.add(modelo_actual)
 
@@ -353,6 +366,12 @@ def guardar_en_postgres(chunks, embeddings):
 
 
 def main():
+    """
+    Punto de entrada del script. Construye y persiste toda la base vectorial:
+    carga el manual, genera chunks, obtiene embeddings (con checkpoint) y
+    hace TRUNCATE + reinsert en fragmentos_manual. Con --dry-run solo imprime
+    la estimación sin llamar a la API ni escribir en la BD.
+    """
     parser = argparse.ArgumentParser(description="Construye la base vectorial del manual.")
     parser.add_argument(
         "--dry-run",
@@ -388,6 +407,7 @@ def main():
     print("Guardando en Supabase (Postgres + pgvector)...")
     guardar_en_postgres(chunks, embeddings)
 
+    # Borrar el checkpoint al terminar exitosamente para no confundir futuras ejecuciones
     if os.path.exists(CHECKPOINT_PATH):
         os.remove(CHECKPOINT_PATH)
 
@@ -435,6 +455,7 @@ def dividir_en_subsecciones(contenido):
 
     tramos = []
 
+    # Texto antes del primer sub-encabezado (introducción o pasos iniciales de la sección)
     intro = contenido[:matches[0].start()].strip()
     if intro:
         tramos.append((None, intro))
@@ -444,6 +465,7 @@ def dividir_en_subsecciones(contenido):
         inicio_texto = m.end()
         fin_texto = matches[idx + 1].start() if idx + 1 < len(matches) else len(contenido)
         texto = contenido[inicio_texto:fin_texto].strip()
+        # Quitar numeraciones sueltas al inicio que el regex no pudo consumir como parte del match
         texto = _NUMERO_SUELTO_INICIAL_REGEX.sub("", texto).strip()
         if texto:
             tramos.append((subtitulo, texto))

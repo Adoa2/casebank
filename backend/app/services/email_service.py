@@ -59,6 +59,7 @@ def send_reset_code_email(to_email: str, username: str, code: str) -> None:
     message["Subject"] = subject
     message.attach(MIMEText(body, "plain", "utf-8"))
 
+    # STARTTLS: eleva la conexión plain-text a cifrada antes de enviar credenciales
     try:
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
             server.starttls()

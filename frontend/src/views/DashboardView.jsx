@@ -1,3 +1,4 @@
+// Vista principal del usuario: índice del manual, lector de contenido por sección y panel del asistente Casey.
 import { useEffect, useMemo, useState } from 'react'
 import Header from '../components/Header'
 import ManualSidebar from '../components/ManualSidebar'
@@ -9,6 +10,7 @@ import caseyReadingImage from '../assets/casey_lee.png'
 import { fetchManualStructure } from '../api/manual'
 import { buildManualTree } from '../utils/manualTree'
 
+/** Vista principal del manual: sidebar de capítulos, contenido y panel de chat colapsable. */
 export default function DashboardView({ onLogout, isAdmin, onGoAdmin }) {
   const [selected, setSelected] = useState({ chapter: null, subchapter: null })
   const [chapters, setChapters] = useState([])
@@ -19,6 +21,7 @@ export default function DashboardView({ onLogout, isAdmin, onGoAdmin }) {
   const [chatCollapsed, setChatCollapsed] = useState(false)
   const [mobilePanel, setMobilePanel] = useState(null)
 
+  // Cargar la estructura del manual una sola vez al montar; usar flag para evitar setState en desmontado
   useEffect(() => {
     let cancelado = false
 

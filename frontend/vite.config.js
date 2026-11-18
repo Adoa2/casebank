@@ -1,3 +1,4 @@
+// Configuración de Vite: proxy de /api al backend local en desarrollo.
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 

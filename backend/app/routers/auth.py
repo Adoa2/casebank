@@ -1,3 +1,4 @@
+# Autenticación: registro, login, recuperación de contraseña y dependencias de acceso por rol.
 from datetime import datetime, timedelta
 import re
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -21,12 +22,15 @@ EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 
 # --- FUNCIONES DE AYUDA ---
 def get_password_hash(password):
+    """Genera el hash bcrypt de una contraseña en texto plano."""
     return pwd_context.hash(password)
 
 def verify_password(plain_password, hashed_password):
+    """Compara una contraseña en texto plano con su hash almacenado."""
     return pwd_context.verify(plain_password, hashed_password)
 
 def create_access_token(data: dict):
+    """Genera un JWT con tiempo de expiración configurado en ACCESS_TOKEN_EXPIRE_MINUTES."""
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
@@ -43,11 +47,13 @@ def create_access_token(data: dict):
     response_description="Usuario creado exitosamente.",
 )
 def register_user(user: schemas.UserCreate, db_session: Session = Depends(db.get_db)):
+    """Registra un usuario nuevo verificando unicidad de correo y nombre de usuario."""
     correo = user.correo.strip()
 
     if not EMAIL_REGEX.match(correo):
         raise HTTPException(status_code=400, detail="Ingresa un correo electrónico válido.")
 
+    # Verificar unicidad de correo Y nombre de usuario en un solo query con OR
     user_exists = db_session.query(models.User).filter(
         (func.lower(models.User.correo) == correo.lower())
         | (func.lower(models.User.nombre_usuario) == user.nombre_usuario.lower())
@@ -78,6 +84,11 @@ def register_user(user: schemas.UserCreate, db_session: Session = Depends(db.get
     response_description="Token de acceso generado.",
 )
 def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db_session: Session = Depends(db.get_db)):
+    """
+    Autentica con nombre de usuario (case-insensitive) y contraseña.
+    Rechaza cuentas inactivas aunque la contraseña sea correcta.
+    """
+    # Búsqueda case-insensitive: "Usuario" y "usuario" son la misma cuenta
     user = db_session.query(models.User).filter(
         func.lower(models.User.nombre_usuario) == form_data.username.lower()
     ).first()
@@ -89,6 +100,7 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db_session: Ses
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # El admin puede desactivar cuentas sin borrarlas
     if not user.activo:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -115,11 +127,16 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db_session: Ses
     response_description="Confirmación de que la solicitud fue procesada.",
 )
 def forgot_password(data: schemas.PasswordResetRequest, db_session: Session = Depends(db.get_db)):
+    """
+    Genera un código de recuperación de 6 dígitos, lo persiste y lo envía por correo.
+    Informa si el correo no está registrado (no es un flujo silencioso).
+    """
     correo = data.correo.strip()
 
     if not EMAIL_REGEX.match(correo):
         raise HTTPException(status_code=400, detail="Ingresa un correo electrónico válido.")
 
+    # Permite múltiples códigos pendientes; el endpoint de reset toma el más reciente
     user = db_session.query(models.User).filter(
         func.lower(models.User.correo) == correo.lower(),
     ).first()
@@ -136,6 +153,7 @@ def forgot_password(data: schemas.PasswordResetRequest, db_session: Session = De
     db_session.add(reset_entry)
     db_session.commit()
 
+    # El fallo de correo es visible al usuario para que reintente
     try:
         send_reset_code_email(to_email=user.correo, username=user.nombre_usuario, code=code)
     except EmailSendError:
@@ -154,6 +172,7 @@ def forgot_password(data: schemas.PasswordResetRequest, db_session: Session = De
     response_description="Confirmación de que la contraseña fue actualizada.",
 )
 def reset_password(data: schemas.PasswordResetVerify, db_session: Session = Depends(db.get_db)):
+    """Verifica que el código exista, no esté usado y no haya vencido; luego actualiza la contraseña."""
     user = db_session.query(models.User).filter(
         func.lower(models.User.correo) == data.correo.lower()
     ).first()
@@ -171,6 +190,7 @@ def reset_password(data: schemas.PasswordResetVerify, db_session: Session = Depe
         .first()
     )
 
+    # Comprobar existencia y expiración en un solo bloque para no filtrar cuál condición falló
     if not reset_entry or reset_entry.expira_en < datetime.utcnow():
         raise HTTPException(status_code=400, detail="Código inválido o vencido")
 
@@ -187,6 +207,7 @@ from jose import JWTError
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 def get_current_user(token: str = Depends(oauth2_scheme), db_session: Session = Depends(db.get_db)):
+    """Dependencia de FastAPI que valida el JWT y devuelve el usuario activo."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="No se pudieron validar las credenciales",
@@ -211,6 +232,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db_session: Session = 
 def require_role(min_role: int):
     """Genera una dependencia que exige un nivel minimo de privilegio (rol)."""
     def dependency(current_user: models.User = Depends(get_current_user)):
+        """Lanza 403 si el rol del usuario es menor al mínimo requerido."""
         if current_user.rol < min_role:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

@@ -1,3 +1,4 @@
+// Tabla CRUD de videos formativos en el panel de administración.
 import { useEffect, useMemo, useState } from 'react'
 import { listVideos, createVideo, updateVideo, deleteVideo } from '../api/videos'
 import VideoFormModal from './VideoFormModal'
@@ -49,6 +50,7 @@ function ChapterBadge({ children }) {
   return <span className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-100"><svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4.5A3.5 3.5 0 0 1 7.5 3H11v17H7.5A3.5 3.5 0 0 0 4 21.5v-17ZM20 4.5A3.5 3.5 0 0 0 16.5 3H13v17h3.5a3.5 3.5 0 0 1 3.5 1.5v-17Z" /></svg><span className="truncate">{children}</span></span>
 }
 
+/** Sección admin de videos formativos: tabla agrupada por sección con CRUD y filtros. */
 export default function VideosSection() {
   const [videos, setVideos] = useState([])
   const [loading, setLoading] = useState(true)
@@ -119,6 +121,7 @@ export default function VideosSection() {
     }
   }
 
+  // Mensaje de retroalimentación unificado: carga, error o vacío
   const feedback = loading ? 'Cargando videos...' : error || (filteredVideos.length === 0 ? 'No se encontraron videos.' : null)
 
   return (

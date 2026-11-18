@@ -1,3 +1,5 @@
+# Punto de entrada de la aplicación FastAPI.
+# Crea las tablas ORM, registra los routers bajo el prefijo /api y configura CORS.
 from fastapi import FastAPI, Depends, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -83,6 +85,7 @@ api_router.include_router(updates.router)
     tags=["General"],
 )
 def read_root():
+    """Healthcheck: confirma que el backend está en línea y conectado a la base de datos."""
     return {"mensaje": "¡Servidor funcionando y base de datos conectada con éxito!"}
 
 @api_router.get(
@@ -92,6 +95,7 @@ def read_root():
     tags=["General"],
 )
 def read_secret_manual(current_user: models.User = Depends(auth.get_current_user)):
+    """Endpoint de ejemplo que requiere autenticación válida."""
     return {
         "mensaje": f"¡Hola, {current_user.nombre_usuario}! Has entrado a la zona protegida.",
     }

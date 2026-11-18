@@ -1,3 +1,4 @@
+// Modal de creación y edición de usuarios del sistema.
 import { useEffect, useMemo, useState } from 'react'
 
 const ROLE_OPTIONS = [
@@ -49,6 +50,7 @@ function Field({ label, required, hint, children }) {
   )
 }
 
+/** Modal de creación y edición de usuarios del sistema con validación de duplicados. */
 export default function UserFormModal({ mode, initialData, existingUsers = [], onClose, onSubmit }) {
   const isEdit = mode === 'edit'
   const [nombreUsuario, setNombreUsuario] = useState(initialData?.nombre_usuario || '')
@@ -62,6 +64,7 @@ export default function UserFormModal({ mode, initialData, existingUsers = [], o
   const [saving, setSaving] = useState(false)
 
   const passwordChecks = useMemo(() => PASSWORD_RULES.map((rule) => ({ ...rule, valid: rule.test(contrasena) })), [contrasena])
+  // Validación client-side de nombre de usuario duplicado (el backend también lo verifica)
   const normalizedUsername = nombreUsuario.trim().toLocaleLowerCase('es')
   const usernameTaken = !isEdit && normalizedUsername.length > 0 && existingUsers.some(
     (user) => user.nombre_usuario?.trim().toLocaleLowerCase('es') === normalizedUsername,
@@ -87,6 +90,7 @@ export default function UserFormModal({ mode, initialData, existingUsers = [], o
   async function handleSubmit(event) {
     event.preventDefault()
     setError(null)
+    // Validaciones client-side antes de llamar al backend
     if (usernameTaken) {
       setError('El nombre de usuario ya está registrado. Elige uno diferente.')
       return
