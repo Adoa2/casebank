@@ -73,9 +73,9 @@ def _indexar_error(error: models.ErrorReport):
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
     try:
-        cur.execute("DELETE FROM error_chunks WHERE error_id = %s;", (error.id,))
+        cur.execute("DELETE FROM fragmentos_errores WHERE reporte_id = %s;", (error.id,))
         cur.execute(
-            "INSERT INTO error_chunks (error_id, contenido, embedding) VALUES (%s, %s, %s::vector);",
+            "INSERT INTO fragmentos_errores (reporte_id, contenido, embedding) VALUES (%s, %s, %s::vector);",
             (error.id, texto, embedding_literal),
         )
         conn.commit()
@@ -160,14 +160,14 @@ def crear_error(
         raise HTTPException(status_code=400, detail="Agrega al menos dos opciones de diagnóstico, cada una con su pregunta y respuesta.")
 
     payload = data.model_dump(exclude={"diagnostico_opciones"})
-    nuevo = models.ErrorReport(**payload, created_by=current_user.id)
+    nuevo = models.ErrorReport(**payload, creado_por=current_user.id)
     db_session.add(nuevo)
     db_session.flush()
 
     if data.tiene_diagnostico:
         for indice, opcion in enumerate(opciones_validas):
             db_session.add(models.ErrorDiagnosticoOpcion(
-                error_id=nuevo.id,
+                reporte_id=nuevo.id,
                 pregunta=opcion.pregunta.strip(),
                 respuesta=opcion.respuesta.strip(),
                 orden=indice,
@@ -194,7 +194,7 @@ def listar_errores(
             joinedload(models.ErrorReport.creator),
             joinedload(models.ErrorReport.reviewer),
         )
-        .order_by(models.ErrorReport.created_at.desc())
+        .order_by(models.ErrorReport.creado_en.desc())
         .all()
     )
 
@@ -216,7 +216,7 @@ def listar_pendientes(
             joinedload(models.ErrorReport.reviewer),
         )
         .filter(models.ErrorReport.estado == "pendiente")
-        .order_by(models.ErrorReport.created_at.desc())
+        .order_by(models.ErrorReport.creado_en.desc())
         .all()
     )
 
@@ -241,8 +241,8 @@ def revisar_error(
         raise HTTPException(status_code=400, detail="Este error ya fue revisado")
 
     error.estado = "aprobado" if data.aprobar else "rechazado"
-    error.reviewed_by = current_user.id
-    error.reviewed_at = datetime.utcnow()
+    error.revisado_por = current_user.id
+    error.revisado_en = datetime.utcnow()
     db_session.commit()
     db_session.refresh(error)
 
@@ -297,11 +297,11 @@ def editar_error(
             raise HTTPException(status_code=400, detail="Agrega al menos dos opciones de diagnóstico, cada una con su pregunta y respuesta.")
 
         db_session.query(models.ErrorDiagnosticoOpcion).filter(
-            models.ErrorDiagnosticoOpcion.error_id == error.id
+            models.ErrorDiagnosticoOpcion.reporte_id == error.id
         ).delete()
         for indice, opcion in enumerate(opciones_validas):
             db_session.add(models.ErrorDiagnosticoOpcion(
-                error_id=error.id,
+                reporte_id=error.id,
                 pregunta=opcion.pregunta.strip(),
                 respuesta=opcion.respuesta.strip(),
                 orden=indice,
@@ -340,4 +340,4 @@ def eliminar_error(
 
     db_session.delete(error)
     db_session.commit()
-    return {"message": "Error eliminado correctamente"}
+    return {"mensaje": "Error eliminado correctamente"}

@@ -28,13 +28,13 @@ function AuthLayout({ cardClassName, children }) {
 
 function ResetRoute({ onBackToLogin, onReset }) {
   const location = useLocation()
-  const email = location.state?.email
+  const correo = location.state?.correo
 
-  if (!email) {
+  if (!correo) {
     return <Navigate to="/forgot" replace />
   }
 
-  return <ResetPasswordView email={email} onBackToLogin={onBackToLogin} onReset={onReset} />
+  return <ResetPasswordView correo={correo} onBackToLogin={onBackToLogin} onReset={onReset} />
 }
 
 function LoginRoute({ authenticated, onLogout, notice, onConsumeNotice, onGoRegister, onGoForgot, onLoginSuccess }) {
@@ -146,7 +146,7 @@ export default function App() {
             <AuthLayout cardClassName="max-w-[510px]">
               <ForgotPasswordView
                 onBackToLogin={() => navigate('/login')}
-                onCodeSent={(email) => navigate('/reset', { state: { email } })}
+                onCodeSent={(correo) => navigate('/reset', { state: { correo } })}
               />
             </AuthLayout>
           )

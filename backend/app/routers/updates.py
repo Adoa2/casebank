@@ -257,13 +257,13 @@ def _index_document(document: models.UpdateDocument, pages: list[dict]):
     connection = psycopg2.connect(DATABASE_URL)
     cursor = connection.cursor()
     try:
-        cursor.execute("DELETE FROM update_chunks WHERE update_id = %s", (document.id,))
+        cursor.execute("DELETE FROM fragmentos_actualizacion WHERE actualizacion_id = %s", (document.id,))
         for chunk, embedding in zip(chunks, embeddings):
             vector = "[" + ",".join(str(value) for value in embedding) + "]"
             cursor.execute(
                 """
-                INSERT INTO update_chunks
-                    (update_id, contenido, pagina_inicio, pagina_fin, embedding)
+                INSERT INTO fragmentos_actualizacion
+                    (actualizacion_id, contenido, pagina_inicio, pagina_fin, embedding)
                 VALUES (%s, %s, %s, %s, %s::vector)
                 """,
                 (document.id, chunk["text"], chunk["page_start"], chunk["page_end"], vector),
@@ -293,7 +293,7 @@ def list_updates(
     return (
         db_session.query(models.UpdateDocument)
         .options(joinedload(models.UpdateDocument.creator))
-        .order_by(models.UpdateDocument.created_at.desc())
+        .order_by(models.UpdateDocument.creado_en.desc())
         .all()
     )
 
@@ -307,7 +307,7 @@ def create_update(
     seccion_id: int | None = Form(None),
     capitulo: str = Form(...),
     seccion: str = Form(...),
-    is_active: bool = Form(True),
+    activo: bool = Form(True),
     file: UploadFile = File(...),
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_reviewer),
@@ -329,9 +329,9 @@ def create_update(
         subseccion=None,
         archivo_url=public_url,
         archivo_nombre=file.filename or "actualizacion.pdf",
-        storage_path=storage_path,
-        is_active=is_active,
-        created_by=current_user.id,
+        ruta_almacenamiento=storage_path,
+        activo=activo,
+        creado_por=current_user.id,
     )
     db_session.add(document)
     db_session.commit()
@@ -393,10 +393,10 @@ def replace_pdf(
         raise HTTPException(status_code=404, detail="Actualización no encontrada.")
     content, pages = _read_pdf(file)
     new_path, new_url = _upload_pdf(content)
-    old_path = document.storage_path
+    old_path = document.ruta_almacenamiento
     old_url = document.archivo_url
     old_name = document.archivo_nombre
-    document.storage_path = new_path
+    document.ruta_almacenamiento = new_path
     document.archivo_url = new_url
     document.archivo_nombre = file.filename or "actualizacion.pdf"
     db_session.commit()
@@ -404,7 +404,7 @@ def replace_pdf(
     try:
         _index_document(document, pages)
     except Exception as exc:
-        document.storage_path, document.archivo_url, document.archivo_nombre = old_path, old_url, old_name
+        document.ruta_almacenamiento, document.archivo_url, document.archivo_nombre = old_path, old_url, old_name
         db_session.commit()
         _delete_pdf(new_path)
         raise HTTPException(status_code=502, detail="No se pudo indexar el nuevo PDF.") from exc
@@ -421,8 +421,8 @@ def delete_update(
     document = db_session.query(models.UpdateDocument).filter(models.UpdateDocument.id == document_id).first()
     if not document:
         raise HTTPException(status_code=404, detail="Actualización no encontrada.")
-    storage_path = document.storage_path
+    storage_path = document.ruta_almacenamiento
     db_session.delete(document)
     db_session.commit()
     _delete_pdf(storage_path)
-    return {"message": "Actualización eliminada correctamente."}
+    return {"mensaje": "Actualización eliminada correctamente."}

@@ -92,7 +92,7 @@ export default function ErrorsSection({ onDetailChange }) {
     try {
       const [data, users] = await Promise.all([listErrors(), listUsers()])
       setErrors(data)
-      setUserNames(Object.fromEntries(users.map((user) => [user.id, user.username])))
+      setUserNames(Object.fromEntries(users.map((user) => [user.id, user.nombre_usuario])))
     } catch (err) {
       setError(err.message || 'No se pudo cargar la lista de errores.')
     } finally {
@@ -270,7 +270,7 @@ export default function ErrorsSection({ onDetailChange }) {
                   <td className="px-5 py-6 text-[#17213e]">
                     <div className="flex items-start gap-2">
                       <svg className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M8 3v4m8-4v4M3 10h18" /></svg>
-                      <span>{formatDate(item.created_at)}</span>
+                      <span>{formatDate(item.creado_en)}</span>
                     </div>
                   </td>
                   <td className="px-5 py-6 text-center"><ViewButton onClick={() => setSelectedError(item)} /></td>
@@ -293,7 +293,7 @@ export default function ErrorsSection({ onDetailChange }) {
               </div>
               <div className="mb-4 grid grid-cols-2 gap-3 text-xs">
                 <div><span className="block text-slate-400">Módulo</span><strong className="mt-1 block truncate text-slate-700">{item.modulo}</strong></div>
-                <div><span className="block text-slate-400">Creado</span><strong className="mt-1 block text-slate-700">{formatDate(item.created_at)}</strong></div>
+                <div><span className="block text-slate-400">Creado</span><strong className="mt-1 block text-slate-700">{formatDate(item.creado_en)}</strong></div>
               </div>
               <div className="flex items-center justify-between gap-3">
                 <StatusBadge status={item.estado} />

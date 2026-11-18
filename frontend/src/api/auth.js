@@ -1,10 +1,10 @@
 import { API_BASE_URL } from '../config'
 
 const FIELD_MESSAGES = {
-  new_password: 'La contraseña debe tener al menos 8 caracteres.',
-  code: 'El código debe tener 6 dígitos.',
-  email: 'El correo no es válido.',
-  password: 'La contraseña debe incluir 8 caracteres, mayúscula, minúscula, número y carácter especial.',
+  nueva_contrasena: 'La contraseña debe tener al menos 8 caracteres.',
+  codigo: 'El código debe tener 6 dígitos.',
+  correo: 'El correo no es válido.',
+  contrasena: 'La contraseña debe incluir 8 caracteres, mayúscula, minúscula, número y carácter especial.',
 }
 
 async function parseError(res, fallback) {
@@ -36,11 +36,11 @@ export async function login(username, password) {
   return res.json()
 }
 
-export async function register(username, email, password, nationality) {
+export async function register(nombre_usuario, correo, contrasena, nacionalidad) {
   const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, email, password, nationality }),
+    body: JSON.stringify({ nombre_usuario, correo, contrasena, nacionalidad }),
   })
 
   if (!res.ok) {
@@ -50,11 +50,11 @@ export async function register(username, email, password, nationality) {
   return res.json()
 }
 
-export async function forgotPassword(email) {
+export async function forgotPassword(correo) {
   const res = await fetch(`${API_BASE_URL}/api/auth/forgot-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ correo }),
   })
 
   if (!res.ok) {
@@ -64,11 +64,11 @@ export async function forgotPassword(email) {
   return res.json()
 }
 
-export async function resetPassword(email, code, newPassword) {
+export async function resetPassword(correo, codigo, nuevaContrasena) {
   const res = await fetch(`${API_BASE_URL}/api/auth/reset-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, code, new_password: newPassword }),
+    body: JSON.stringify({ correo, codigo, nueva_contrasena: nuevaContrasena }),
   })
 
   if (!res.ok) {

@@ -573,15 +573,15 @@ def search_relevant_chunks(pregunta, nationality=None, n_results=N_RESULTS, max_
                NULL::text AS archivo_url,
                embedding <=> %s::vector AS distance,
                ctid::text AS row_id
-        FROM manual_chunks
+        FROM fragmentos_manual
         UNION ALL
-        SELECT 'error' AS origen, ec.error_id::text AS seccion_id, er.titulo AS titulo, NULL::integer AS pagina_inicio,
+        SELECT 'error' AS origen, ec.reporte_id::text AS seccion_id, er.titulo AS titulo, NULL::integer AS pagina_inicio,
                NULL::integer AS pagina_fin, ec.contenido, NULL::jsonb AS imagenes,
                er.requiere_ticket, er.tiene_evidencia, er.imagen_url, NULL::text AS archivo_url,
                ec.embedding <=> %s::vector AS distance,
                ec.ctid::text AS row_id
-        FROM error_chunks ec
-        JOIN error_reports er ON er.id = ec.error_id
+        FROM fragmentos_errores ec
+        JOIN reportes_errores er ON er.id = ec.reporte_id
         UNION ALL
         SELECT 'actualizacion' AS origen, ud.id::text AS seccion_id, ud.titulo,
                uc.pagina_inicio, uc.pagina_fin, uc.contenido, NULL::jsonb AS imagenes,
@@ -589,9 +589,9 @@ def search_relevant_chunks(pregunta, nationality=None, n_results=N_RESULTS, max_
                ud.archivo_url,
                uc.embedding <=> %s::vector AS distance,
                uc.ctid::text AS row_id
-        FROM update_chunks uc
-        JOIN update_documents ud ON ud.id = uc.update_id
-        WHERE ud.is_active = TRUE
+        FROM fragmentos_actualizacion uc
+        JOIN documentos_actualizacion ud ON ud.id = uc.actualizacion_id
+        WHERE ud.activo = TRUE
           AND (ud.aplicabilidad = 'ambas' OR ud.aplicabilidad = %s)
         ORDER BY distance
         LIMIT %s;
@@ -651,9 +651,9 @@ def _obtener_chunk_error(error_id):
             """
             SELECT ec.contenido, er.titulo, er.requiere_ticket, er.tiene_evidencia,
                    er.imagen_url, ec.ctid::text
-            FROM error_chunks ec
-            JOIN error_reports er ON er.id = ec.error_id
-            WHERE ec.error_id = %s
+            FROM fragmentos_errores ec
+            JOIN reportes_errores er ON er.id = ec.reporte_id
+            WHERE ec.reporte_id = %s
             LIMIT 1;
             """,
             (error_id,),
@@ -696,7 +696,7 @@ def _obtener_diagnostico_error(error_id):
     cur = conn.cursor()
     try:
         cur.execute(
-            "SELECT tiene_diagnostico FROM error_reports WHERE id = %s;",
+            "SELECT tiene_diagnostico FROM reportes_errores WHERE id = %s;",
             (error_id,),
         )
         fila = cur.fetchone()
@@ -707,7 +707,7 @@ def _obtener_diagnostico_error(error_id):
             """
             SELECT id, pregunta
             FROM error_diagnostico_opciones
-            WHERE error_id = %s
+            WHERE reporte_id = %s
             ORDER BY orden;
             """,
             (error_id,),
@@ -732,8 +732,8 @@ def _obtener_opcion_diagnostico(error_id, opcion_id):
             """
             SELECT edo.respuesta, er.requiere_ticket
             FROM error_diagnostico_opciones edo
-            JOIN error_reports er ON er.id = edo.error_id
-            WHERE edo.id = %s AND edo.error_id = %s
+            JOIN reportes_errores er ON er.id = edo.reporte_id
+            WHERE edo.id = %s AND edo.reporte_id = %s
             LIMIT 1;
             """,
             (opcion_id, error_id),
@@ -817,7 +817,7 @@ def _obtener_chunk_seccion(seccion_id):
         cur.execute(
             """
             SELECT titulo, pagina_inicio, pagina_fin, contenido, imagenes, ctid::text
-            FROM manual_chunks
+            FROM fragmentos_manual
             WHERE seccion_id = %s
             ORDER BY ctid
             LIMIT 1;

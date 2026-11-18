@@ -89,9 +89,9 @@ export default function AdminHome({ role, onNavigate, onGoManual }) {
 
   const activities = useMemo(() => {
     const entries = [
-      ...data.users.map((user) => ({ id: `user-${user.id}`, type: 'users', title: 'Se registró un nuevo usuario', detail: user.username, date: user.created_at })),
-      ...data.videos.map((video) => ({ id: `video-${video.id}`, type: 'videos', title: 'Se publicó un video', detail: video.titulo, date: video.created_at })),
-      ...data.errors.map((item) => ({ id: `error-${item.id}`, type: item.estado === 'pendiente' ? 'pending' : 'solved', title: item.estado === 'pendiente' ? 'Error pendiente de revisión' : `Error ${item.estado}`, detail: item.titulo, date: item.reviewed_at || item.created_at })),
+      ...data.users.map((user) => ({ id: `user-${user.id}`, type: 'users', title: 'Se registró un nuevo usuario', detail: user.nombre_usuario, date: user.creado_en })),
+      ...data.videos.map((video) => ({ id: `video-${video.id}`, type: 'videos', title: 'Se publicó un video', detail: video.titulo, date: video.creado_en })),
+      ...data.errors.map((item) => ({ id: `error-${item.id}`, type: item.estado === 'pendiente' ? 'pending' : 'solved', title: item.estado === 'pendiente' ? 'Error pendiente de revisión' : `Error ${item.estado}`, detail: item.titulo, date: item.revisado_en || item.creado_en })),
     ]
     return entries.filter((entry) => entry.date).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 4)
   }, [data])

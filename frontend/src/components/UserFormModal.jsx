@@ -51,20 +51,20 @@ function Field({ label, required, hint, children }) {
 
 export default function UserFormModal({ mode, initialData, existingUsers = [], onClose, onSubmit }) {
   const isEdit = mode === 'edit'
-  const [username, setUsername] = useState(initialData?.username || '')
-  const [email, setEmail] = useState(initialData?.email || '')
-  const [nationality, setNationality] = useState(initialData?.nationality || '')
-  const [password, setPassword] = useState('')
-  const [role, setRole] = useState(initialData?.role ?? (isEdit ? 0 : 1))
-  const [isActive, setIsActive] = useState(initialData?.is_active ?? true)
+  const [nombreUsuario, setNombreUsuario] = useState(initialData?.nombre_usuario || '')
+  const [correo, setCorreo] = useState(initialData?.correo || '')
+  const [nacionalidad, setNacionalidad] = useState(initialData?.nacionalidad || '')
+  const [contrasena, setContrasena] = useState('')
+  const [rol, setRol] = useState(initialData?.rol ?? (isEdit ? 0 : 1))
+  const [activo, setActivo] = useState(initialData?.activo ?? true)
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
 
-  const passwordChecks = useMemo(() => PASSWORD_RULES.map((rule) => ({ ...rule, valid: rule.test(password) })), [password])
-  const normalizedUsername = username.trim().toLocaleLowerCase('es')
+  const passwordChecks = useMemo(() => PASSWORD_RULES.map((rule) => ({ ...rule, valid: rule.test(contrasena) })), [contrasena])
+  const normalizedUsername = nombreUsuario.trim().toLocaleLowerCase('es')
   const usernameTaken = !isEdit && normalizedUsername.length > 0 && existingUsers.some(
-    (user) => user.username?.trim().toLocaleLowerCase('es') === normalizedUsername,
+    (user) => user.nombre_usuario?.trim().toLocaleLowerCase('es') === normalizedUsername,
   )
   const passedRules = passwordChecks.filter((rule) => rule.valid).length
   const passwordIsValid = passedRules === PASSWORD_RULES.length
@@ -91,22 +91,22 @@ export default function UserFormModal({ mode, initialData, existingUsers = [], o
       setError('El nombre de usuario ya está registrado. Elige uno diferente.')
       return
     }
-    if (!nationality) {
+    if (!nacionalidad) {
       setError('Selecciona la nacionalidad del usuario.')
       return
     }
-    if ((!isEdit || password) && !passwordIsValid) {
+    if ((!isEdit || contrasena) && !passwordIsValid) {
       setError('La contraseña debe cumplir todos los requisitos de seguridad.')
       return
     }
     setSaving(true)
     try {
       if (isEdit) {
-        const payload = { email, nationality, role: Number(role), is_active: isActive }
-        if (password) payload.password = password
+        const payload = { correo, nacionalidad, rol: Number(rol), activo }
+        if (contrasena) payload.contrasena = contrasena
         await onSubmit(payload)
       } else {
-        await onSubmit({ username, email, nationality, password, role: Number(role), is_active: isActive })
+        await onSubmit({ nombre_usuario: nombreUsuario, correo, nacionalidad, contrasena, rol: Number(rol), activo })
       }
     } catch (err) {
       setError(err.message || 'No se pudo guardar el usuario.')
@@ -137,18 +137,18 @@ export default function UserFormModal({ mode, initialData, existingUsers = [], o
               <SectionHeading number="1" icon="identity" title="Identidad" />
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Nombre de usuario" required hint={isEdit ? 'El nombre de usuario no se puede modificar.' : 'Solo letras, números, puntos y guiones bajos.'}>
-                  <input type="text" value={username} onChange={(event) => { setUsername(event.target.value); setError(null) }} disabled={isEdit} required autoComplete="username" placeholder="juan.perez" aria-invalid={usernameTaken} aria-describedby={usernameTaken ? 'username-exists-error' : undefined} className={`${inputClass} ${usernameTaken ? '!border-red-400 focus:!border-red-500 focus:!ring-red-100' : ''}`} />
+                  <input type="text" value={nombreUsuario} onChange={(event) => { setNombreUsuario(event.target.value); setError(null) }} disabled={isEdit} required autoComplete="username" placeholder="juan.perez" aria-invalid={usernameTaken} aria-describedby={usernameTaken ? 'username-exists-error' : undefined} className={`${inputClass} ${usernameTaken ? '!border-red-400 focus:!border-red-500 focus:!ring-red-100' : ''}`} />
                   {usernameTaken && <p id="username-exists-error" role="alert" className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600"><svg className="h-4 w-4 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="8" cy="8" r="6" /><path d="M8 4.5v4M8 11.5h.01" /></svg>Este nombre de usuario ya está registrado.</p>}
                 </Field>
                 <Field label="Correo electrónico" required hint="Se enviará la información de acceso a este correo.">
-                  <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" placeholder="juan.perez@casebank.com" className={inputClass} />
+                  <input type="email" value={correo} onChange={(event) => setCorreo(event.target.value)} required autoComplete="email" placeholder="juan.perez@casebank.com" className={inputClass} />
                 </Field>
               </div>
               <div className="mt-4 max-w-[360px]">
                 <Field label="Nacionalidad" required hint="Selecciona la nacionalidad registrada para esta cuenta.">
                   <div className="relative">
                     <svg className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" /></svg>
-                    <select value={nationality} onChange={(event) => { setNationality(event.target.value); setError(null) }} required className={`${inputClass} appearance-none pl-11 pr-10 ${nationality ? '' : 'text-slate-400'}`}>
+                    <select value={nacionalidad} onChange={(event) => { setNacionalidad(event.target.value); setError(null) }} required className={`${inputClass} appearance-none pl-11 pr-10 ${nacionalidad ? '' : 'text-slate-400'}`}>
                       <option value="" disabled>Selecciona una nacionalidad</option>
                       <option value="hondurena">Hondureña</option>
                       <option value="dominicana">Dominicana</option>
@@ -163,10 +163,10 @@ export default function UserFormModal({ mode, initialData, existingUsers = [], o
               <SectionHeading number="2" icon="badge" title="Rol" description="Selecciona el rol que definirá los permisos del usuario." />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {ROLE_OPTIONS.map((option) => {
-                  const selected = Number(role) === option.value
+                  const selected = Number(rol) === option.value
                   return (
                     <label key={option.value} className={`relative min-h-[142px] cursor-pointer rounded-xl border p-4 transition ${selected ? 'border-blue-500 bg-blue-50/30 shadow-[0_0_0_1px_rgba(59,130,246,.08)]' : 'border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50/50'}`}>
-                      <input type="radio" name="role" value={option.value} checked={selected} onChange={() => setRole(option.value)} className="sr-only" />
+                      <input type="radio" name="rol" value={option.value} checked={selected} onChange={() => setRol(option.value)} className="sr-only" />
                       <span className={`mb-3 grid h-7 w-7 place-items-center ${selected ? 'text-blue-600' : 'text-[#17213e]'}`}><Icon name={option.icon} className="h-6 w-6" /></span>
                       <span className="block text-sm font-semibold text-[#17213e]">{option.label}</span>
                       <span className="mt-1.5 block text-[11px] leading-[1.55] text-slate-500 sm:text-xs">{option.description}</span>
@@ -182,7 +182,7 @@ export default function UserFormModal({ mode, initialData, existingUsers = [], o
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1.35fr_.9fr] sm:gap-8">
                 <Field label={isEdit ? 'Nueva contraseña' : 'Contraseña'} required={!isEdit} hint={isEdit ? 'Déjala en blanco para conservar la contraseña actual.' : 'La contraseña debe ingresarse manualmente.'}>
                   <div className="relative">
-                    <input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} required={!isEdit} autoComplete="new-password" placeholder="••••••••••••" className={`${inputClass} pr-11`} />
+                    <input type={showPassword ? 'text' : 'password'} value={contrasena} onChange={(event) => setContrasena(event.target.value)} required={!isEdit} autoComplete="new-password" placeholder="••••••••••••" className={`${inputClass} pr-11`} />
                     <button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute right-2.5 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-md text-slate-600 hover:bg-slate-50" aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}>
                       <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">{showPassword ? <path d="M3 3l18 18M10.6 10.6a2.5 2.5 0 0 0 3.5 3.5M6.5 6.7C4.3 8.1 2.7 10 2 12c1.5 3.9 5.5 7 10 7 1.6 0 3.1-.4 4.5-1.1M9.9 4.2A10.6 10.6 0 0 1 12 4c4.5 0 8.5 3.1 10 7-.5 1.3-1.3 2.6-2.3 3.7" /> : <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></>}</svg>
                     </button>
@@ -200,8 +200,8 @@ export default function UserFormModal({ mode, initialData, existingUsers = [], o
               <div className="max-w-[360px]">
                 <Field label="Estado" required hint="El usuario podrá acceder al sistema según este estado.">
                   <div className="relative">
-                    <span className={`pointer-events-none absolute left-4 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                    <select value={isActive ? 'activo' : 'inactivo'} onChange={(event) => setIsActive(event.target.value === 'activo')} className={`${inputClass} appearance-none pl-10 pr-10`}><option value="activo">Activo</option><option value="inactivo">Inactivo</option></select>
+                    <span className={`pointer-events-none absolute left-4 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full ${activo ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                    <select value={activo ? 'activo' : 'inactivo'} onChange={(event) => setActivo(event.target.value === 'activo')} className={`${inputClass} appearance-none pl-10 pr-10`}><option value="activo">Activo</option><option value="inactivo">Inactivo</option></select>
                     <svg className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg>
                   </div>
                 </Field>

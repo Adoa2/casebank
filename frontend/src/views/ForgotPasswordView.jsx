@@ -6,7 +6,7 @@ import { forgotPassword } from '../api/auth'
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export default function ForgotPasswordView({ onBackToLogin, onCodeSent }) {
-  const [email, setEmail] = useState('')
+  const [correo, setCorreo] = useState('')
   const [message, setMessage] = useState(null)
   const [loading, setLoading] = useState(false)
 
@@ -14,17 +14,17 @@ export default function ForgotPasswordView({ onBackToLogin, onCodeSent }) {
     e.preventDefault()
     setMessage(null)
 
-    const trimmedEmail = email.trim()
+    const trimmedCorreo = correo.trim()
 
-    if (!EMAIL_REGEX.test(trimmedEmail)) {
+    if (!EMAIL_REGEX.test(trimmedCorreo)) {
       setMessage({ text: 'Ingresa un correo electrónico válido.', type: 'error' })
       return
     }
 
     setLoading(true)
     try {
-      await forgotPassword(trimmedEmail)
-      onCodeSent(trimmedEmail)
+      await forgotPassword(trimmedCorreo)
+      onCodeSent(trimmedCorreo)
     } catch (err) {
       setMessage({ text: err.message || 'No se pudo conectar con el servidor.', type: 'error' })
     } finally {
@@ -45,8 +45,8 @@ export default function ForgotPasswordView({ onBackToLogin, onCodeSent }) {
         type="email"
         placeholder="nombre@cooperativa.com"
         autoComplete="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
+        value={correo}
+        onChange={(e) => setCorreo(e.target.value)}
       />
 
       <button

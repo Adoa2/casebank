@@ -9,27 +9,27 @@ from .db import Base
 
 
 class User(Base):
-    __tablename__ = "users"
+    __tablename__ = "usuarios"
 
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True, nullable=False)
-    email = Column(String, unique=True, index=True, nullable=False)
-    nationality = Column(String, nullable=True)
-    hashed_password = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    is_active = Column(Boolean, default=True, nullable=False)
-    role = Column(Integer, default=0, nullable=False)
+    nombre_usuario = Column(String, unique=True, index=True, nullable=False)
+    correo = Column(String, unique=True, index=True, nullable=False)
+    nacionalidad = Column(String, nullable=True)
+    contrasena_hash = Column(String, nullable=False)
+    creado_en = Column(DateTime, default=datetime.utcnow, nullable=False)
+    activo = Column(Boolean, default=True, nullable=False)
+    rol = Column(Integer, default=0, nullable=False)
 
 
 class PasswordResetCode(Base):
-    __tablename__ = "password_reset_codes"
+    __tablename__ = "codigos_recuperacion_contrasena"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    code = Column(String(6), nullable=False)
-    expires_at = Column(DateTime, nullable=False)
-    used = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    codigo = Column(String(6), nullable=False)
+    expira_en = Column(DateTime, nullable=False)
+    usado = Column(Boolean, default=False)
+    creado_en = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
 
@@ -43,7 +43,7 @@ class PasswordResetCode(Base):
 
 
 class ErrorReport(Base):
-    __tablename__ = "error_reports"
+    __tablename__ = "reportes_errores"
 
     id = Column(Integer, primary_key=True, index=True)
     titulo = Column(String, nullable=False)
@@ -58,13 +58,13 @@ class ErrorReport(Base):
     tiene_evidencia = Column(Boolean, default=False, nullable=False)
     imagen_url = Column(String, nullable=True)
     estado = Column(String, default="pendiente", nullable=False)  # pendiente | aprobado | rechazado
-    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    reviewed_at = Column(DateTime, nullable=True)
+    creado_por = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    revisado_por = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
+    creado_en = Column(DateTime, default=datetime.utcnow, nullable=False)
+    revisado_en = Column(DateTime, nullable=True)
 
-    creator = relationship("User", foreign_keys=[created_by])
-    reviewer = relationship("User", foreign_keys=[reviewed_by])
+    creator = relationship("User", foreign_keys=[creado_por])
+    reviewer = relationship("User", foreign_keys=[revisado_por])
     tiene_diagnostico = Column(Boolean, nullable=False, default=False)
     diagnostico_titulo = Column(String, nullable=True)
     diagnostico_opciones = relationship(
@@ -73,43 +73,46 @@ class ErrorReport(Base):
         cascade="all, delete-orphan",
         order_by="ErrorDiagnosticoOpcion.orden",
     )
-    @property
-    def created_by_name(self):
-        return self.creator.username if self.creator else None
 
     @property
-    def reviewed_by_name(self):
-        return self.reviewer.username if self.reviewer else None
+    def creado_por_nombre(self):
+        return self.creator.nombre_usuario if self.creator else None
+
+    @property
+    def revisado_por_nombre(self):
+        return self.reviewer.nombre_usuario if self.reviewer else None
+
 
 class ErrorDiagnosticoOpcion(Base):
     __tablename__ = "error_diagnostico_opciones"
 
     id = Column(Integer, primary_key=True, index=True)
-    error_id = Column(Integer, ForeignKey("error_reports.id", ondelete="CASCADE"), nullable=False)
+    reporte_id = Column(Integer, ForeignKey("reportes_errores.id", ondelete="CASCADE"), nullable=False)
     pregunta = Column(String, nullable=False)
     respuesta = Column(Text, nullable=False)
     orden = Column(Integer, nullable=False, default=0)
 
     error = relationship("ErrorReport", back_populates="diagnostico_opciones")
 
+
 class Video(Base):
     __tablename__ = "videos"
 
     id = Column(Integer, primary_key=True, index=True)
     titulo = Column(String, nullable=False)
-    url = Column(String, nullable=False)
+    enlace = Column(String, nullable=False)
     seccion_id = Column(Integer, nullable=False, index=True)
     capitulo = Column(String, nullable=False)
     seccion = Column(String, nullable=True)
     subseccion = Column(String, nullable=True)
-    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    creado_por = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    creado_en = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    creator = relationship("User", foreign_keys=[created_by])
+    creator = relationship("User", foreign_keys=[creado_por])
 
 
 class UpdateDocument(Base):
-    __tablename__ = "update_documents"
+    __tablename__ = "documentos_actualizacion"
 
     id = Column(Integer, primary_key=True, index=True)
     titulo = Column(String, nullable=False)
@@ -122,38 +125,39 @@ class UpdateDocument(Base):
     subseccion = Column(String, nullable=True)
     archivo_url = Column(String, nullable=False)
     archivo_nombre = Column(String, nullable=False)
-    storage_path = Column(String, nullable=False)
-    is_active = Column(Boolean, default=True, nullable=False)
-    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-    creator = relationship("User", foreign_keys=[created_by])
-
-    @property
-    def created_by_name(self):
-        return self.creator.username if self.creator else None
-
-
-class VideoGenerationJob(Base):
-    __tablename__ = "video_generation_jobs"
-
-    id = Column(Integer, primary_key=True, index=True)
-    titulo = Column(String, nullable=False)
-    descripcion_inconveniente = Column(Text, nullable=False)
-    solucion = Column(Text, nullable=False)
-    puntos_a_considerar = Column(Text, nullable=True)
-    pasos_json = Column(JSON, nullable=True)  # [{"texto": str, "imagen_url": str|None}, ...], en orden
-    imagenes = Column(JSON, nullable=True, default=list)  # URLs de imagenes de respaldo subidas (compatibilidad/registro)
-    guion_json = Column(JSON, nullable=True)  # guion final usado para el timeline, para auditoria/debug
-    shotstack_render_id = Column(String, nullable=True, index=True)
-    estado = Column(String, nullable=False, default="pendiente")  # pendiente | procesando | completado | fallido
-    video_url = Column(String, nullable=True)
-    video_id = Column(Integer, ForeignKey("videos.id", ondelete="SET NULL"), nullable=True)
-    error_mensaje = Column(Text, nullable=True)
-    creado_por = Column(Integer, ForeignKey("users.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    ruta_almacenamiento = Column(String, nullable=False)
+    activo = Column(Boolean, default=True, nullable=False)
+    creado_por = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    creado_en = Column(DateTime, default=datetime.utcnow, nullable=False)
+    actualizado_en = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     creator = relationship("User", foreign_keys=[creado_por])
-    video = relationship("Video", foreign_keys=[video_id])
+
+    @property
+    def creado_por_nombre(self):
+        return self.creator.nombre_usuario if self.creator else None
+
+
+# TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
+# class VideoGenerationJob(Base):
+#     __tablename__ = "trabajos_generacion_video"
+#
+#     id = Column(Integer, primary_key=True, index=True)
+#     titulo = Column(String, nullable=False)
+#     descripcion_inconveniente = Column(Text, nullable=False)
+#     solucion = Column(Text, nullable=False)
+#     puntos_a_considerar = Column(Text, nullable=True)
+#     pasos_json = Column(JSON, nullable=True)
+#     imagenes = Column(JSON, nullable=True, default=list)
+#     guion_json = Column(JSON, nullable=True)
+#     shotstack_render_id = Column(String, nullable=True, index=True)
+#     estado = Column(String, nullable=False, default="pendiente")
+#     enlace_video = Column(String, nullable=True)
+#     video_id = Column(Integer, ForeignKey("videos.id", ondelete="SET NULL"), nullable=True)
+#     error_mensaje = Column(Text, nullable=True)
+#     creado_por = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
+#     creado_en = Column(DateTime, default=datetime.utcnow, nullable=False)
+#     actualizado_en = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+#
+#     creator = relationship("User", foreign_keys=[creado_por])
+#     video = relationship("Video", foreign_keys=[video_id])

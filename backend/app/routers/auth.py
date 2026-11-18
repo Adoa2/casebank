@@ -43,25 +43,25 @@ def create_access_token(data: dict):
     response_description="Usuario creado exitosamente.",
 )
 def register_user(user: schemas.UserCreate, db_session: Session = Depends(db.get_db)):
-    email = user.email.strip()
+    correo = user.correo.strip()
 
-    if not EMAIL_REGEX.match(email):
+    if not EMAIL_REGEX.match(correo):
         raise HTTPException(status_code=400, detail="Ingresa un correo electrónico válido.")
 
     user_exists = db_session.query(models.User).filter(
-        (func.lower(models.User.email) == email.lower())
-        | (func.lower(models.User.username) == user.username.lower())
+        (func.lower(models.User.correo) == correo.lower())
+        | (func.lower(models.User.nombre_usuario) == user.nombre_usuario.lower())
     ).first()
 
     if user_exists:
         raise HTTPException(status_code=400, detail="El usuario o correo ya está registrado")
 
-    hashed_pwd = get_password_hash(user.password)
+    hashed_pwd = get_password_hash(user.contrasena)
     new_user = models.User(
-        username=user.username,
-        email=email,
-        nationality=user.nationality,
-        hashed_password=hashed_pwd,
+        nombre_usuario=user.nombre_usuario,
+        correo=correo,
+        nacionalidad=user.nacionalidad,
+        contrasena_hash=hashed_pwd,
     )
 
     db_session.add(new_user)
@@ -79,30 +79,30 @@ def register_user(user: schemas.UserCreate, db_session: Session = Depends(db.get
 )
 def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db_session: Session = Depends(db.get_db)):
     user = db_session.query(models.User).filter(
-        func.lower(models.User.username) == form_data.username.lower()
+        func.lower(models.User.nombre_usuario) == form_data.username.lower()
     ).first()
 
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if not user or not verify_password(form_data.password, user.contrasena_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if not user.is_active:
+    if not user.activo:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Esta cuenta está inactiva",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access_token = create_access_token(data={"sub": user.username})
+    access_token = create_access_token(data={"sub": user.nombre_usuario})
 
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "username": user.username,
-        "role": user.role,
+        "nombre_usuario": user.nombre_usuario,
+        "rol": user.rol,
     }
 
 
@@ -115,13 +115,13 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db_session: Ses
     response_description="Confirmación de que la solicitud fue procesada.",
 )
 def forgot_password(data: schemas.PasswordResetRequest, db_session: Session = Depends(db.get_db)):
-    email = data.email.strip()
+    correo = data.correo.strip()
 
-    if not EMAIL_REGEX.match(email):
+    if not EMAIL_REGEX.match(correo):
         raise HTTPException(status_code=400, detail="Ingresa un correo electrónico válido.")
 
     user = db_session.query(models.User).filter(
-        func.lower(models.User.email) == email.lower(),
+        func.lower(models.User.correo) == correo.lower(),
     ).first()
 
     if not user:
@@ -129,22 +129,22 @@ def forgot_password(data: schemas.PasswordResetRequest, db_session: Session = De
 
     code = models.PasswordResetCode.generate_code()
     reset_entry = models.PasswordResetCode(
-        user_id=user.id,
-        code=code,
-        expires_at=models.PasswordResetCode.new_expiration(minutes=15),
+        usuario_id=user.id,
+        codigo=code,
+        expira_en=models.PasswordResetCode.new_expiration(minutes=15),
     )
     db_session.add(reset_entry)
     db_session.commit()
 
     try:
-        send_reset_code_email(to_email=user.email, username=user.username, code=code)
+        send_reset_code_email(to_email=user.correo, username=user.nombre_usuario, code=code)
     except EmailSendError:
         raise HTTPException(
             status_code=500,
             detail="No se pudo enviar el correo. Intenta de nuevo en unos minutos.",
         )
 
-    return {"message": "Te enviamos un código a tu correo."}
+    return {"mensaje": "Te enviamos un código a tu correo."}
 
 @router.post(
     "/reset-password",
@@ -155,7 +155,7 @@ def forgot_password(data: schemas.PasswordResetRequest, db_session: Session = De
 )
 def reset_password(data: schemas.PasswordResetVerify, db_session: Session = Depends(db.get_db)):
     user = db_session.query(models.User).filter(
-        func.lower(models.User.email) == data.email.lower()
+        func.lower(models.User.correo) == data.correo.lower()
     ).first()
     if not user:
         raise HTTPException(status_code=400, detail="Código inválido o vencido")
@@ -163,22 +163,22 @@ def reset_password(data: schemas.PasswordResetVerify, db_session: Session = Depe
     reset_entry = (
         db_session.query(models.PasswordResetCode)
         .filter(
-            models.PasswordResetCode.user_id == user.id,
-            models.PasswordResetCode.code == data.code,
-            models.PasswordResetCode.used == False,  
+            models.PasswordResetCode.usuario_id == user.id,
+            models.PasswordResetCode.codigo == data.codigo,
+            models.PasswordResetCode.usado == False,
         )
         .order_by(models.PasswordResetCode.id.desc())
         .first()
     )
 
-    if not reset_entry or reset_entry.expires_at < datetime.utcnow():
+    if not reset_entry or reset_entry.expira_en < datetime.utcnow():
         raise HTTPException(status_code=400, detail="Código inválido o vencido")
 
-    user.hashed_password = get_password_hash(data.new_password)
-    reset_entry.used = True
+    user.contrasena_hash = get_password_hash(data.nueva_contrasena)
+    reset_entry.usado = True
     db_session.commit()
 
-    return {"message": "Contraseña actualizada correctamente"}
+    return {"mensaje": "Contraseña actualizada correctamente"}
 
 
 from fastapi.security import OAuth2PasswordBearer
@@ -195,13 +195,13 @@ def get_current_user(token: str = Depends(oauth2_scheme), db_session: Session = 
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
+        nombre_usuario: str = payload.get("sub")
+        if nombre_usuario is None:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
 
-    user = db_session.query(models.User).filter(models.User.username == username).first()
+    user = db_session.query(models.User).filter(models.User.nombre_usuario == nombre_usuario).first()
     if user is None:
         raise credentials_exception
 
@@ -209,9 +209,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db_session: Session = 
 
 
 def require_role(min_role: int):
-    """Genera una dependencia que exige un nivel minimo de privilegio (role)."""
+    """Genera una dependencia que exige un nivel minimo de privilegio (rol)."""
     def dependency(current_user: models.User = Depends(get_current_user)):
-        if current_user.role < min_role:
+        if current_user.rol < min_role:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permisos para realizar esta acción",

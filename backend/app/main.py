@@ -89,7 +89,7 @@ def read_root():
 )
 def read_secret_manual(current_user: models.User = Depends(auth.get_current_user)):
     return {
-        "mensaje": f"¡Hola, {current_user.username}! Has entrado a la zona protegida.",
+        "mensaje": f"¡Hola, {current_user.nombre_usuario}! Has entrado a la zona protegida.",
     }
 
 app.include_router(api_router)

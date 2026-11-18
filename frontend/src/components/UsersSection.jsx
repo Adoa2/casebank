@@ -85,7 +85,7 @@ function ActionButtons({ user, isSelf, busy, onEdit, onToggle, onDelete }) {
         type="button"
         onClick={() => onEdit(user)}
         title="Editar usuario"
-        aria-label={`Editar a ${user.username}`}
+        aria-label={`Editar a ${user.nombre_usuario}`}
         className={`${baseClass} border-blue-100 bg-blue-50/70 text-blue-600 hover:bg-blue-100`}
       >
         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19 3 20l1-4Z" /></svg>
@@ -94,13 +94,13 @@ function ActionButtons({ user, isSelf, busy, onEdit, onToggle, onDelete }) {
         type="button"
         onClick={() => onToggle(user)}
         disabled={busy}
-        title={user.is_active ? 'Desactivar usuario' : 'Activar usuario'}
-        aria-label={user.is_active ? `Desactivar a ${user.username}` : `Activar a ${user.username}`}
+        title={user.activo ? 'Desactivar usuario' : 'Activar usuario'}
+        aria-label={user.activo ? `Desactivar a ${user.nombre_usuario}` : `Activar a ${user.nombre_usuario}`}
         className={`${baseClass} border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700`}
       >
         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <rect x="5" y="10" width="14" height="10" rx="2" />
-          {user.is_active ? <path d="M9 10V7a4 4 0 0 1 7.5-2" /> : <path d="M8 10V7a4 4 0 0 1 8 0v3" />}
+          {user.activo ? <path d="M9 10V7a4 4 0 0 1 7.5-2" /> : <path d="M8 10V7a4 4 0 0 1 8 0v3" />}
           <path d="M12 14v2" />
         </svg>
       </button>
@@ -109,7 +109,7 @@ function ActionButtons({ user, isSelf, busy, onEdit, onToggle, onDelete }) {
         onClick={() => onDelete(user)}
         disabled={isSelf || busy}
         title={isSelf ? 'No puedes eliminar tu propia cuenta' : 'Eliminar usuario'}
-        aria-label={`Eliminar a ${user.username}`}
+        aria-label={`Eliminar a ${user.nombre_usuario}`}
         className={`${baseClass} border-red-100 bg-red-50/70 text-red-500 hover:bg-red-100`}
       >
         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13M10 11v5m4-5v5" /></svg>
@@ -150,7 +150,7 @@ export default function UsersSection() {
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase()
     if (!query) return users
-    return users.filter((user) => user.username.toLowerCase().includes(query) || user.email.toLowerCase().includes(query))
+    return users.filter((user) => user.nombre_usuario.toLowerCase().includes(query) || user.correo.toLowerCase().includes(query))
   }, [users, search])
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE))
@@ -196,7 +196,7 @@ export default function UsersSection() {
     setActionError(null)
     setBusyId(user.id)
     try {
-      const updated = await updateUser(user.id, { is_active: !user.is_active })
+      const updated = await updateUser(user.id, { activo: !user.activo })
       setUsers((previous) => previous.map((item) => (item.id === updated.id ? updated : item)))
     } catch (err) {
       setActionError(err.message || 'No se pudo cambiar el estado del usuario.')
@@ -206,7 +206,7 @@ export default function UsersSection() {
   }
 
   async function handleDelete(user) {
-    if (!window.confirm(`¿Eliminar al usuario "${user.username}"? Esta acción no se puede deshacer.`)) return
+    if (!window.confirm(`¿Eliminar al usuario "${user.nombre_usuario}"? Esta acción no se puede deshacer.`)) return
     setActionError(null)
     setBusyId(user.id)
     try {
@@ -277,20 +277,20 @@ export default function UsersSection() {
             <tbody>
               {feedback && <tr><td colSpan={7} className={`px-6 py-16 text-center ${error ? 'text-red-600' : 'text-slate-400'}`}>{feedback}</td></tr>}
               {!feedback && visibleUsers.map((user) => {
-                const isSelf = user.username === currentUsername
+                const isSelf = user.nombre_usuario === currentUsername
                 return (
                   <tr key={user.id} className="border-b border-slate-200 last:border-0 hover:bg-slate-50/50">
                     <td className="px-6 py-5">
-                      <div className="flex items-center gap-4"><UserAvatar username={user.username} /><strong className="truncate text-[#101a38]">{user.username}</strong></div>
+                      <div className="flex items-center gap-4"><UserAvatar username={user.nombre_usuario} /><strong className="truncate text-[#101a38]">{user.nombre_usuario}</strong></div>
                     </td>
-                    <td className="truncate px-5 py-5 text-slate-600" title={user.email}>{user.email}</td>
-                    <td className="px-5 py-3 text-center"><NationalityBadge nationality={user.nationality} /></td>
-                    <td className="px-5 py-5"><RoleBadge role={user.role} /></td>
-                    <td className="px-5 py-5"><StatusBadge active={user.is_active} /></td>
+                    <td className="truncate px-5 py-5 text-slate-600" title={user.correo}>{user.correo}</td>
+                    <td className="px-5 py-3 text-center"><NationalityBadge nationality={user.nacionalidad} /></td>
+                    <td className="px-5 py-5"><RoleBadge role={user.rol} /></td>
+                    <td className="px-5 py-5"><StatusBadge active={user.activo} /></td>
                     <td className="px-5 py-5 text-[#17213e]">
                       <span className="flex items-center gap-2">
                         <svg className="h-5 w-5 shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M8 3v4m8-4v4M3 10h18" /></svg>
-                        {formatDate(user.created_at)}
+                        {formatDate(user.creado_en)}
                       </span>
                     </td>
                     <td className="px-5 py-5"><ActionButtons user={user} isSelf={isSelf} busy={busyId === user.id} onEdit={openEdit} onToggle={handleToggleActive} onDelete={handleDelete} /></td>
@@ -306,16 +306,16 @@ export default function UsersSection() {
           {!feedback && visibleUsers.map((user) => (
             <article key={user.id} className="p-4 sm:p-5">
               <div className="mb-4 flex min-w-0 items-center gap-3">
-                <UserAvatar username={user.username} />
-                <div className="min-w-0"><h2 className="truncate font-semibold text-[#101a38]">{user.username}</h2><p className="truncate text-sm text-slate-500">{user.email}</p></div>
+                <UserAvatar username={user.nombre_usuario} />
+                <div className="min-w-0"><h2 className="truncate font-semibold text-[#101a38]">{user.nombre_usuario}</h2><p className="truncate text-sm text-slate-500">{user.correo}</p></div>
               </div>
-              <div className="mb-4 flex flex-wrap items-center gap-3"><NationalityBadge nationality={user.nationality} /><RoleBadge role={user.role} /><StatusBadge active={user.is_active} /></div>
+              <div className="mb-4 flex flex-wrap items-center gap-3"><NationalityBadge nationality={user.nacionalidad} /><RoleBadge role={user.rol} /><StatusBadge active={user.activo} /></div>
               <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
                 <span className="flex items-center gap-2 text-xs text-slate-500">
                   <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M8 3v4m8-4v4M3 10h18" /></svg>
-                  {formatDate(user.created_at)}
+                  {formatDate(user.creado_en)}
                 </span>
-                <ActionButtons user={user} isSelf={user.username === currentUsername} busy={busyId === user.id} onEdit={openEdit} onToggle={handleToggleActive} onDelete={handleDelete} />
+                <ActionButtons user={user} isSelf={user.nombre_usuario === currentUsername} busy={busyId === user.id} onEdit={openEdit} onToggle={handleToggleActive} onDelete={handleDelete} />
               </div>
             </article>
           ))}

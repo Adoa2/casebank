@@ -21,10 +21,10 @@ export function getRole() {
 }
 
 // Se llama con la respuesta cruda de POST /api/auth/login.
-export function setAuthData({ access_token, username, role }) {
+export function setAuthData({ access_token, nombre_usuario, rol }) {
   if (access_token) localStorage.setItem(TOKEN_KEY, access_token)
-  if (username !== undefined && username !== null) localStorage.setItem(USERNAME_KEY, username)
-  if (role !== undefined && role !== null) localStorage.setItem(ROLE_KEY, String(role))
+  if (nombre_usuario !== undefined && nombre_usuario !== null) localStorage.setItem(USERNAME_KEY, nombre_usuario)
+  if (rol !== undefined && rol !== null) localStorage.setItem(ROLE_KEY, String(rol))
 }
 
 export function clearAuthData() {

@@ -19,7 +19,7 @@ function Field({ label, hint, children }) {
 export default function VideoFormModal({ mode = 'create', initialData, onClose, onSubmit }) {
   const isEdit = mode === 'edit'
   const [titulo, setTitulo] = useState(initialData?.titulo || '')
-  const [url, setUrl] = useState(initialData?.url || '')
+  const [url, setUrl] = useState(initialData?.enlace || '')
   const [arbol, setArbol] = useState([])
   const [loadingArbol, setLoadingArbol] = useState(true)
   const [errorArbol, setErrorArbol] = useState(null)
@@ -59,7 +59,7 @@ export default function VideoFormModal({ mode = 'create', initialData, onClose, 
     setUsarVideoIA(checked)
     setJobSeleccionadoId(null)
     if (!checked) {
-      setUrl(initialData?.url || '')
+      setUrl(initialData?.enlace || '')
     } else {
       setUrl('')
     }
@@ -162,7 +162,7 @@ export default function VideoFormModal({ mode = 'create', initialData, onClose, 
     try {
       const videoCreado = await onSubmit({
         titulo: titulo.trim(),
-        url: url.trim(),
+        enlace: url.trim(),
         seccion_id: Number(subseccionId),
         capitulo: capituloSeleccionado.titulo,
         seccion: seccionSeleccionada.titulo,

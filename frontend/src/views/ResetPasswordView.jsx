@@ -3,17 +3,17 @@ import AuthField from '../components/AuthField'
 import AuthMessage from '../components/AuthMessage'
 import { resetPassword } from '../api/auth'
 
-export default function ResetPasswordView({ email, onBackToLogin, onReset }) {
-  const [code, setCode] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
+export default function ResetPasswordView({ correo, onBackToLogin, onReset }) {
+  const [codigo, setCodigo] = useState('')
+  const [nuevaContrasena, setNuevaContrasena] = useState('')
+  const [nuevaContrasenaConfirm, setNuevaContrasenaConfirm] = useState('')
   const [message, setMessage] = useState(null)
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e) {
     e.preventDefault()
 
-    if (newPassword !== newPasswordConfirm) {
+    if (nuevaContrasena !== nuevaContrasenaConfirm) {
       setMessage({ text: 'Las contraseñas no coinciden.', type: 'error' })
       return
     }
@@ -22,7 +22,7 @@ export default function ResetPasswordView({ email, onBackToLogin, onReset }) {
     setLoading(true)
 
     try {
-      await resetPassword(email, code.trim(), newPassword)
+      await resetPassword(correo, codigo.trim(), nuevaContrasena)
       onReset()
     } catch (err) {
       setMessage({ text: err.message, type: 'error' })
@@ -45,8 +45,8 @@ export default function ResetPasswordView({ email, onBackToLogin, onReset }) {
         inputMode="numeric"
         maxLength={6}
         autoComplete="one-time-code"
-        value={code}
-        onChange={(e) => setCode(e.target.value)}
+        value={codigo}
+        onChange={(e) => setCodigo(e.target.value)}
       />
       <AuthField
         id="resetNewPassword"
@@ -54,8 +54,8 @@ export default function ResetPasswordView({ email, onBackToLogin, onReset }) {
         type="password"
         placeholder="********"
         autoComplete="new-password"
-        value={newPassword}
-        onChange={(e) => setNewPassword(e.target.value)}
+        value={nuevaContrasena}
+        onChange={(e) => setNuevaContrasena(e.target.value)}
       />
       <p className="text-xs text-slate -mt-4 mb-4">La contraseña debe tener al menos 8 caracteres.</p>
       <AuthField
@@ -64,8 +64,8 @@ export default function ResetPasswordView({ email, onBackToLogin, onReset }) {
         type="password"
         placeholder="********"
         autoComplete="new-password"
-        value={newPasswordConfirm}
-        onChange={(e) => setNewPasswordConfirm(e.target.value)}
+        value={nuevaContrasenaConfirm}
+        onChange={(e) => setNuevaContrasenaConfirm(e.target.value)}
       />
 
       <button

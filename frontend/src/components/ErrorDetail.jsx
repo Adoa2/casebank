@@ -93,8 +93,8 @@ export default function ErrorDetail({ error, canReview, canEdit, userNames = {},
   const [actionError, setActionError] = useState(null)
   const keywords = (error.palabras_clave || '').split(',').map((keyword) => keyword.trim()).filter(Boolean)
   const status = STATUS[error.estado] || STATUS.pendiente
-  const creatorName = error.created_by_name || userNames[error.created_by] || 'No disponible'
-  const reviewerName = error.reviewed_by_name || userNames[error.reviewed_by] || (error.reviewed_by ? 'No disponible' : 'Pendiente')
+  const creatorName = error.creado_por_nombre || userNames[error.creado_por] || 'No disponible'
+  const reviewerName = error.revisado_por_nombre || userNames[error.revisado_por] || (error.revisado_por ? 'No disponible' : 'Pendiente')
   const diagnosticoOpciones = error.diagnostico_opciones || []
 
   async function handleReview(aprobar) {
@@ -220,8 +220,8 @@ export default function ErrorDetail({ error, canReview, canEdit, userNames = {},
             <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-current/10 pt-3 text-xs lg:grid-cols-4">
               <div className="flex min-w-0 gap-2.5"><Icon name="user" className="h-5 w-5 shrink-0 text-slate-500" /><span className="min-w-0 text-slate-500">Creado por<strong className="mt-0.5 block truncate text-[#17213e]" title={creatorName}>{creatorName}</strong></span></div>
               <div className="flex min-w-0 gap-2.5"><Icon name="status" className="h-5 w-5 shrink-0 text-slate-500" /><span className="min-w-0 text-slate-500">Revisado por<strong className="mt-0.5 block truncate text-[#17213e]" title={reviewerName}>{reviewerName}</strong></span></div>
-              <div className="flex min-w-0 gap-2.5"><Icon name="calendar" className="h-5 w-5 shrink-0 text-slate-500" /><span className="min-w-0 text-slate-500">Creado<strong className="mt-0.5 block text-[#17213e]">{formatDate(error.created_at)}</strong></span></div>
-              <div className="flex min-w-0 gap-2.5"><Icon name="calendar" className="h-5 w-5 shrink-0 text-slate-500" /><span className="min-w-0 text-slate-500">Revisado<strong className="mt-0.5 block text-[#17213e]">{error.reviewed_at ? formatDate(error.reviewed_at) : 'Pendiente'}</strong></span></div>
+              <div className="flex min-w-0 gap-2.5"><Icon name="calendar" className="h-5 w-5 shrink-0 text-slate-500" /><span className="min-w-0 text-slate-500">Creado<strong className="mt-0.5 block text-[#17213e]">{formatDate(error.creado_en)}</strong></span></div>
+              <div className="flex min-w-0 gap-2.5"><Icon name="calendar" className="h-5 w-5 shrink-0 text-slate-500" /><span className="min-w-0 text-slate-500">Revisado<strong className="mt-0.5 block text-[#17213e]">{error.revisado_en ? formatDate(error.revisado_en) : 'Pendiente'}</strong></span></div>
             </div>
           </div>
         </div>

@@ -13,11 +13,11 @@ const PASSWORD_RULES = [
 ]
 
 export default function RegisterView({ onBackToLogin, onRegistered }) {
-  const [username, setUsername] = useState('')
-  const [email, setEmail] = useState('')
-  const [nationality, setNationality] = useState('')
-  const [password, setPassword] = useState('')
-  const [passwordConfirm, setPasswordConfirm] = useState('')
+  const [nombreUsuario, setNombreUsuario] = useState('')
+  const [correo, setCorreo] = useState('')
+  const [nacionalidad, setNacionalidad] = useState('')
+  const [contrasena, setContrasena] = useState('')
+  const [contrasenaConfirm, setContrasenaConfirm] = useState('')
   const [message, setMessage] = useState(null)
   const [loading, setLoading] = useState(false)
 
@@ -25,31 +25,31 @@ export default function RegisterView({ onBackToLogin, onRegistered }) {
     e.preventDefault()
     setMessage(null)
 
-    const trimmedEmail = email.trim()
+    const trimmedCorreo = correo.trim()
 
-    if (!nationality) {
+    if (!nacionalidad) {
       setMessage({ text: 'Selecciona una nacionalidad.', type: 'error' })
       return
     }
 
-    if (!EMAIL_REGEX.test(trimmedEmail)) {
+    if (!EMAIL_REGEX.test(trimmedCorreo)) {
       setMessage({ text: 'Ingresa un correo electrónico válido.', type: 'error' })
       return
     }
 
-    if (!PASSWORD_RULES.every((rule) => rule.test(password))) {
+    if (!PASSWORD_RULES.every((rule) => rule.test(contrasena))) {
       setMessage({ text: 'La contraseña debe incluir 8 caracteres, mayúscula, minúscula, número y carácter especial.', type: 'error' })
       return
     }
 
-    if (password !== passwordConfirm) {
+    if (contrasena !== contrasenaConfirm) {
       setMessage({ text: 'Las contraseñas no coinciden.', type: 'error' })
       return
     }
 
     setLoading(true)
     try {
-      await register(username.trim(), trimmedEmail, password, nationality)
+      await register(nombreUsuario.trim(), trimmedCorreo, contrasena, nacionalidad)
       onRegistered()
     } catch (err) {
       setMessage({ text: err.message, type: 'error' })
@@ -70,8 +70,8 @@ export default function RegisterView({ onBackToLogin, onRegistered }) {
         label="Usuario"
         placeholder="Digite un usuario"
         autoComplete="username"
-        value={username}
-        onChange={(e) => setUsername(e.target.value)}
+        value={nombreUsuario}
+        onChange={(e) => setNombreUsuario(e.target.value)}
         compact
       />
       <AuthField
@@ -80,8 +80,8 @@ export default function RegisterView({ onBackToLogin, onRegistered }) {
         type="email"
         placeholder="nombre@cooperativa.com"
         autoComplete="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
+        value={correo}
+        onChange={(e) => setCorreo(e.target.value)}
         compact
       />
       <div className="mb-3">
@@ -97,11 +97,11 @@ export default function RegisterView({ onBackToLogin, onRegistered }) {
           </span>
           <select
             id="regNationality"
-            name="nationality"
-            value={nationality}
-            onChange={(e) => setNationality(e.target.value)}
+            name="nacionalidad"
+            value={nacionalidad}
+            onChange={(e) => setNacionalidad(e.target.value)}
             required
-            className={`h-12 w-full appearance-none rounded-xl border border-[#d9e1ef] bg-white pl-12 pr-12 text-[0.92rem] shadow-sm outline-none transition focus:border-brand-blue focus:ring-[3px] focus:ring-brand-blue/10 ${nationality ? 'text-ink' : 'text-[#8a98b5]'}`}
+            className={`h-12 w-full appearance-none rounded-xl border border-[#d9e1ef] bg-white pl-12 pr-12 text-[0.92rem] shadow-sm outline-none transition focus:border-brand-blue focus:ring-[3px] focus:ring-brand-blue/10 ${nacionalidad ? 'text-ink' : 'text-[#8a98b5]'}`}
           >
             <option value="" disabled>Seleccione una nacionalidad</option>
             <option value="hondurena">Hondureña</option>
@@ -118,14 +118,14 @@ export default function RegisterView({ onBackToLogin, onRegistered }) {
         type="password"
         placeholder="********"
         autoComplete="new-password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
+        value={contrasena}
+        onChange={(e) => setContrasena(e.target.value)}
         compact
       />
-      {password && (
+      {contrasena && (
         <ul className="-mt-1 mb-3 grid grid-cols-2 gap-x-3 gap-y-1 text-[0.68rem]" aria-label="Requisitos de contraseña">
           {PASSWORD_RULES.map((rule) => {
-            const valid = rule.test(password)
+            const valid = rule.test(contrasena)
             return (
               <li key={rule.label} className={`flex items-center gap-1.5 ${valid ? 'text-emerald-600' : 'text-slate-400'}`}>
                 <span aria-hidden="true" className="font-bold">{valid ? '✓' : '○'}</span>{rule.label}
@@ -140,8 +140,8 @@ export default function RegisterView({ onBackToLogin, onRegistered }) {
         type="password"
         placeholder="********"
         autoComplete="new-password"
-        value={passwordConfirm}
-        onChange={(e) => setPasswordConfirm(e.target.value)}
+        value={contrasenaConfirm}
+        onChange={(e) => setContrasenaConfirm(e.target.value)}
         compact
       />
 

@@ -37,19 +37,19 @@ def crear_usuario(
     current_user: models.User = Depends(auth.get_current_admin),
 ):
     existe = db_session.query(models.User).filter(
-        (func.lower(models.User.email) == data.email.lower())
-        | (func.lower(models.User.username) == data.username.lower())
+        (func.lower(models.User.correo) == data.correo.lower())
+        | (func.lower(models.User.nombre_usuario) == data.nombre_usuario.lower())
     ).first()
     if existe:
         raise HTTPException(status_code=400, detail="El usuario o correo ya está registrado")
 
     nuevo = models.User(
-        username=data.username,
-        email=data.email,
-        nationality=data.nationality,
-        hashed_password=auth.get_password_hash(data.password),
-        role=data.role,
-        is_active=data.is_active,
+        nombre_usuario=data.nombre_usuario,
+        correo=data.correo,
+        nacionalidad=data.nacionalidad,
+        contrasena_hash=auth.get_password_hash(data.contrasena),
+        rol=data.rol,
+        activo=data.activo,
     )
     db_session.add(nuevo)
     db_session.commit()
@@ -73,16 +73,16 @@ def actualizar_usuario(
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    if data.email is not None:
-        usuario.email = data.email
-    if data.nationality is not None:
-        usuario.nationality = data.nationality
-    if data.role is not None:
-        usuario.role = data.role
-    if data.is_active is not None:
-        usuario.is_active = data.is_active
-    if data.password:
-        usuario.hashed_password = auth.get_password_hash(data.password)
+    if data.correo is not None:
+        usuario.correo = data.correo
+    if data.nacionalidad is not None:
+        usuario.nacionalidad = data.nacionalidad
+    if data.rol is not None:
+        usuario.rol = data.rol
+    if data.activo is not None:
+        usuario.activo = data.activo
+    if data.contrasena:
+        usuario.contrasena_hash = auth.get_password_hash(data.contrasena)
 
     db_session.commit()
     db_session.refresh(usuario)
@@ -109,4 +109,4 @@ def eliminar_usuario(
 
     db_session.delete(usuario)
     db_session.commit()
-    return {"message": "Usuario eliminado correctamente"}
+    return {"mensaje": "Usuario eliminado correctamente"}

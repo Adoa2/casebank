@@ -23,7 +23,7 @@ def crear_video(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_reviewer),
 ):
-    nuevo = models.Video(**data.model_dump(), created_by=current_user.id)
+    nuevo = models.Video(**data.model_dump(), creado_por=current_user.id)
     db_session.add(nuevo)
     db_session.commit()
     db_session.refresh(nuevo)
@@ -41,7 +41,7 @@ def listar_videos(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_reviewer),
 ):
-    return db_session.query(models.Video).order_by(models.Video.created_at.desc()).all()
+    return db_session.query(models.Video).order_by(models.Video.creado_en.desc()).all()
 
 
 @router.get(
@@ -58,7 +58,7 @@ def listar_videos_por_seccion(
 ):
     return db_session.query(models.Video).filter(
         models.Video.seccion_id == seccion_id
-    ).order_by(models.Video.created_at.asc()).all()
+    ).order_by(models.Video.creado_en.asc()).all()
 
 
 @router.put(
@@ -102,4 +102,4 @@ def eliminar_video(
 
     db_session.delete(video)
     db_session.commit()
-    return {"message": "Video eliminado correctamente"}
+    return {"mensaje": "Video eliminado correctamente"}
