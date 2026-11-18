@@ -7,6 +7,48 @@ import { listVideosBySeccion } from '../api/videos'
 
 const IMG_MARKER_REGEX = /(\[IMG:([^\]]+)\])/g
 const LINEA_NUMERO_REGEX = /^\d{1,4}$/
+const PIE_IMAGEN_REGEX = /^[Ii]lustraci[oó]n\s+\d+/
+// Inicio de ítem de lista: "1. " "22. " "1) " "a. " "a) " "- "
+// No coincide con secciones "3.1.1.2." porque el 2.º token tras el punto NO es espacio.
+const LISTA_ITEM_RE = /^(\d{1,2}[.)]\s|[a-z][.)]\s|-\s)/
+
+// Detección de rutas de acceso al sistema.
+// Separadores reconocidos:
+//   · glifos de flecha (→ ➔ ►  ➡)
+//   · "->" y "=>" ASCII
+//   · " > " con espacios
+//   · "letra>letra" SIN espacios (ej: Cooperativista>Menú), no parte de -> => >=
+const FLECHA_RX = /→|➔|►|►|➡|(?<![=-])->(?!=)|(?<!-)=>(?!=)|\s>\s|(?<=[A-Za-záéíóúÁÉÍÓÚüÜñÑ])>(?=[A-Za-záéíóúÁÉÍÓÚüÜñÑ])/gu
+const MENU_VOCAB_RX = /\b(?:Men[uú]|Pesta[nñ]a|Vi[nñ]eta|M[oó]dulo|Cooperativ|Afiliaci|Atenci[oó]n|Seleccionar|Configuraci|Administraci)\b/i
+const RUTA_PHRASE_RX = /\bruta\b/i
+const ROUTE_OPENER_RE = /^(?:Para\s+ingresar[^:]{0,80}siguiente\s+ruta|Su\s+ruta\s+es|Ruta):\s*/i
+
+/** Elimina marcadores **negrita** para comparaciones de texto. */
+function stripNegrita(texto) {
+  return texto.replace(/\*\*([^*]+)\*\*/g, '$1')
+}
+
+/** Detecta si un texto es una ruta de acceso al sistema. */
+function esRutaAcceso(texto) {
+  const flechas = (texto.match(FLECHA_RX) || []).length
+  if (flechas < 1) return false
+  return MENU_VOCAB_RX.test(texto) || RUTA_PHRASE_RX.test(texto)
+}
+
+/** Convierte **texto** en <strong>texto</strong> para renderizado. */
+function parsearNegrita(texto) {
+  const partes = texto.split(/(\*\*[^*]+\*\*)/)
+  return partes.map((parte, i) => {
+    if (parte.startsWith('**') && parte.endsWith('**')) {
+      return (
+        <strong key={i} className="font-semibold text-ink">
+          {parte.slice(2, -2)}
+        </strong>
+      )
+    }
+    return parte
+  })
+}
 
 function normalizarContenido(contenido, titulo, paginaInicio, paginaFin) {
   if (!contenido) return []
@@ -38,15 +80,48 @@ function normalizarContenido(contenido, titulo, paginaInicio, paginaFin) {
       const texto = bloque.replace(/\s+/g, ' ').trim()
       if (!texto) continue
 
-      if (paginasValidas.has(texto) && LINEA_NUMERO_REGEX.test(texto)) {
-        partes.push({ tipo: 'pagina', valor: texto })
+      // Texto sin marcadores de negrita, para comparaciones
+      const textoLimpio = stripNegrita(texto)
+
+      if (paginasValidas.has(textoLimpio) && LINEA_NUMERO_REGEX.test(textoLimpio)) {
+        partes.push({ tipo: 'pagina', valor: textoLimpio })
         continue
       }
 
-      if (texto.toLocaleLowerCase('es') === (titulo || '').trim().toLocaleLowerCase('es')) {
+      if (textoLimpio.toLocaleLowerCase('es') === (titulo || '').trim().toLocaleLowerCase('es')) {
         continue
       }
 
+      if (PIE_IMAGEN_REGEX.test(textoLimpio)) {
+        continue
+      }
+
+      // Ítems de lista del nuevo extractor ("1. texto", "- texto")
+      // Usar textoLimpio para detectar marcadores en párrafos completamente en negrita
+      // ("**3. Encabezado**" → textoLimpio="3. Encabezado" → sí hace match)
+      const listaMatch = LISTA_ITEM_RE.exec(textoLimpio)
+      if (listaMatch) {
+        const marcador = listaMatch[1]
+        // Preservar negritas: si todo el párrafo era negrita, el contenido también lo es
+        const contenido = texto === `**${textoLimpio}**`
+          ? `**${textoLimpio.slice(marcador.length)}**`
+          : texto.slice(marcador.length)
+        partes.push({
+          tipo: 'lista_item',
+          marcador,
+          contenido,
+          esNumero: /^\d/.test(marcador),
+        })
+        continue
+      }
+
+      // Rutas de acceso al sistema (flechas + vocabulario de menú o "ruta")
+      if (esRutaAcceso(textoLimpio)) {
+        partes.push({ tipo: 'ruta', valor: texto })
+        continue
+      }
+
+      // Compatibilidad con ítems ##LIST## del extractor anterior
       if (/^#+\s*/.test(texto)) {
         numeroItem += 1
         partes.push({
@@ -65,7 +140,7 @@ function normalizarContenido(contenido, titulo, paginaInicio, paginaFin) {
 }
 
 function terminaOracion(texto) {
-  return /[.!?;:]$/.test(texto.trim())
+  return /[.!?;:]$/.test(stripNegrita(texto).trim())
 }
 
 function agruparPartes(partes) {
@@ -74,6 +149,19 @@ function agruparPartes(partes) {
 
   while (index < partes.length) {
     const parte = partes[index]
+
+    // Agrupar ítems de lista consecutivos en un bloque tipo 'lista'
+    if (parte.tipo === 'lista_item') {
+      const items = [parte]
+      index += 1
+      while (index < partes.length && partes[index].tipo === 'lista_item') {
+        items.push(partes[index])
+        index += 1
+      }
+      resultado.push({ tipo: 'lista', items })
+      continue
+    }
+
     const esTextoOItem = parte.tipo === 'texto' || parte.tipo === 'item'
     const iniciaFlujoConImagen =
       parte.tipo === 'imagen' ||
@@ -91,6 +179,9 @@ function agruparPartes(partes) {
     while (index < partes.length && partes[index].tipo !== 'pagina') {
       const actual = partes[index]
       if (actual.tipo === 'item' && contenido.length > 0) break
+      // No absorber ítems de lista ni rutas en el flujo de imagen
+      if (actual.tipo === 'lista_item') break
+      if (actual.tipo === 'ruta') break
 
       contenido.push(actual)
       if (actual.tipo === 'imagen') contieneImagen = true
@@ -285,6 +376,26 @@ export default function ManualContent({ chapter, subchapter, onGoHome }) {
                   )
                 }
 
+                // Bloque de lista (ítems "1. " o "- " del nuevo extractor)
+                if (parte.tipo === 'lista') {
+                  return (
+                    <div key={`lista-${index}`} className="mb-4 space-y-2 text-[15px] leading-7 text-slate last:mb-0">
+                      {parte.items.map((item, iIdx) => (
+                        <div key={iIdx} className="flex items-start gap-3">
+                          {item.esNumero ? (
+                            <span className="mt-0.5 shrink-0 min-w-[1.75rem] text-right text-sm font-semibold text-slate">
+                              {item.marcador.trim()}
+                            </span>
+                          ) : (
+                            <span className="mt-[0.6rem] h-1.5 w-1.5 shrink-0 rounded-full bg-slate" aria-hidden="true" />
+                          )}
+                          <span className="min-w-0 flex-1">{parsearNegrita(item.contenido)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                }
+
                 if (parte.tipo === 'flujo') {
                   const primerElemento = parte.contenido[0]
                   const esItem = primerElemento?.tipo === 'item'
@@ -301,7 +412,7 @@ export default function ManualContent({ chapter, subchapter, onGoHome }) {
                         </span>
                       )}
                       <div className={esItem ? 'min-w-0 flex-1' : 'contents'}>
-                        {esItem && <span>{primerElemento.valor} </span>}
+                        {esItem && <span>{parsearNegrita(primerElemento.valor)} </span>}
                         {contenidoFlujo.map((elemento, elementoIndex) =>
                           elemento.tipo === 'imagen' ? (
                             <ImagenManual
@@ -313,7 +424,7 @@ export default function ManualContent({ chapter, subchapter, onGoHome }) {
                             />
                           ) : (
                             <span key={`flujo-texto-${elementoIndex}`}>
-                              {elemento.valor}{' '}
+                              {parsearNegrita(elemento.valor)}{' '}
                             </span>
                           )
                         )}
@@ -328,14 +439,50 @@ export default function ManualContent({ chapter, subchapter, onGoHome }) {
                       <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-blue text-xs font-semibold text-white">
                         {parte.numero}
                       </span>
-                      <p className="min-w-0 flex-1">{parte.valor}</p>
+                      <p className="min-w-0 flex-1">{parsearNegrita(parte.valor)}</p>
+                    </div>
+                  )
+                }
+
+                if (parte.tipo === 'ruta') {
+                  const textoRuta = stripNegrita(parte.valor)
+                  const matchOpener = ROUTE_OPENER_RE.exec(textoRuta)
+                  const cuerpo = matchOpener ? textoRuta.slice(matchOpener[0].length) : textoRuta
+                  const pasos = cuerpo
+                    .split(/\s*(?:→|➔|►|►|➡|->|=>|>)\s*/)
+                    .map((p) => p.trim().replace(/\.$/, ''))
+                    .filter(Boolean)
+                  return (
+                    <div
+                      key={`ruta-${index}`}
+                      className="mb-4 overflow-hidden rounded-lg border border-slate-200 border-l-4 border-l-brand-blue bg-white shadow-sm last:mb-0"
+                    >
+                      <div className="px-4 py-3">
+                        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-brand-blue">
+                          Ruta de acceso
+                        </p>
+                        <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-[13px] leading-relaxed">
+                          {pasos.map((paso, pIdx) => (
+                            <span key={pIdx} className="flex items-center gap-1">
+                              {pIdx > 0 && (
+                                <span className="select-none text-xs text-slate-400" aria-hidden="true">
+                                  →
+                                </span>
+                              )}
+                              <span className="font-semibold text-gray-800">
+                                {paso}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )
                 }
 
                 return (
                   <p key={`texto-${index}`} className="mb-4 text-[15px] leading-7 text-slate last:mb-0">
-                    {parte.valor}
+                    {parsearNegrita(parte.valor)}
                   </p>
                 )
               })}

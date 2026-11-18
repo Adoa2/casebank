@@ -207,34 +207,41 @@ def _respuesta_estructurada(pregunta):
     distantes del manual y que una busqueda puramente vectorial puede confundir
     con acciones relacionadas (por ejemplo, confirmar o cambiar un cheque).
     """
-    normalizada = _normalizar_busqueda(pregunta)
-    consulta_tipos_cheque = bool(
-        re.search(r"\b(tipos?|clases?)\s+(?:de\s+)?cheques?\b", normalizada)
-        or re.search(r"\b(cuantos?|cuales)\b.*\bcheques?\b", normalizada)
-        or re.search(r"\bque\s+cheques?\s+(?:tiene|genera|maneja)\b", normalizada)
-    )
-    if not consulta_tipos_cheque:
-        return None
-
-    return {
-        "respuesta": (
-            "CaseBank maneja **cuatro tipos principales de cheque**:\n\n"
-            "1. **Cheque por retiro de cuentas de ahorro.**\n"
-            "2. **Cheque por liquidación.**\n"
-            "3. **Cheque de gastos.**\n"
-            "4. **Cheque por otorgamiento.**\n\n"
-            "Las opciones **interno** y **externo** pertenecen a la pantalla de "
-            "cambio de cheques y no representan esta clasificación principal."
-        ),
-        "fuentes": [
-            {"seccion_id": 11, "titulo": "3.1 Menú de oficialía", "pagina": 23, "pagina_fin": 27},
-            {"seccion_id": 186, "titulo": "4.1.2 Cheques de Gasto", "pagina": 727, "pagina_fin": 732},
-        ],
-        "imagenes": [],
-        "imagen_evidencia": None,
-        "pendiente_confirmacion": None,
-        "opciones_aclaracion": [],
-    }
+    # TODO: respuesta fija de "tipos de cheque" desactivada tras migración al manual nuevo.
+    # La fuente ID 186 era "4.1.2 Cheques de Gasto" (págs 727-732); en el manual nuevo
+    # ID 186 = "4.4 Menú de Presupuesto". El nuevo ID para Cheques de Gasto es 154
+    # (págs 543-552). El texto hardcodeado (4 tipos) debe verificarse contra la sección
+    # 154 del JSON nuevo antes de reactivar. ID 11 sigue siendo "3.1 Menú de Oficialía"
+    # pero las páginas cambiaron de 23-27 a 62-63.
+    #
+    # normalizada = _normalizar_busqueda(pregunta)
+    # consulta_tipos_cheque = bool(
+    #     re.search(r"\b(tipos?|clases?)\s+(?:de\s+)?cheques?\b", normalizada)
+    #     or re.search(r"\b(cuantos?|cuales)\b.*\bcheques?\b", normalizada)
+    #     or re.search(r"\bque\s+cheques?\s+(?:tiene|genera|maneja)\b", normalizada)
+    # )
+    # if not consulta_tipos_cheque:
+    #     return None
+    # return {
+    #     "respuesta": (
+    #         "CaseBank maneja **cuatro tipos principales de cheque**:\n\n"
+    #         "1. **Cheque por retiro de cuentas de ahorro.**\n"
+    #         "2. **Cheque por liquidación.**\n"
+    #         "3. **Cheque de gastos.**\n"
+    #         "4. **Cheque por otorgamiento.**\n\n"
+    #         "Las opciones **interno** y **externo** pertenecen a la pantalla de "
+    #         "cambio de cheques y no representan esta clasificación principal."
+    #     ),
+    #     "fuentes": [
+    #         {"seccion_id": 11, "titulo": "3.1. Menú de Oficialía", "pagina": 62, "pagina_fin": 63},
+    #         {"seccion_id": 154, "titulo": "4.1.2. Cheques de Gasto", "pagina": 543, "pagina_fin": 552},
+    #     ],
+    #     "imagenes": [],
+    #     "imagen_evidencia": None,
+    #     "pendiente_confirmacion": None,
+    #     "opciones_aclaracion": [],
+    # }
+    return None
 
 SINONIMOS_DOMINIO = {
     "catalogo": ["definición", "definicion"],
@@ -851,11 +858,17 @@ def _obtener_chunk_seccion(seccion_id):
     }
 
 
-SECCIONES_PREREQUISITO = {
-    16: [15],
-    17: [15],
-    18: [15],
-}
+# TODO: SECCIONES_PREREQUISITO desactivado tras migración al manual nuevo.
+# En el manual viejo: IDs 16=Ahorro, 17=Préstamos, 18=DPF con prerequisito ID 15
+# ("Agregar una cuenta a un afiliado"). En el manual nuevo esos IDs cambiaron:
+# 13=Ahorro, 14=Préstamos, 15=DPF. El nuevo contenedor padre es ID 12 ("3.1.1. Afiliación").
+# Verificar si ID 12 debe ser prerequisito de 13/14/15 antes de reactivar.
+# SECCIONES_PREREQUISITO = {
+#     16: [15],
+#     17: [15],
+#     18: [15],
+# }
+SECCIONES_PREREQUISITO = {}
 
 
 def _agregar_chunks_prerequisito(chunks):
@@ -887,11 +900,15 @@ def _agregar_chunks_prerequisito(chunks):
 
     return chunks + agregados
 
-APERTURA_INTENT_REGEX = {
-    17: re.compile(r"\b(agregar|abrir|nuevo|nueva|crear|registrar|aperturar)\b.*\b(credito|crédito|prestamo|préstamo)\b", re.IGNORECASE),
-    16: re.compile(r"\b(agregar|abrir|nuevo|nueva|crear|registrar|aperturar)\b.*\b(ahorro)\b", re.IGNORECASE),
-    18: re.compile(r"\b(agregar|abrir|nuevo|nueva|crear|registrar|aperturar)\b.*\b(dpf|plazo fijo|deposito a plazo|depósito a plazo)\b", re.IGNORECASE),
-}
+# TODO: APERTURA_INTENT_REGEX desactivado tras migración al manual nuevo.
+# En el manual viejo: keys 17=Préstamos, 16=Ahorro, 18=DPF. En el manual nuevo
+# esos IDs son: 14=Préstamos, 13=Ahorro, 15=DPF. Reactivar con los IDs correctos.
+# APERTURA_INTENT_REGEX = {
+#     17: re.compile(r"\b(agregar|abrir|nuevo|nueva|crear|registrar|aperturar)\b.*\b(credito|crédito|prestamo|préstamo)\b", re.IGNORECASE),
+#     16: re.compile(r"\b(agregar|abrir|nuevo|nueva|crear|registrar|aperturar)\b.*\b(ahorro)\b", re.IGNORECASE),
+#     18: re.compile(r"\b(agregar|abrir|nuevo|nueva|crear|registrar|aperturar)\b.*\b(dpf|plazo fijo|deposito a plazo|depósito a plazo)\b", re.IGNORECASE),
+# }
+APERTURA_INTENT_REGEX = {}
 
 AFILIADO_INTENT_REGEX = re.compile(
     r"\b(agregar|ingresar|registrar|dar de alta|crear|nuevo|nueva)\b.*\b(afiliado|socio|cooperativista)\b",
@@ -952,23 +969,25 @@ def _forzar_chunk_afiliado(chunks, pregunta):
     13 sea la respuesta correcta para el caso general (ver sesion del
     2026-08-20, caso "como agregar un afiliado").
     """
-    if not _es_intencion_afiliado_general(pregunta):
-        return chunks
-
-    ya_presente = any(
-        c["metadata"]["origen"] == "manual"
-        and c["metadata"]["seccion_id"] == "13"
-        and _es_titulo_intro(c["metadata"].get("titulo"))
-        for c in chunks
-    )
-    if ya_presente:
-        return chunks
-
-    chunk_intro = _obtener_chunk_seccion(13)
-    if chunk_intro:
-        chunk_intro["metadata"]["es_apertura_forzada"] = True
-        chunks = [chunk_intro] + chunks
-        _debug("_forzar_chunk_afiliado: forzado chunk intro de seccion 13 por intencion general de afiliado detectada en la pregunta")
+    # TODO: manual nuevo — el ID 13 ya no es "Afiliados".
+    # En el manual nuevo, el ID para Afiliación general es 12
+    # ("3.1.1. Afiliación.", págs 64-89). Reactivar apuntando al nuevo ID
+    # y verificar que _es_intencion_afiliado_general sigue siendo válido.
+    # if not _es_intencion_afiliado_general(pregunta):
+    #     return chunks
+    # ya_presente = any(
+    #     c["metadata"]["origen"] == "manual"
+    #     and c["metadata"]["seccion_id"] == "13"
+    #     and _es_titulo_intro(c["metadata"].get("titulo"))
+    #     for c in chunks
+    # )
+    # if ya_presente:
+    #     return chunks
+    # chunk_intro = _obtener_chunk_seccion(13)
+    # if chunk_intro:
+    #     chunk_intro["metadata"]["es_apertura_forzada"] = True
+    #     chunks = [chunk_intro] + chunks
+    #     _debug("_forzar_chunk_afiliado: forzado chunk intro de seccion 13 por intencion general de afiliado detectada en la pregunta")
     return chunks
 
 def _fusionar_chunks(*listas_chunks):

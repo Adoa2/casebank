@@ -25,7 +25,9 @@ Este script debe colocarse en app/services/, junto a pdf_processor.py,
 ya que asume que manual_structure.json vive en ../../data/manual_structure.json
 """
 
+import argparse
 import json
+import math
 import os
 import re
 import time
@@ -60,9 +62,17 @@ MAX_REINTENTOS = 6
 IMG_MARKER_PATTERN = re.compile(r"\[IMG:[^\]]+\]")
 
 
+_NEGRITA_RE = re.compile(r'\*\*([^*]+)\*\*')
+
+
 def limpiar_marcadores_imagen(texto):
-    """Quita marcadores visuales y conserva únicamente párrafos semánticos."""
+    """
+    Quita marcadores visuales y conserva únicamente párrafos semánticos.
+    También elimina los marcadores **negrita** del procesador de PDF para
+    que dividir_en_subsecciones y los embeddings trabajen sobre texto limpio.
+    """
     limpio = IMG_MARKER_PATTERN.sub("\n\n", texto or "")
+    limpio = _NEGRITA_RE.sub(r'\1', limpio)
     parrafos = []
     for bloque in re.split(r"\n\s*\n", limpio):
         parrafo = re.sub(r"\s+", " ", bloque).strip()
@@ -308,7 +318,7 @@ def guardar_en_postgres(chunks, embeddings):
     cur = conn.cursor()
 
     try:
-        cur.execute("TRUNCATE TABLE manual_chunks RESTART IDENTITY;")
+        cur.execute("TRUNCATE TABLE fragmentos_manual RESTART IDENTITY;")
 
         filas = []
         for chunk, embedding in zip(chunks, embeddings):
@@ -328,7 +338,7 @@ def guardar_en_postgres(chunks, embeddings):
         execute_values(
             cur,
             """
-            INSERT INTO manual_chunks
+            INSERT INTO fragmentos_manual
                 (seccion_id, titulo, nivel, pagina_inicio, pagina_fin, contenido, imagenes, embedding)
             VALUES %s
             """,
@@ -343,17 +353,34 @@ def guardar_en_postgres(chunks, embeddings):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Construye la base vectorial del manual.")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Cuenta chunks y estima llamadas a Gemini sin llamar a la API ni escribir en la DB.",
+    )
+    args = parser.parse_args()
+
+    print(f"Cargando manual desde: {JSON_PATH}")
+    secciones = cargar_manual(JSON_PATH)
+    print(f"Secciones cargadas   : {len(secciones)}")
+
+    chunks = construir_chunks(secciones)
+    lotes = math.ceil(len(chunks) / EMBED_BATCH_SIZE)
+    minutos_estimados = (lotes * PAUSA_ENTRE_LOTES_SEG) / 60
+
+    print(f"Chunks generados     : {len(chunks)}")
+    print(f"Lotes de embeddings  : {lotes}  (batch_size={EMBED_BATCH_SIZE})")
+    print(f"Llamadas API Gemini  : {lotes}  (~{minutos_estimados:.1f} min sin rate-limit)")
+
+    if args.dry_run:
+        print("\n-- DRY RUN: no se llama a Gemini ni se escribe en la DB --")
+        return
+
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY no esta configurada (revisa el .env).")
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL no esta configurada (revisa el .env).")
-
-    print(f"Cargando manual desde: {JSON_PATH}")
-    secciones = cargar_manual(JSON_PATH)
-    print(f"Secciones cargadas: {len(secciones)}")
-
-    chunks = construir_chunks(secciones)
-    print(f"Chunks generados: {len(chunks)}")
 
     print("Generando embeddings con Gemini (esto puede tardar varios minutos)...")
     embeddings = obtener_embeddings(chunks)
@@ -364,7 +391,7 @@ def main():
     if os.path.exists(CHECKPOINT_PATH):
         os.remove(CHECKPOINT_PATH)
 
-    print(f"\nListo. {len(chunks)} chunks indexados en la tabla 'manual_chunks'.")
+    print(f"\nListo. {len(chunks)} chunks indexados en la tabla 'fragmentos_manual'.")
     print("Ya puedes probar consultas con: python rag_query.py \"tu pregunta\"")
 
 VERBOS_SUBENCABEZADO = [
