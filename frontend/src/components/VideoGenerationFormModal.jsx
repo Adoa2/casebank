@@ -5,7 +5,7 @@ import {
   reintentarEstadoJob,
   subirImagenVideoGeneracion,
 } from "../api/videoGeneration";
-import VideoGenerationStatusBadge from "./VideoGenerationStatusBadge";
+import VideoGenerationStatusBadge from "./Videogenerationstatusbadge";
 
 const TIPOS_PERMITIDOS = ["image/jpeg", "image/jpg", "image/png"];
 const MAX_FILE_SIZE = 5 * 1024 * 1024;

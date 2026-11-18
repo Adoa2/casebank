@@ -9,7 +9,7 @@ import {
   reintentarEstadoJob,
 } from '../api/videoGeneration'
 import VideoGenerationFormModal from './VideoGenerationFormModal'
-import VideoGenerationStatusBadge from './VideoGenerationStatusBadge'
+import VideoGenerationStatusBadge from './Videogenerationstatusbadge'
 
 const POLL_INTERVAL_MS = 8000
 
