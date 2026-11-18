@@ -4,7 +4,8 @@ const NAV_ITEMS = [
   { id: 'inicio', label: 'Inicio', minRole: 1, icon: 'home' },
   { id: 'usuarios', label: 'Usuarios', minRole: 2, icon: 'users' },
   { id: 'videos', label: 'Administrar Videos', minRole: 2, icon: 'video' },
-  { id: 'video-tutoriales', label: 'Video Tutoriales', minRole: 2, icon: 'magic' },
+  // TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
+  // { id: 'video-tutoriales', label: 'Video Tutoriales', minRole: 2, icon: 'magic' },
   { id: 'actualizaciones', label: 'Actualizaciones PDF', minRole: 2, icon: 'document' },
   { id: 'errores-frecuentes', label: 'Errores Frecuentes', minRole: 1, icon: 'warning' },
 ]

@@ -1,3 +1,5 @@
+# TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
+# Este servicio no es importado mientras el router de video_generation esté desregistrado.
 """
 Construye el timeline JSON de Shotstack a partir del guion generado y hace las
 llamadas HTTP al Edit API (sin SDK, con requests, mismo patrón que ya usan

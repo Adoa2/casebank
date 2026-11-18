@@ -1,3 +1,5 @@
+// TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
+// Este componente no está montado en AdminView mientras la función esté deshabilitada.
 import { useEffect, useRef, useState } from 'react'
 import {
   listarJobsVideoGeneracion,

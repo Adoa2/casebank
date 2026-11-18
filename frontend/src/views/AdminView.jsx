@@ -4,7 +4,8 @@ import AdminSidebar from '../components/AdminSidebar'
 import UsersSection from '../components/UsersSection'
 import ErrorsSection from '../components/ErrorsSection'
 import VideosSection from '../components/VideosSection'
-import VideoTutorialesSection from '../components/Videotutorialessection'
+// TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
+// import VideoTutorialesSection from '../components/Videotutorialessection'
 import AdminHome from '../components/AdminHome'
 import UpdatesSection from '../components/UpdatesSection'
 
@@ -13,7 +14,7 @@ export default function AdminView({ onLogout, onGoDashboard, role = 0 }) {
   const [isViewingDetail, setIsViewingDetail] = useState(false)
 
   function handleSelectSection(id) {
-    if ((id === 'usuarios' || id === 'videos' || id === 'video-tutoriales' || id === 'actualizaciones') && role < 2) return
+    if ((id === 'usuarios' || id === 'videos' || id === 'actualizaciones') && role < 2) return
     setIsViewingDetail(false)
     setActiveSection(id)
   }
@@ -44,7 +45,8 @@ export default function AdminView({ onLogout, onGoDashboard, role = 0 }) {
             {activeSection === 'usuarios' && role >= 2 && <UsersSection />}
             {activeSection === 'errores-frecuentes' && role >= 1 && <ErrorsSection onDetailChange={setIsViewingDetail} />}
             {activeSection === 'videos' && role >= 2 && <VideosSection />}
-            {activeSection === 'video-tutoriales' && role >= 2 && <VideoTutorialesSection />}
+            {/* TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA */}
+            {/* {activeSection === 'video-tutoriales' && role >= 2 && <VideoTutorialesSection />} */}
             {activeSection === 'actualizaciones' && role >= 2 && <UpdatesSection />}
 
             <footer className="mt-auto pt-8 text-center text-xs text-slate-500 sm:text-sm">

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchManualStructure } from '../api/manual'
 import { buildJerarquiaAnidada } from '../utils/manualTree'
-import { listarDisponiblesParaManual, vincularJobAVideo } from '../api/videoGeneration'
+// TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
+// import { listarDisponiblesParaManual, vincularJobAVideo } from '../api/videoGeneration'
 
 function aplanarDescendientes(nodo) {
   const resultado = []
@@ -29,50 +30,33 @@ export default function VideoFormModal({ mode = 'create', initialData, onClose, 
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
 
-  // --- Selector de video generado por IA (Video Tutoriales) ---
-  const [usarVideoIA, setUsarVideoIA] = useState(false)
-  const [jobsDisponibles, setJobsDisponibles] = useState([])
-  const [loadingJobs, setLoadingJobs] = useState(false)
-  const [errorJobs, setErrorJobs] = useState(null)
-  const [jobSeleccionadoId, setJobSeleccionadoId] = useState(null)
+  // TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
+  // const [usarVideoIA, setUsarVideoIA] = useState(false)
+  // const [jobsDisponibles, setJobsDisponibles] = useState([])
+  // const [loadingJobs, setLoadingJobs] = useState(false)
+  // const [errorJobs, setErrorJobs] = useState(null)
+  // const [jobSeleccionadoId, setJobSeleccionadoId] = useState(null)
 
-  useEffect(() => {
-    if (!usarVideoIA || isEdit) return
-    let cancelado = false
-    async function cargarJobs() {
-      setLoadingJobs(true)
-      setErrorJobs(null)
-      try {
-        const data = await listarDisponiblesParaManual()
-        if (!cancelado) setJobsDisponibles(data)
-      } catch (err) {
-        if (!cancelado) setErrorJobs(err.message || 'No se pudieron cargar los videos generados por IA.')
-      } finally {
-        if (!cancelado) setLoadingJobs(false)
-      }
-    }
-    cargarJobs()
-    return () => { cancelado = true }
-  }, [usarVideoIA, isEdit])
+  // useEffect(() => {
+  //   if (!usarVideoIA || isEdit) return
+  //   let cancelado = false
+  //   async function cargarJobs() {
+  //     setLoadingJobs(true); setErrorJobs(null)
+  //     try {
+  //       const data = await listarDisponiblesParaManual()
+  //       if (!cancelado) setJobsDisponibles(data)
+  //     } catch (err) {
+  //       if (!cancelado) setErrorJobs(err.message || 'No se pudieron cargar los videos generados por IA.')
+  //     } finally {
+  //       if (!cancelado) setLoadingJobs(false)
+  //     }
+  //   }
+  //   cargarJobs()
+  //   return () => { cancelado = true }
+  // }, [usarVideoIA, isEdit])
 
-  function handleToggleUsarVideoIA(checked) {
-    setUsarVideoIA(checked)
-    setJobSeleccionadoId(null)
-    if (!checked) {
-      setUrl(initialData?.enlace || '')
-    } else {
-      setUrl('')
-    }
-    setError(null)
-  }
-
-  function handleSeleccionarJob(job) {
-    setJobSeleccionadoId(job.id)
-    setUrl(job.video_url)
-    if (!titulo.trim()) setTitulo(job.titulo)
-    setError(null)
-  }
-  // --- fin selector de video generado por IA ---
+  // function handleToggleUsarVideoIA(checked) { ... }
+  // function handleSeleccionarJob(job) { ... }
 
   useEffect(() => {
     let cancelado = false
@@ -153,14 +137,15 @@ export default function VideoFormModal({ mode = 'create', initialData, onClose, 
     if (!titulo.trim()) return setError('El título es obligatorio.')
     if (!capituloId || !seccionId) return setError('Selecciona capítulo y sección.')
     if (!subseccionId) return setError('Selecciona la subsección o la opción de esta sección.')
-    if (usarVideoIA && !jobSeleccionadoId) return setError('Selecciona un video generado por IA de la lista.')
+    // TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
+    // if (usarVideoIA && !jobSeleccionadoId) return setError('Selecciona un video generado por IA de la lista.')
     if (!/^https?:\/\//i.test(url.trim())) return setError('La URL debe comenzar con http:// o https://')
 
     const subseccionSeleccionada = subsecciones.find((item) => String(item.id) === subseccionId)
     const esLaMismaSeccion = subseccionSeleccionada?.id === seccionSeleccionada.id
     setSaving(true)
     try {
-      const videoCreado = await onSubmit({
+      await onSubmit({
         titulo: titulo.trim(),
         enlace: url.trim(),
         seccion_id: Number(subseccionId),
@@ -169,17 +154,11 @@ export default function VideoFormModal({ mode = 'create', initialData, onClose, 
         subseccion: esLaMismaSeccion ? null : subseccionSeleccionada?.titulo || null,
       })
 
-      // Si se usó un video generado por IA, lo marcamos como vinculado para
-      // que deje de aparecer como "disponible" la próxima vez. Si esto falla
-      // (ej. onSubmit no devuelve el id del video creado), no se bloquea el
-      // guardado del video en sí — solo puede volver a aparecer en la lista.
-      if (usarVideoIA && jobSeleccionadoId && videoCreado?.id) {
-        try {
-          await vincularJobAVideo(jobSeleccionadoId, videoCreado.id)
-        } catch (err) {
-          console.error('No se pudo marcar el video generado por IA como vinculado:', err)
-        }
-      }
+      // TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
+      // if (usarVideoIA && jobSeleccionadoId && videoCreado?.id) {
+      //   try { await vincularJobAVideo(jobSeleccionadoId, videoCreado.id) }
+      //   catch (err) { console.error('No se pudo marcar el video generado por IA como vinculado:', err) }
+      // }
     } catch (err) {
       setError(err.message || 'No se pudo guardar el video.')
       setSaving(false)
@@ -216,64 +195,10 @@ export default function VideoFormModal({ mode = 'create', initialData, onClose, 
                 </div>
               </div>
 
-              {!isEdit && (
-                <div className="rounded-xl border border-purple-100 bg-purple-50/35 p-4 sm:p-5">
-                  <label className="flex cursor-pointer items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={usarVideoIA}
-                      onChange={(event) => handleToggleUsarVideoIA(event.target.checked)}
-                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-200"
-                    />
-                    <span className="text-xs leading-5 text-slate-500">
-                      <strong className="block text-sm text-[#17213e]">Usar un video generado por IA</strong>
-                      Elegí uno de los videos ya generados en "Video Tutoriales" en vez de pegar una URL a mano.
-                    </span>
-                  </label>
+              {/* TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA */}
+              {/* Sección "Usar un video generado por IA" oculta hasta reactivación */}
 
-                  {usarVideoIA && (
-                    <div className="mt-4">
-                      {loadingJobs && <p className="text-xs text-slate-500">Cargando videos generados...</p>}
-                      {errorJobs && <p className="text-xs text-red-700">{errorJobs}</p>}
-                      {!loadingJobs && !errorJobs && jobsDisponibles.length === 0 && (
-                        <p className="text-xs text-slate-500">
-                          No hay videos generados por IA disponibles todavía (o ya se usaron todos). Generá uno nuevo desde "Video Tutoriales".
-                        </p>
-                      )}
-                      <div className="max-h-52 space-y-2 overflow-y-auto">
-                        {jobsDisponibles.map((job) => {
-                          const seleccionado = jobSeleccionadoId === job.id
-                          return (
-                            <button
-                              type="button"
-                              key={job.id}
-                              onClick={() => handleSeleccionarJob(job)}
-                              className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition ${
-                                seleccionado
-                                  ? 'border-purple-400 bg-purple-100/60'
-                                  : 'border-slate-200 bg-white hover:border-purple-200'
-                              }`}
-                            >
-                              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-purple-100 text-purple-600">
-                                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                                  <rect x="3" y="5" width="18" height="14" rx="2" />
-                                  <path d="m10 9 5 3-5 3Z" />
-                                </svg>
-                              </span>
-                              <span className="text-sm text-[#17213e]">{job.titulo}</span>
-                              {seleccionado && (
-                                <svg className="ml-auto h-4 w-4 shrink-0 text-purple-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="m3.5 8 2.7 2.7 6.3-6.2" /></svg>
-                              )}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <Field label="URL del video" hint={usarVideoIA ? 'Se completa automáticamente al elegir un video generado por IA arriba.' : 'Acepta enlaces públicos que comiencen con http:// o https://.'}>
+              <Field label="URL del video" hint="Acepta enlaces públicos que comiencen con http:// o https://.">
                 <div className="relative">
                   <svg className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.1 1.1M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.1-1.1" /></svg>
                   <input
@@ -281,10 +206,9 @@ export default function VideoFormModal({ mode = 'create', initialData, onClose, 
                     value={url}
                     onChange={(event) => { setUrl(event.target.value); setError(null) }}
                     placeholder="https://www.youtube.com/..."
-                    disabled={usarVideoIA}
                     className={`${fieldClass} pl-12 pr-28`}
                   />
-                  {validUrl && !usarVideoIA && <a href={url.trim()} target="_blank" rel="noopener noreferrer" className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-100">Comprobar</a>}
+                  {validUrl && <a href={url.trim()} target="_blank" rel="noopener noreferrer" className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-100">Comprobar</a>}
                 </div>
               </Field>
             </div>

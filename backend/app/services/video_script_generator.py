@@ -1,3 +1,5 @@
+# TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
+# Este servicio no es importado mientras el router de video_generation esté desregistrado.
 """
 Convierte el título, la descripción del inconveniente, una lista ordenada de
 pasos (cada uno con su propio texto) y los puntos a considerar en un guion

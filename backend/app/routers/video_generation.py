@@ -1,3 +1,5 @@
+# TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
+# Este router está desregistrado en main.py y no se carga en producción.
 """
 Router del módulo de generación automática de video tutoriales (Shotstack).
 

@@ -1,3 +1,5 @@
+// TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
+// Este componente no está en uso mientras la función esté deshabilitada.
 import React from "react";
 
 const ESTILOS = {
