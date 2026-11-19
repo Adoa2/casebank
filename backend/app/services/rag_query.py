@@ -60,6 +60,30 @@ MAX_DISTANCE_TEMA_RELACIONADO = 0.32
 
 MAX_DISTANCE_ERROR = 0.35
 
+# --- Umbral minimo de relevancia ---
+# Distancia coseno maxima (pgvector "<=>", menor = mas parecido) que debe
+# alcanzar el MEJOR fragmento recuperado para considerar que la consulta
+# tiene relacion con el manual, los errores frecuentes o las
+# actualizaciones activas. La busqueda siempre devuelve N_RESULTS
+# fragmentos aunque ninguno se parezca; sin este corte, una consulta ajena
+# (ej. "pie de limon") deja a todos los candidatos igual de lejos, el
+# detector de ambiguedad los ve "empatados" y Casey ofrece una lista de
+# secciones sin relacion.
+# Calibrado el 2026-11-18 con la mejor distancia tras busqueda expandida +
+# boost de sinonimos:
+#   - legitimas (claras y cortas/vagas): 0.2017 - 0.2852
+#     (peor: "tipos de cheque" 0.2852; en busqueda base "cheques" 0.3154)
+#   - sin relacion: 0.3873 - 0.4799
+#     (mas cercanas: "hola cómo estás" 0.3873, "receta de pastel" 0.4049)
+# 0.35 deja ~0.065 de margen sobre la peor legitima. Si se reindexa la base
+# o se cambia el modelo de embeddings, volver a medir antes de ajustar.
+MAX_DISTANCE_RELEVANCIA_MINIMA = 0.35
+MENSAJE_FUERA_DE_ALCANCE = (
+    "No encontré información sobre eso en el manual. Puedes reformular tu "
+    "pregunta o consultar sobre algún módulo de CaseBank."
+)
+# --- fin umbral minimo de relevancia ---
+
 MAX_INTENTOS_CONFIRMACION_EVIDENCIA = 2
 
 DEBUG_RAG = True
@@ -87,7 +111,7 @@ GREETING_BASES = [
     r"hey",
     r"hi",
     r"(que|qu[ée]) tal",
-    r"como (estas|est[aá]s|andas)",
+    r"c[oó]mo (estas|est[aá]s|andas)",
     r"gracias",
     r"muchas gracias",
     r"(ok|okay|vale|listo|entendido)",
@@ -100,10 +124,19 @@ GREETING_BASES = [
 ]
 _SUFIJO_NOMBRE = r"(\s+casey(\s+bot)?)?"
 
+# --- Saludos combinados ---
+# Acepta una o varias bases de saludo seguidas, separadas por espacios o
+# signos (ej. "hola cómo estás", "hola, ¿qué tal?", "buenos días, gracias").
+# Antes solo se aceptaba una base sola, y un saludo combinado caia en la
+# busqueda vectorial; con MAX_DISTANCE_RELEVANCIA_MINIMA habria recibido
+# MENSAJE_FUERA_DE_ALCANCE en vez de una respuesta de cortesia.
+_GREETING_BASE = r"(?:" + "|".join(GREETING_BASES) + r")"
 _GREETING_REGEX = re.compile(
-    r"^(?:" + "|".join(GREETING_BASES) + r")" + _SUFIJO_NOMBRE + r"[!?.,¡¿\s]*$",
+    r"^[¡¿\s]*" + _GREETING_BASE + r"(?:[!?.,¡¿\s]+" + _GREETING_BASE + r")*"
+    + _SUFIJO_NOMBRE + r"[!?.,¡¿\s]*$",
     re.IGNORECASE,
 )
+# --- fin saludos combinados ---
 
 
 ABOUT_ASSISTANT_PATTERNS = [
@@ -1897,6 +1930,30 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
         "answer_question: resultados tras boost por sinonimos -> "
         + str([(c["metadata"]["seccion_id"], c["metadata"]["titulo"], round(c["distance"], 4)) for c in chunks_crudos])
     )
+
+    # --- Corte por relevancia minima (antes de la ambiguedad) ---
+    # Si ni el mejor fragmento alcanza MAX_DISTANCE_RELEVANCIA_MINIMA, la
+    # consulta no tiene relacion con nada indexado: se responde con
+    # MENSAJE_FUERA_DE_ALCANCE, sin evaluar ambiguedad, sin lista de
+    # opciones y sin fuentes. Es un mensaje fijo (no generado) para que la
+    # respuesta sea siempre corta y consistente. Los saludos no llegan aqui:
+    # es_saludo_o_cortesia los atiende antes (ver "Saludos combinados").
+    mejor_distancia = min((c["distance"] for c in chunks_crudos), default=None)
+    if mejor_distancia is None or mejor_distancia > MAX_DISTANCE_RELEVANCIA_MINIMA:
+        _debug(
+            f"answer_question: mejor distancia {mejor_distancia} > "
+            f"MAX_DISTANCE_RELEVANCIA_MINIMA={MAX_DISTANCE_RELEVANCIA_MINIMA}, consulta fuera de alcance"
+        )
+        return {
+            "respuesta": MENSAJE_FUERA_DE_ALCANCE,
+            "fuentes": [],
+            "imagenes": [],
+            "imagen_evidencia": None,
+            "pendiente_confirmacion": None,
+            "opciones_aclaracion": [],
+            "sugerir_soporte": False,
+        }
+    # --- fin corte por relevancia minima ---
 
     intencion_apertura_clara = (
         any(patron.search(pregunta_efectiva) for patron in APERTURA_INTENT_REGEX.values())
