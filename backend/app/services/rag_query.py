@@ -1183,8 +1183,8 @@ def _fuentes_unicas(chunks_citados, chunks_disponibles=None):
     rangos = {}
     for c in disponibles:
         meta = c["metadata"]
-        if meta["origen"] == "error":
-            continue
+        if meta["origen"] in ("error", "actualizacion"):
+            continue  # no se citan (ver "Origenes que no se citan" mas abajo)
 
         clave = (meta["origen"], meta["seccion_id"])
         actual = rangos.setdefault(clave, {"pagina_inicio": None, "pagina_fin": None})
@@ -1200,8 +1200,16 @@ def _fuentes_unicas(chunks_citados, chunks_disponibles=None):
     fuentes = []
     for c in chunks_citados:
         meta = c["metadata"]
-        if meta["origen"] == "error":
-            continue  # los errores frecuentes aportan contenido, pero no se citan como fuente
+        # --- Origenes que no se citan ---
+        # Los errores frecuentes y los documentos de actualizacion
+        # (documentos_actualizacion / fragmentos_actualizacion) aportan
+        # contenido a la respuesta, pero no se muestran como fuente: sin
+        # titulo ni pagina al pie del mensaje. Solo el manual conserva su
+        # referencia de seccion y pagina. Si una respuesta mezcla manual y
+        # actualizacion, aqui se descarta solo la actualizacion.
+        if meta["origen"] in ("error", "actualizacion"):
+            continue
+        # --- fin origenes que no se citan ---
 
         clave = (meta["origen"], meta["seccion_id"])
         if clave in vistas:
