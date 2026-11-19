@@ -10,6 +10,9 @@ const profileAssets = import.meta.glob('../assets/perfil*.{png,jpg,jpeg,webp}', 
   import: 'default',
 })
 
+// Personas por página del carrusel del equipo (siempre una fila de 4 columnas).
+const PERSONAS_POR_PAGINA = 4
+
 const team = [
   { image: 'perfil_1', name: 'Ing. José Alfredo Martínez', role: 'Gerente Evaluate Comercial' },
   { image: 'perfil_2', name: 'MSc. José Alfredo Martínez Cáceres', role: 'Gerente SINTEG' },
@@ -19,7 +22,6 @@ const team = [
   { image: 'perfil_5', name: 'MSc. Yosseny Gimena Sanchez C.', role: 'Programadora' },
   { image: 'perfil_6', name: 'Ing. Hesler Aldair Alvarado H.', role: 'Programador' },
   { image: 'perfil_7', name: 'MSc. Heidy Nohemy Lemus R.', role: 'Programadora' },
-  { image: 'perfil_8', name: 'Ing. Adolfo Angel Amador', role: 'Programador' },
 ]
 
 function findProfile(name) {
@@ -30,9 +32,9 @@ function findProfile(name) {
 /** Panel decorativo de autenticación: presentación de Casey y carrusel del equipo técnico. */
 export default function BrandPanel() {
   const [carouselSlide, setCarouselSlide] = useState(0)
-  const teamPages = Math.ceil(team.length / 5)
+  const teamPages = Math.ceil(team.length / PERSONAS_POR_PAGINA)
   const totalSlides = teamPages + 1
-  const visibleTeam = carouselSlide > 0 ? team.slice((carouselSlide - 1) * 5, carouselSlide * 5) : []
+  const visibleTeam = carouselSlide > 0 ? team.slice((carouselSlide - 1) * PERSONAS_POR_PAGINA, carouselSlide * PERSONAS_POR_PAGINA) : []
 
   // Avance automático cada 10 s; reinicia si cambia totalSlides
   useEffect(() => {
@@ -101,7 +103,7 @@ export default function BrandPanel() {
                 <svg className="h-5 w-5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="9" cy="8" r="3" /><path d="M3 19v-1a5 5 0 0 1 10 0v1M16 6a3 3 0 0 1 0 6M17 14a5 5 0 0 1 4 5" /></svg>
                 Conoce a nuestro equipo técnico
               </h2>
-              <div className={`grid gap-3 ${visibleTeam.length === 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
+              <div className="grid grid-cols-4 gap-3">
                 {visibleTeam.map((person) => {
                   const src = findProfile(person.image)
                   const initials = person.name.replace(/^(Ing\.|MSc\.)\s*/, '').split(' ').slice(0, 2).map((part) => part[0]).join('')

@@ -104,7 +104,6 @@ MIEMBROS_EQUIPO = [
     ("MSc. Yosseny Gimena Sanchez C.", ["gimena", "gimena sanchez","yosseny"]),
     ("Ing. Hesler Aldair Alvarado H", ["hesler", "hesler alvarado", "aldair"]),
     ("MSc. Heidy Nohemy Lemus R.", ["heidy", "heidy lemus", "nohemy"]),
-    ("Ing. Adolfo Angel Amador", ["adolfo", "adolfo amador", "angel"]),
 ]
 
 # --- Conversacion social (sin IA) ---
