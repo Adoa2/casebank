@@ -21,6 +21,7 @@ import sys
 import os
 import re
 import json
+import random
 import time
 import unicodedata
 import requests
@@ -79,8 +80,9 @@ MAX_DISTANCE_ERROR = 0.35
 # o se cambia el modelo de embeddings, volver a medir antes de ajustar.
 MAX_DISTANCE_RELEVANCIA_MINIMA = 0.35
 MENSAJE_FUERA_DE_ALCANCE = (
-    "No encontré información sobre eso en el manual. Puedes reformular tu "
-    "pregunta o consultar sobre algún módulo de CaseBank."
+    "Eso se sale de lo que puedo ayudarte, pero con gusto te apoyo con "
+    "CaseBank. Puedes preguntarme, por ejemplo, cómo abrir un préstamo, "
+    "hacer un DPF o cambiar tu clave."
 )
 # --- fin umbral minimo de relevancia ---
 
@@ -105,59 +107,180 @@ MIEMBROS_EQUIPO = [
     ("Ing. Adolfo Angel Amador", ["adolfo", "adolfo amador", "angel"]),
 ]
 
-GREETING_BASES = [
-    r"hola+",
-    r"(muy )?buen[oa]s?( d[ií]as?| tardes?| noches?)?",
-    r"hey",
-    r"hi",
-    r"(que|qu[ée]) tal",
-    r"c[oó]mo (estas|est[aá]s|andas)",
-    r"gracias",
-    r"muchas gracias",
-    r"(ok|okay|vale|listo|entendido)",
-    r"(adios|adi[oó]s|chao|hasta luego|nos vemos)",
-    r"(muy )?bien(,)?\s*(y\s*(tu|usted|vos))?",
-    r"todo bien(,)?\s*(y\s*(tu|usted|vos))?",
-    r"(mas|m[aá]s) o menos",
-    r"por aqui( todo bien)?",
-    r"(y\s*)?(tu|usted|vos)( que tal| como estas| c[oó]mo est[aá]s)?",
+# --- Conversacion social (sin IA) ---
+# Detecta mensajes que son SOLO conversacion (saludos, despedidas, "como
+# estas", agradecimientos, afecto o cumplidos al bot, y preguntas sobre
+# quien es Casey) y los responde con frases fijas, sin busqueda vectorial
+# ni llamadas a Gemini.
+#
+# Como funciona:
+#   - El texto se normaliza (minusculas, sin tildes, espacios colapsados).
+#   - Cada categoria es una lista de fragmentos (regex sobre texto ya sin
+#     tildes). El mensaje COMPLETO debe ser una secuencia de fragmentos
+#     separados por espacios o signos; ademas se permiten "casey", "bot",
+#     pronombres sueltos ("tu", "usted") y conectores ("y", "and").
+#   - Si sobra cualquier palabra que no sea un fragmento (ej. "hola,
+#     necesito un prestamo"), NO es conversacion y sigue el flujo normal.
+#   - Si hay fragmentos de varias categorias ("hola, como estas"), gana la
+#     de mayor prioridad en PRIORIDAD_CATEGORIAS_SOCIALES.
+FRAGMENTOS_SOCIALES = {
+    "quien_eres": [
+        r"quien(es)? (eres|sos)",
+        r"que (eres|sos)",
+        r"que es casey",
+        r"(que|q) (puedes|podes|sabes) hacer",
+        r"que haces",
+        r"que funciones tienes",
+        r"cual(es)? (es|son) tus? funcion(es)?",
+        r"(en|de) que (me )?(puedes|podes) ayudar(me)?",
+        r"en que me (ayudas|puedes ayudar)",
+        r"como (me )?(puedes|podes) ayudar(me)?",
+        r"para que (sirves|te uso|eres|sos|te puedo usar)",
+        r"que tipo de (preguntas|cosas|temas) (puedo hacerte|me puedes ayudar|puedo preguntarte)",
+        r"hablame (de|sobre) ti",
+        r"cuentame (sobre|de) (ti|vos)",
+        r"que informacion (tienes|manejas|tenes)",
+        r"who are you",
+        r"what (can|do) you do",
+        r"how can you help( me)?",
+    ],
+    "afecto": [
+        r"te (quiero|amo|adoro)( mucho)?",
+        r"me (encantas|caes (muy )?bien)",
+        r"eres (genial|increible|lo maximo|(el|la) mejor|un amor|muy (util|buena?|amable|lind[oa]))",
+        r"(que |muy )?buen trabajo",
+        r"excelente trabajo",
+        r"bien hecho",
+        r"(i )?love you",
+        r"you('| a)?re (great|awesome|amazing|the best)",
+        r"(good|great|nice) job",
+        r"well done",
+    ],
+    "como_estas": [
+        r"como (estas|esta|andas|te va|te encuentras|va todo|vas)",
+        r"que tal( estas| todo| va| tu dia)?",
+        r"que (onda|hay|cuentas)",
+        r"how are you( doing| today)?",
+        r"how('?s| is) it going",
+        r"what'?s up",
+        r"(muy )?bien",
+        r"todo bien",
+        r"mas o menos",
+        r"por aqui( todo bien)?",
+    ],
+    "despedida": [
+        r"adios",
+        r"chao|chau",
+        r"hasta (luego|pronto|manana|la proxima)",
+        r"nos vemos",
+        r"cuidate",
+        r"(good)?bye",
+        r"see you( later| soon)?",
+    ],
+    "agradecimiento": [
+        r"(muchas|mil|muchisimas) gracias",
+        r"gracias( por (todo|tu ayuda|la ayuda|la informacion))?",
+        r"te (lo )?agradezco",
+        r"thank you( so much| very much)?",
+        r"thanks( a lot)?",
+        r"thx",
+    ],
+    "confirmacion": [
+        r"ok(ay|ey)?",
+        r"vale",
+        r"listo",
+        r"entendido",
+        r"perfecto",
+        r"de acuerdo",
+        r"genial",
+        r"excelente",
+        r"got it",
+        r"(sounds )?good(?! (morning|afternoon|evening|job))",  # no robar "good morning" al saludo
+    ],
+    "saludo": [
+        r"hola+",
+        r"(muy )?buen[oa]s?( dias?| tardes?| noches?)?",
+        r"saludos",
+        r"hey",
+        r"hi",
+        r"hello",
+        r"good (morning|afternoon|evening)",
+    ],
+}
+
+# Fragmentos neutros: se aceptan dentro del mensaje pero no definen categoria.
+_FRAGMENTOS_NEUTROS = [r"casey", r"bot", r"tu", r"usted", r"vos", r"y", r"and", r"you"]
+
+PRIORIDAD_CATEGORIAS_SOCIALES = [
+    "quien_eres", "afecto", "como_estas", "despedida", "agradecimiento", "confirmacion", "saludo",
 ]
-_SUFIJO_NOMBRE = r"(\s+casey(\s+bot)?)?"
 
-# --- Saludos combinados ---
-# Acepta una o varias bases de saludo seguidas, separadas por espacios o
-# signos (ej. "hola cómo estás", "hola, ¿qué tal?", "buenos días, gracias").
-# Antes solo se aceptaba una base sola, y un saludo combinado caia en la
-# busqueda vectorial; con MAX_DISTANCE_RELEVANCIA_MINIMA habria recibido
-# MENSAJE_FUERA_DE_ALCANCE en vez de una respuesta de cortesia.
-_GREETING_BASE = r"(?:" + "|".join(GREETING_BASES) + r")"
-_GREETING_REGEX = re.compile(
-    r"^[¡¿\s]*" + _GREETING_BASE + r"(?:[!?.,¡¿\s]+" + _GREETING_BASE + r")*"
-    + _SUFIJO_NOMBRE + r"[!?.,¡¿\s]*$",
-    re.IGNORECASE,
+_SEPARADOR_SOCIAL = r"[\s,.;:!?¡¿…~\-]+"
+_REGEX_FRAGMENTO_SOCIAL = re.compile(
+    r"(?<![a-z'])(?:"
+    + "|".join(
+        f"(?P<{categoria}>" + "|".join(f"(?:{f})" for f in FRAGMENTOS_SOCIALES[categoria]) + ")"
+        for categoria in PRIORIDAD_CATEGORIAS_SOCIALES
+    )
+    + "|(?:" + "|".join(_FRAGMENTOS_NEUTROS) + r"))(?![a-z'])"
 )
-# --- fin saludos combinados ---
-
-
-ABOUT_ASSISTANT_PATTERNS = [
-    r"(que|qu[ée]) (haces|puedes hacer|sabes hacer|funciones tienes)(\s+(tu|vos|casey))?",
-    r"quien(es)? (eres|sos)(\s+(tu|vos|casey))?",
-    r"que (eres|sos)(\s+(tu|vos|casey))?",
-    r"cual(es)? (es|son) tu(s)? funci[oó]n(es)?",
-    r"(en|de) que (me puedes|podes|puedes) ayudar",
-    r"como (me puedes|podes|puedes) ayudar(me)?",
-    r"para que (sirves|te uso|eres|te puedo usar|sos)",
-    r"que tipo de (preguntas|cosas|temas) (puedo hacerte|me puedes ayudar|puedo preguntarte)",
-    r"que es casey",
-    r"h[aá]blame de ti",
-    r"cu[eé]ntame (sobre ti|de ti|sobre vos|de vos)",
-    r"que (informacion|informaci[oó]n) (tienes|manejas|tenes)",
-]
-
-_ABOUT_ASSISTANT_REGEX = re.compile(
-    r"(?:" + "|".join(ABOUT_ASSISTANT_PATTERNS) + r")",
-    re.IGNORECASE,
+_FRAGMENTO_SOCIAL_CUALQUIERA = (
+    r"(?:"
+    + "|".join(f"(?:{f})" for categoria in PRIORIDAD_CATEGORIAS_SOCIALES for f in FRAGMENTOS_SOCIALES[categoria])
+    + "|" + "|".join(_FRAGMENTOS_NEUTROS)
+    + r")"
 )
+_REGEX_MENSAJE_SOCIAL = re.compile(
+    rf"^(?:{_SEPARADOR_SOCIAL})?{_FRAGMENTO_SOCIAL_CUALQUIERA}"
+    rf"(?:{_SEPARADOR_SOCIAL}{_FRAGMENTO_SOCIAL_CUALQUIERA})*(?:{_SEPARADOR_SOCIAL})?$"
+)
+
+# Respuestas fijas: 1-2 oraciones, calidas, y todas cierran invitando a
+# consultar sobre CaseBank. Reglas de tono:
+#   - afecto: agradecer, aclarar que es un asistente virtual y redirigir;
+#     nunca corresponder en tono romantico ("yo tambien").
+#   - como_estas: amable, sin inventar sentimientos ni extenderse.
+#   - quien_eres: que es Casey + 2-3 ejemplos reales de consultas.
+RESPUESTAS_SOCIALES = {
+    "saludo": [
+        "¡Hola! Soy Casey. ¿En qué te puedo ayudar hoy con CaseBank?",
+        "¡Hola, qué gusto saludarte! Cuéntame qué necesitas hacer en CaseBank.",
+        "¡Hola! Aquí estoy para ayudarte con CaseBank. ¿Qué te gustaría consultar?",
+    ],
+    "como_estas": [
+        "¡Gracias por preguntar! Aquí estoy para ayudarte. ¿Qué necesitas consultar sobre CaseBank?",
+        "¡Todo en orden por aquí, gracias! ¿En qué te puedo ayudar hoy con CaseBank?",
+        "¡Qué amable que preguntes! Cuéntame en qué te apoyo con CaseBank.",
+    ],
+    "despedida": [
+        "¡Hasta pronto! Cuando tengas otra duda sobre CaseBank, aquí estaré.",
+        "¡Que te vaya muy bien! Si más adelante necesitas ayuda con CaseBank, solo escríbeme.",
+        "¡Nos vemos! Puedes volver cuando quieras para consultar sobre CaseBank.",
+    ],
+    "agradecimiento": [
+        "¡Con gusto! Si tienes otra duda sobre CaseBank, aquí estoy.",
+        "¡Para eso estoy! Avísame si necesitas ayuda con algo más de CaseBank.",
+        "¡De nada! Cuando quieras, puedes consultarme otra duda sobre CaseBank.",
+    ],
+    "confirmacion": [
+        "¡Perfecto! Si te surge otra duda sobre CaseBank, aquí estoy.",
+        "¡Listo! Cuando necesites algo más de CaseBank, solo escríbeme.",
+    ],
+    "afecto": [
+        "¡Qué amable, gracias! Soy un asistente virtual, y es un gusto ayudarte. ¿Qué te gustaría consultar sobre CaseBank?",
+        "¡Gracias por tus palabras! Como asistente virtual, lo mío es apoyarte con CaseBank: cuéntame qué necesitas.",
+        "¡Muchas gracias! Soy un asistente virtual y estoy aquí para ayudarte con CaseBank. ¿En qué te apoyo?",
+    ],
+    "quien_eres": [
+        "Soy Casey, el asistente virtual de CaseBank: te ayudo con el uso del sistema según el manual de usuario. "
+        "Puedes preguntarme, por ejemplo, cómo abrir un préstamo, hacer un DPF o ingresar un afiliado nuevo.",
+        "Soy Casey y te oriento en el uso de CaseBank con base en el manual. "
+        "Prueba con algo como «¿Cómo abro un préstamo?», «¿Cómo hago un DPF?» o «¿Cómo cambio mi clave?».",
+        "Me llamo Casey, el asistente de CaseBank, y te explico paso a paso los procedimientos del manual, "
+        "como ingresar un afiliado nuevo, abrir un préstamo o cambiar tu clave. ¿Por cuál empezamos?",
+    ],
+}
+# --- fin conversacion social (sin IA) ---
 
 
 _REPETIDO_REGEX = re.compile(r"(.)\1{3,}")  # el mismo caracter 4+ veces seguidas
@@ -190,15 +313,40 @@ def es_mensaje_sin_sentido(texto):
     return False
 
 
-def es_pregunta_sobre_el_asistente(texto):
+def _normalizar_social(texto):
+    """Minusculas, sin tildes, apostrofos unificados y espacios colapsados."""
+    sin_tildes = unicodedata.normalize("NFD", texto.lower().replace("’", "'"))
+    sin_tildes = "".join(c for c in sin_tildes if unicodedata.category(c) != "Mn")
+    return re.sub(r"\s+", " ", sin_tildes).strip()
+
+
+def detectar_conversacion_social(texto):
     """
-    True si el mensaje pregunta sobre el asistente mismo (que hace, cuales
-    son sus funciones, quien es, etc.) en vez de sobre un tema puntual del
-    manual. Estas preguntas se responden directo, describiendo las
-    capacidades reales de Casey, sin pasar por la busqueda semantica.
+    Devuelve la categoria social del mensaje ("saludo", "como_estas",
+    "despedida", "agradecimiento", "confirmacion", "afecto", "quien_eres")
+    o None si el mensaje no es SOLO conversacion. Ver el bloque
+    "Conversacion social (sin IA)" al inicio del modulo.
     """
-    normalizado = texto.strip().lower()
-    return bool(_ABOUT_ASSISTANT_REGEX.search(normalizado))
+    normalizado = _normalizar_social(texto)
+    if not normalizado or not _REGEX_MENSAJE_SOCIAL.match(normalizado):
+        return None
+    encontradas = set()
+    for coincidencia in _REGEX_FRAGMENTO_SOCIAL.finditer(normalizado):
+        encontradas.update(nombre for nombre, valor in coincidencia.groupdict().items() if valor)
+    return next((c for c in PRIORIDAD_CATEGORIAS_SOCIALES if c in encontradas), None)
+
+
+def respuesta_social(categoria):
+    """Arma la respuesta fija (una variante al azar) para una categoria social."""
+    return {
+        "respuesta": random.choice(RESPUESTAS_SOCIALES[categoria]),
+        "fuentes": [],
+        "imagenes": [],
+        "imagen_evidencia": None,
+        "pendiente_confirmacion": None,
+        "opciones_aclaracion": [],
+        "sugerir_soporte": False,
+    }
 
 
 def _normalizar_busqueda(texto):
@@ -315,17 +463,6 @@ def _debug(mensaje):
     """Imprime mensajes de diagnóstico cuando DEBUG_RAG está activado."""
     if DEBUG_RAG:
         print(f"[DEBUG RAG] {mensaje}")
-
-
-def es_saludo_o_cortesia(texto):
-    """
-    True si el mensaje es un saludo, agradecimiento o despedida simple, sin
-    contenido tecnico real. Se usa para evitar la busqueda vectorial (y el
-    riesgo de arrastrar fuentes irrelevantes) en mensajes que no son
-    preguntas sobre el manual.
-    """
-    normalizado = texto.strip().lower()
-    return bool(_GREETING_REGEX.match(normalizado))
 
 
 REQUEST_TIMEOUT_SEGUNDOS = 20
@@ -1263,16 +1400,6 @@ def _fuentes_unicas(chunks_citados, chunks_disponibles=None):
     return fuentes
 
 
-RESPUESTA_SOBRE_ASISTENTE = (
-    "Soy Casey, el asistente virtual de CaseBank. Te oriento con base en el "
-    "Manual de Usuario del sistema, explico paso a paso los distintos "
-    "procedimientos y te ayudo a interpretar mensajes de error frecuentes. "
-    "En cada respuesta incluyo la sección y página del manual en la que me "
-    "baso, y puedes consultarme en lenguaje natural, sin necesidad de "
-    "conocer términos técnicos."
-)
-
-
 def build_prompt(pregunta, chunks, incluir_aviso_ticket, terminos_clave=None, omitir_saludo=False):
     """Arma el prompt para el LLM combinando la pregunta con el contexto recuperado."""
     if not chunks:
@@ -1830,29 +1957,18 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
             "sugerir_soporte": True,
         }
 
+    # --- Conversacion social ---
+    # Antes del filtro de "sin sentido" (que descartaria "hi" por corto) y
+    # antes de cualquier busqueda o llamada a Gemini: respuesta fija.
+    categoria_social = detectar_conversacion_social(question)
+    if categoria_social:
+        _debug(f"answer_question: conversacion social -> {categoria_social}")
+        return respuesta_social(categoria_social)
+    # --- fin conversacion social ---
+
     if es_mensaje_sin_sentido(question):
         return {
             "respuesta": "Disculpa, ¿podrías darme un poco más de contexto sobre tu consulta?",
-            "fuentes": [],
-            "imagenes": [],
-            "imagen_evidencia": None,
-            "pendiente_confirmacion": None,
-        }
-
-    if es_saludo_o_cortesia(question):
-        prompt = build_prompt(question, [], incluir_aviso_ticket=False)
-        respuesta = call_gemini_generate(prompt)
-        return {
-            "respuesta": respuesta,
-            "fuentes": [],
-            "imagenes": [],
-            "imagen_evidencia": None,
-            "pendiente_confirmacion": None,
-        }
-
-    if es_pregunta_sobre_el_asistente(question):
-        return {
-            "respuesta": RESPUESTA_SOBRE_ASISTENTE,
             "fuentes": [],
             "imagenes": [],
             "imagen_evidencia": None,
@@ -1889,17 +2005,11 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
     respuesta_estructurada = _respuesta_estructurada(pregunta_efectiva)
     if respuesta_estructurada:
         return respuesta_estructurada
-    if correccion and es_saludo_o_cortesia(correccion):
-        prompt = build_prompt(correccion, [], incluir_aviso_ticket=False)
-        respuesta = call_gemini_generate(prompt)
-        respuesta = _sanitizar_formato(respuesta)
-        return {
-            "respuesta": respuesta,
-            "fuentes": [],
-            "imagenes": [],
-            "imagen_evidencia": None,
-            "pendiente_confirmacion": None,
-        }
+    # Un mensaje con errores de tipeo que, ya corregido por el analisis,
+    # resulta ser conversacion social recibe la misma respuesta fija.
+    categoria_social = detectar_conversacion_social(correccion) if correccion else None
+    if categoria_social:
+        return respuesta_social(categoria_social)
 
     terminos_para_aviso = list(
         dict.fromkeys(list(terminos_clave) + _sinonimos_fijos(pregunta_efectiva))
@@ -1937,7 +2047,7 @@ def answer_question(question, contexto_error=None, confirmacion=None, historial=
     # MENSAJE_FUERA_DE_ALCANCE, sin evaluar ambiguedad, sin lista de
     # opciones y sin fuentes. Es un mensaje fijo (no generado) para que la
     # respuesta sea siempre corta y consistente. Los saludos no llegan aqui:
-    # es_saludo_o_cortesia los atiende antes (ver "Saludos combinados").
+    # detectar_conversacion_social los atiende antes (ver "Conversacion social").
     mejor_distancia = min((c["distance"] for c in chunks_crudos), default=None)
     if mejor_distancia is None or mejor_distancia > MAX_DISTANCE_RELEVANCIA_MINIMA:
         _debug(
