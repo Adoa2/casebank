@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { crearTrabajoVideoIA, subirImagenVideoIA } from '../api/videosIA'
 import BotonAgregarPunteado from './BotonAgregarPunteado'
+import usePegadoImagen, { leerImagenDelPortapapeles } from '../hooks/usePegadoImagen'
 
 const TIPOS_PERMITIDOS = ['image/jpeg', 'image/jpg', 'image/png']
 const MAX_FILE_SIZE = 5 * 1024 * 1024
@@ -20,7 +21,8 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
   const [descripcion, setDescripcion] = useState('')
   const [pasos, setPasos] = useState([pasoVacio()])
   const [puntos, setPuntos] = useState('')
-  const [subiendoIndex, setSubiendoIndex] = useState(null)
+  // Pasos con una imagen subiéndose; un Set permite pegar varias capturas seguidas
+  const [subiendo, setSubiendo] = useState(() => new Set())
   const [enviando, setEnviando] = useState(false)
   const [errorGeneral, setErrorGeneral] = useState(null)
 
@@ -52,6 +54,15 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
     setPuntos(trabajoBase?.puntos_a_considerar || '')
     setErrorGeneral(null)
   }, [isOpen, trabajoBase])
+
+  // --- Pegado de capturas con Ctrl+V ---
+  // El destino es el paso con el foco o con el mouse encima (ver usePegadoImagen).
+  // subirImagenRef apunta a la función del render actual, definida más abajo.
+  const subirImagenRef = useRef(null)
+  const { propsDestino, destinoResaltado } = usePegadoImagen({
+    activo: isOpen,
+    onPegar: (index, file) => subirImagenRef.current?.(index, file),
+  })
 
   if (!isOpen) return null
 
@@ -91,7 +102,7 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
       setErrorGeneral('La imagen no puede superar los 5 MB.')
       return
     }
-    setSubiendoIndex(index)
+    setSubiendo((prev) => new Set(prev).add(index))
     setErrorGeneral(null)
     try {
       const { url } = await subirImagenVideoIA(file)
@@ -99,7 +110,22 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
     } catch (err) {
       setErrorGeneral(err.message || 'No se pudo subir la imagen.')
     } finally {
-      setSubiendoIndex(null)
+      setSubiendo((prev) => {
+        const siguiente = new Set(prev)
+        siguiente.delete(index)
+        return siguiente
+      })
+    }
+  }
+  subirImagenRef.current = subirImagenParaPaso
+
+  // Botón "Pegar imagen": complemento de Ctrl+V usando la API del portapapeles
+  async function pegarDesdeBoton(index) {
+    try {
+      const file = await leerImagenDelPortapapeles()
+      subirImagenParaPaso(index, file)
+    } catch (err) {
+      setErrorGeneral(err.message)
     }
   }
 
@@ -113,15 +139,6 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
     e.target.value = ''
     const index = indiceParaSubidaRef.current
     if (file && index !== null) subirImagenParaPaso(index, file)
-  }
-
-  function handlePegarImagen(index, event) {
-    const item = Array.from(event.clipboardData?.items || []).find((entry) => entry.type.startsWith('image/'))
-    const file = item?.getAsFile()
-    if (file) {
-      event.preventDefault()
-      subirImagenParaPaso(index, file)
-    }
   }
 
   function quitarImagenPaso(index) {
@@ -186,7 +203,13 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
 
             <div className="space-y-3">
               {pasos.map((paso, index) => (
-                <div key={index} className="rounded-lg border border-gray-200 p-3">
+                <div
+                  key={index}
+                  {...propsDestino(index)}
+                  className={`rounded-lg border p-3 transition ${
+                    destinoResaltado === index ? 'border-blue-300 bg-blue-50/40' : 'border-gray-200'
+                  }`}
+                >
                   <div className="flex items-center justify-between mb-1">
                     <p className="text-xs font-semibold text-gray-500">Paso {index + 1}</p>
                     {pasos.length > 1 && (
@@ -211,14 +234,13 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
                   <div
                     tabIndex={0}
                     role="button"
-                    onPaste={(event) => handlePegarImagen(index, event)}
                     onClick={() => abrirSelectorArchivo(index)}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') abrirSelectorArchivo(index)
                     }}
                     className="mt-2 flex min-h-[64px] cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-center outline-none transition hover:border-blue-400 focus:border-blue-500"
                   >
-                    {subiendoIndex === index ? (
+                    {subiendo.has(index) ? (
                       <span className="text-xs text-gray-500">Subiendo imagen...</span>
                     ) : paso.imagenUrl ? (
                       <div className="relative">
@@ -236,9 +258,19 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
                       </div>
                     ) : (
                       <span className="text-xs text-gray-500">
-                        Captura para este paso (opcional): haz clic para elegir un archivo, o haz clic aquí y pega con Ctrl+V
+                        Captura para este paso (opcional): haz clic para elegir un archivo, o presiona Ctrl+V para pegar aquí
                       </span>
                     )}
+                  </div>
+                  <div className="mt-1 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => pegarDesdeBoton(index)}
+                      disabled={subiendo.has(index)}
+                      className="text-xs font-semibold text-blue-600 hover:underline disabled:opacity-50"
+                    >
+                      Pegar imagen
+                    </button>
                   </div>
                 </div>
               ))}
@@ -283,7 +315,7 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
             </button>
             <button
               type="submit"
-              disabled={enviando || subiendoIndex !== null || excedeEscenas || excedeCaracteres}
+              disabled={enviando || subiendo.size > 0 || excedeEscenas || excedeCaracteres}
               className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {enviando ? 'Creando...' : 'Generar video'}

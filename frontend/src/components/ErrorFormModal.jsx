@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { uploadImagenError } from '../api/errors'
 import BotonAgregarPunteado from './BotonAgregarPunteado'
+import usePegadoImagen, { leerImagenDelPortapapeles } from '../hooks/usePegadoImagen'
 
 const STEPS = [
   { id: 'informacion', label: 'Información' },
@@ -168,11 +169,24 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
     event.target.value = ''
   }
 
-  function handlePaste(event) {
-    if (!tieneEvidencia) return
-    const item = Array.from(event.clipboardData?.items || []).find((entry) => entry.type.startsWith('image/'))
-    const file = item?.getAsFile()
-    if (file) subirArchivo(file)
+  // --- Pegado de capturas con Ctrl+V ---
+  // La caja de evidencia es el único destino: se usa si tiene el foco o el mouse
+  // encima y, si no, por defecto mientras esté visible (casilla marcada y paso Solución).
+  const subirArchivoRef = useRef(null)
+  subirArchivoRef.current = subirArchivo
+  const { propsDestino, destinoResaltado } = usePegadoImagen({
+    activo: true,
+    onPegar: (_destino, file) => subirArchivoRef.current?.(file),
+    destinoPorDefecto: 'evidencia',
+  })
+
+  // Botón "Pegar imagen": complemento de Ctrl+V usando la API del portapapeles
+  async function pegarDesdeBoton() {
+    try {
+      subirArchivo(await leerImagenDelPortapapeles())
+    } catch (err) {
+      setImagenError(err.message)
+    }
   }
 
   function handleDrop(event) {
@@ -259,7 +273,7 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
         </header>
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col" noValidate>
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-7 sm:py-5" onPaste={handlePaste}>
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-7 sm:py-5">
             {error && <div role="alert" className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
             {activeStep === 0 && (
@@ -314,9 +328,14 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
                     <span className="text-xs leading-5 text-slate-500"><strong className="block text-sm text-[#17213e]">Agregar imagen de evidencia</strong>Permite que el usuario confirme visualmente que se trata del mismo error.</span>
                   </label>
                   {tieneEvidencia && (
-                    <div className="mt-4">
-                      <div role="button" tabIndex={0} onClick={() => !subiendoImagen && fileInputRef.current?.click()} onKeyDown={(event) => (event.key === 'Enter' || event.key === ' ') && fileInputRef.current?.click()} onDragOver={(event) => { event.preventDefault(); setDragging(true) }} onDragLeave={() => setDragging(false)} onDrop={handleDrop} className={`flex min-h-[130px] cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed bg-white px-4 py-5 text-center outline-none transition focus:border-blue-500 ${dragging ? 'border-blue-500 bg-blue-50' : 'border-slate-300 hover:border-blue-400'}`}>
-                        {subiendoImagen ? <><span className="h-6 w-6 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" /><p className="text-sm text-slate-500">Subiendo imagen...</p></> : imagenUrl ? <><img src={imagenUrl} alt="Evidencia del error" className="max-h-40 rounded-lg border border-slate-200 object-contain" /><button type="button" onClick={(event) => { event.stopPropagation(); setImagenUrl(null) }} className="text-xs font-semibold text-red-600 hover:underline">Quitar imagen</button></> : <><svg className="h-8 w-8 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg><p className="text-sm font-medium text-slate-700">Arrastra, pega o selecciona una imagen</p><p className="text-xs text-slate-400">JPG o PNG, máximo 5 MB</p></>}
+                    <div className="mt-4" {...propsDestino('evidencia')}>
+                      <div role="button" tabIndex={0} onClick={() => !subiendoImagen && fileInputRef.current?.click()} onKeyDown={(event) => (event.key === 'Enter' || event.key === ' ') && fileInputRef.current?.click()} onDragOver={(event) => { event.preventDefault(); setDragging(true) }} onDragLeave={() => setDragging(false)} onDrop={handleDrop} className={`flex min-h-[130px] cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed bg-white px-4 py-5 text-center outline-none transition focus:border-blue-500 ${dragging ? 'border-blue-500 bg-blue-50' : destinoResaltado === 'evidencia' ? 'border-blue-400 bg-blue-50/40' : 'border-slate-300 hover:border-blue-400'}`}>
+                        {subiendoImagen ? <><span className="h-6 w-6 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" /><p className="text-sm text-slate-500">Subiendo imagen...</p></> : imagenUrl ? <><img src={imagenUrl} alt="Evidencia del error" className="max-h-40 rounded-lg border border-slate-200 object-contain" /><button type="button" onClick={(event) => { event.stopPropagation(); setImagenUrl(null) }} className="text-xs font-semibold text-red-600 hover:underline">Quitar imagen</button></> : <><svg className="h-8 w-8 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg><p className="text-sm font-medium text-slate-700">Arrastra una imagen o haz clic para elegir un archivo</p><p className="text-xs text-slate-500">o presiona Ctrl+V para pegar aquí</p><p className="text-xs text-slate-400">JPG o PNG, máximo 5 MB</p></>}
+                      </div>
+                      <div className="mt-1.5 flex justify-end">
+                        <button type="button" onClick={pegarDesdeBoton} disabled={subiendoImagen} className="text-xs font-semibold text-blue-600 hover:underline disabled:opacity-50">
+                          Pegar imagen
+                        </button>
                       </div>
                       <input ref={fileInputRef} type="file" accept="image/jpeg,image/jpg,image/png" onChange={handleFileChange} className="hidden" />
                       {imagenError && <p className="mt-2 text-xs text-red-600">{imagenError}</p>}
