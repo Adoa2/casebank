@@ -1,0 +1,246 @@
+<!doctype html>
+<!--
+  Plantilla de video tutorial CaseBank, versión 1 (Hyperframes).
+
+  Variables (todas string, porque Hyperframes no acepta listas como variable):
+    escenas      Lista de escenas en texto JSON:
+                 [{"titulo": str, "imagen": "assets/escena-1.png" | null,
+                   "inicio": segundos, "duracion": segundos}]
+    narracion    Ruta del audio con la narración unida de todas las escenas.
+    titulo_video Título del video; se muestra en las escenas sin captura.
+
+  Reglas de esta plantilla:
+    - El audio es un único <audio> estático: el mezclador de Hyperframes no
+      reproduce audio creado por script.
+    - La duración total (data-duration del elemento raíz) no puede venir de
+      una variable: el backend la escribe en este archivo al armar el zip
+      (services/heygen_client.py, empaquetar_proyecto).
+    - Las escenas se crean por script a partir de la variable escenas y solo
+      se animan con la línea de tiempo GSAP registrada (pausada y
+      determinística, sin azar ni reloj).
+    - Todo se carga desde el zip: GSAP y fuentes van en assets/.
+-->
+<html lang="es" data-composition-variables='[
+  {"id":"escenas","type":"string","label":"Escenas (JSON)","default":"[{\"titulo\":\"Introducción al problema\",\"imagen\":null,\"inicio\":0,\"duracion\":4},{\"titulo\":\"Abrí el módulo de clientes\",\"imagen\":null,\"inicio\":4,\"duracion\":4},{\"titulo\":\"Puntos a considerar\",\"imagen\":null,\"inicio\":8,\"duracion\":4}]"},
+  {"id":"narracion","type":"string","label":"Narración (audio)","default":"assets/narracion.wav"},
+  {"id":"titulo_video","type":"string","label":"Título del video","default":"Video tutorial CaseBank"}
+]'>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920, height=1080">
+  <title>CaseBank - video tutorial</title>
+  <style>
+    /* --- Fuentes empaquetadas (SIL OFL, ver assets/fonts) --- */
+    @font-face { font-family: "Inter"; font-weight: 400; src: url("assets/fonts/inter-latin-400-normal.woff2") format("woff2"); }
+    @font-face { font-family: "Inter"; font-weight: 600; src: url("assets/fonts/inter-latin-600-normal.woff2") format("woff2"); }
+    @font-face { font-family: "Space Grotesk"; font-weight: 700; src: url("assets/fonts/space-grotesk-latin-700-normal.woff2") format("woff2"); }
+
+    /* --- Colores de la marca (mismos que frontend/tailwind.config.js) --- */
+    :root {
+      --tinta: #0b1739;
+      --tinta-2: #17213e;
+      --azul: #155EEF;
+      --indigo: #362FA8;
+      --cian: #1FDDF2;
+      --papel: #F7F9FC;
+      --gris: #8796b6;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--tinta); }
+
+    #raiz {
+      position: relative; width: 1920px; height: 1080px; overflow: hidden;
+      font-family: "Inter", sans-serif; color: var(--papel);
+      background: radial-gradient(1400px 900px at 15% 0%, #1b2a5c 0%, var(--tinta) 60%) , var(--tinta);
+    }
+
+    /* Marca fija arriba a la izquierda. */
+    #marca {
+      position: absolute; left: 80px; top: 34px; z-index: 30;
+      font: 700 30px "Space Grotesk", sans-serif; letter-spacing: 0.5px; color: var(--papel);
+    }
+    #marca span { color: var(--cian); }
+
+    /* --- Escena --- */
+    .escena { position: absolute; inset: 0; opacity: 0; z-index: 10; }
+
+    /* Marco de la captura: la imagen se ajusta al marco sin deformarse (contain). */
+    .marco {
+      position: absolute; left: 120px; top: 100px; width: 1680px; height: 740px;
+      border-radius: 22px; overflow: hidden; background: #dfe6f0;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+    }
+    .marco img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+    /* Escenas sin captura: tarjeta de título en el lugar del marco. */
+    .portada {
+      position: absolute; left: 120px; top: 100px; width: 1680px; height: 740px;
+      border-radius: 22px; display: flex; flex-direction: column; justify-content: center;
+      padding: 0 140px; background: linear-gradient(135deg, var(--indigo) 0%, var(--azul) 100%);
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+    }
+    .portada .etiqueta { font: 600 30px "Inter", sans-serif; color: var(--cian); text-transform: uppercase; letter-spacing: 4px; }
+    .portada .grande { margin-top: 26px; font: 700 84px/1.08 "Space Grotesk", sans-serif; color: #ffffff; }
+
+    /* Barra de título abajo. */
+    .barra {
+      position: absolute; left: 120px; top: 880px; width: 1680px; height: 130px; z-index: 20;
+      display: flex; align-items: center; gap: 34px; padding: 0 44px;
+      border-radius: 18px; background: var(--tinta-2); border: 2px solid rgba(31, 221, 242, 0.25);
+      overflow: hidden;
+    }
+    .barra .acento { position: absolute; left: 0; top: 0; width: 100%; height: 6px; background: linear-gradient(90deg, var(--cian), var(--azul)); transform-origin: left center; }
+    .barra .numero {
+      flex: 0 0 auto; width: 74px; height: 74px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font: 700 34px "Space Grotesk", sans-serif; color: var(--tinta); background: var(--cian);
+    }
+    .barra .texto { overflow: hidden; }
+    .barra .titulo { font: 700 50px/1.1 "Space Grotesk", sans-serif; color: #ffffff; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; max-width: 1460px; }
+  </style>
+</head>
+<body>
+  <!-- data-duration lo reemplaza el backend al empaquetar (duración real de la narración). -->
+  <div id="raiz" data-composition-id="casebank_v1" data-start="0" data-width="1920" data-height="1080" data-duration="12">
+    <div id="marca">Case<span>Bank</span></div>
+    <div id="escenas"></div>
+
+    <!-- Único audio fijo: la narración unida de todas las escenas. -->
+    <audio id="narracion" class="clip" data-start="0" data-has-audio="true" data-var-src="narracion" src="assets/narracion.wav"></audio>
+  </div>
+
+  <script src="assets/gsap.min.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      // --- Constantes de animación (segundos) ---
+      var TRANSICION = 0.6;      // cruce entre escenas
+      var RETRASO_BARRA = 0.2;   // la barra entra un poco después de la escena
+      var DURACION_BARRA = 0.55;
+
+      // --- Lectura de variables ---
+      var variables = (window.__hyperframes && window.__hyperframes.getVariables) ? window.__hyperframes.getVariables() : {};
+      var escenas = [];
+      try {
+        escenas = JSON.parse(variables.escenas || "[]");
+      } catch (e) {
+        escenas = [];
+      }
+      if (!Array.isArray(escenas)) escenas = [];
+      var tituloVideo = String(variables.titulo_video || "");
+
+      // Inicio de cada escena: el que viene en el JSON o la suma de las anteriores.
+      var acumulado = 0;
+      escenas.forEach(function (e) {
+        e.duracion = Math.max(Number(e.duracion) || 0, 0.5);
+        e.inicio = (typeof e.inicio === "number") ? e.inicio : acumulado;
+        acumulado = e.inicio + e.duracion;
+      });
+      var total = acumulado;
+
+      // --- Construcción de las escenas ---
+      var contenedor = document.getElementById("escenas");
+      var imagenes = [];
+
+      function crear(etiqueta, clase, texto) {
+        var el = document.createElement(etiqueta);
+        if (clase) el.className = clase;
+        if (texto !== undefined) el.textContent = texto;
+        return el;
+      }
+
+      var nodos = escenas.map(function (e, i) {
+        var escena = crear("div", "escena");
+        escena.id = "escena-" + (i + 1);
+
+        if (e.imagen) {
+          var marco = crear("div", "marco");
+          var img = crear("img");
+          img.alt = "";
+          img.src = e.imagen;
+          marco.appendChild(img);
+          escena.appendChild(marco);
+          imagenes.push(img);
+        } else {
+          var portada = crear("div", "portada");
+          portada.appendChild(crear("div", "etiqueta", i === 0 ? "Video tutorial" : "Para tener en cuenta"));
+          portada.appendChild(crear("div", "grande", i === 0 ? (tituloVideo || e.titulo || "") : (e.titulo || "")));
+          escena.appendChild(portada);
+        }
+
+        var barra = crear("div", "barra");
+        barra.appendChild(crear("div", "acento"));
+        barra.appendChild(crear("div", "numero", String(i + 1)));
+        var texto = crear("div", "texto");
+        texto.appendChild(crear("div", "titulo", e.titulo || ""));
+        barra.appendChild(texto);
+        escena.appendChild(barra);
+
+        contenedor.appendChild(escena);
+        return escena;
+      });
+
+      // --- Línea de tiempo ---
+      function construirLinea() {
+        var tl = gsap.timeline({ paused: true });
+
+        nodos.forEach(function (escena, i) {
+          var e = escenas[i];
+          var inicio = e.inicio;
+          var fin = e.inicio + e.duracion;
+          var visual = escena.querySelector(".marco, .portada");
+          var barra = escena.querySelector(".barra");
+          var acento = escena.querySelector(".acento");
+          var titulo = escena.querySelector(".titulo");
+          var numero = escena.querySelector(".numero");
+
+          // Entrada: la primera aparece desde el inicio; las demás cruzan con la anterior.
+          if (i === 0) {
+            tl.set(escena, { opacity: 1 }, 0);
+            tl.fromTo(visual, { opacity: 0, scale: 0.96 }, { opacity: 1, scale: 1, duration: TRANSICION, ease: "power2.out" }, 0);
+          } else {
+            tl.fromTo(escena, { opacity: 0 }, { opacity: 1, duration: TRANSICION, ease: "power1.inOut" }, inicio);
+            tl.fromTo(visual, { x: 90, scale: 0.98 }, { x: 0, scale: 1, duration: TRANSICION, ease: "power3.out" }, inicio);
+          }
+
+          // Acercamiento suave de la captura durante la escena (escala uniforme: no deforma).
+          var img = escena.querySelector(".marco img");
+          if (img) {
+            tl.fromTo(img, { scale: 1 }, { scale: 1.03, duration: Math.max(e.duracion - TRANSICION, 0.1), ease: "none" }, inicio + TRANSICION);
+          }
+
+          // Barra de título animada.
+          tl.fromTo(barra, { y: 70, opacity: 0 }, { y: 0, opacity: 1, duration: DURACION_BARRA, ease: "back.out(1.4)" }, inicio + RETRASO_BARRA);
+          tl.fromTo(acento, { scaleX: 0 }, { scaleX: 1, duration: 0.7, ease: "power2.out" }, inicio + RETRASO_BARRA + 0.1);
+          tl.fromTo(numero, { scale: 0.4, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4, ease: "back.out(2)" }, inicio + RETRASO_BARRA + 0.15);
+          tl.fromTo(titulo, { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, inicio + RETRASO_BARRA + 0.2);
+
+          // Salida: se desvanece mientras entra la siguiente (la última queda hasta el final).
+          if (i < nodos.length - 1) {
+            tl.to(escena, { opacity: 0, duration: TRANSICION, ease: "power1.inOut" }, fin);
+            tl.to(visual, { x: -90, scale: 0.98, duration: TRANSICION, ease: "power3.in" }, fin);
+          }
+        });
+
+        // Fija la duración de la línea de tiempo en la duración total del video.
+        tl.set({}, {}, total);
+
+        window.__timelines = window.__timelines || {};
+        window.__timelines["casebank_v1"] = tl;
+      }
+
+      // Espera fuentes e imágenes (creadas por script) antes de registrar la línea de tiempo.
+      var esperas = [
+        document.fonts.load('700 50px "Space Grotesk"', "ÁÉÍÓÚÑáéíóúñ"),
+        document.fonts.load('600 30px "Inter"', "ÁÉÍÓÚÑáéíóúñ"),
+        document.fonts.load('400 30px "Inter"', "ÁÉÍÓÚÑáéíóúñ")
+      ].concat(imagenes.map(function (img) {
+        return img.decode ? img.decode() : Promise.resolve();
+      }));
+      Promise.all(esperas.map(function (p) { return p.catch(function () { return null; }); })).then(construirLinea);
+    })();
+  </script>
+</body>
+</html>

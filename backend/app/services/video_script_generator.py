@@ -57,6 +57,7 @@ Reglas estrictas:
 - Cada escena tiene "titulo" (máximo {max_palabras_titulo} palabras, aparece en pantalla), "narracion" (1 a 2 oraciones cortas en español neutro, tono claro y profesional, máximo {max_caracteres_narracion} caracteres) y "captura".
 - "captura" es el número del paso cuya imagen acompaña la escena: null en la introducción, el número del paso (1 a {n_pasos}) en cada escena de paso, y null en la escena de puntos a considerar.
 - Para marcar una pausa en la narración escribí exactamente [pause]. No uses ninguna otra marca entre corchetes.
+- Usá ortografía española completa, con todas las tildes y eñes (por ejemplo: parámetro, menú, operación, módulo, configuración). La voz lee el texto tal cual y sin tildes pronuncia mal.
 - Escribí texto plano: sin Markdown (nada de asteriscos, almohadillas, guiones de lista ni comillas invertidas), sin etiquetas SSML ni HTML, sin emojis y sin URLs.
 - No repitas literalmente el "titulo" dentro de la "narracion".
 - El total de escenas debe ser EXACTAMENTE {escenas_esperadas}.

@@ -20,11 +20,34 @@ Flujo sin trabajo largo dentro de una petición HTTP:
    transacción. Es idempotente: si ya estaba publicado devuelve el mismo video.
 
 Un trabajo en pendiente o procesando por más de VIDEO_IA_TIEMPO_LIMITE_MINUTOS
-pasa a "fallido" automáticamente y libera al usuario.
+pasa a "fallido" automáticamente y libera al usuario. Excepción: si estaba en
+etapa render o descarga y el proveedor confirma que el render terminó, pasa a
+"descarga_pendiente" para no perder un video ya pagado.
+
+Duración de cada paso de "avanzar" (medida con un video de 3 escenas y 22 s):
+    guion     ~3 s. Una llamada a Gemini; peor caso unos 45 s (2 intentos de 20 s).
+    voz       ~6 s por lote de hasta 4 narraciones (unos 2 s por narración).
+    render    ~9 s al iniciar: descarga los WAV y las capturas, arma el zip,
+              lo sube a HeyGen y crea el render. Es el paso más largo de los
+              fijos y crece con la cantidad de escenas (20 escenas: decenas de
+              segundos). Las consultas de estado siguientes duran ~1 s.
+    descarga  ~5 s para 3,3 MB. Es el paso más largo en videos largos: un video
+              de 5 minutos pesaría unos 45 MB y tardaría entre 30 y 80 s. Lo
+              corta VIDEO_IA_TIEMPO_MAX_DESCARGA_SEGUNDOS (240 s).
+En Vercel (plan Hobby con Fluid compute) la función del backend puede durar
+hasta 300 s, configurado en vercel.json con maxDuration dentro del servicio
+backend. Sin Fluid compute el máximo de Hobby es 60 s y la descarga de un
+video largo no entraría.
+
+Los recursos subidos al proveedor (el zip del proyecto) se guardan en
+recursos_externos y se borran cuando el render termina, falla, se cancela o
+el trabajo se elimina.
 """
 
 import copy
 import logging
+import secrets
+import string
 import tempfile
 import time
 import uuid
@@ -204,8 +227,36 @@ def _fallar(trabajo: Trabajo, mensaje: str) -> None:
     _limpiar_recursos(trabajo)
 
 
+def _recuperar_render_terminado(trabajo: Trabajo) -> bool:
+    """
+    Antes de fallar por tiempo un trabajo en etapa render o descarga, consulta
+    al proveedor. Si el render ya terminó, el trabajo pasa a "descarga_pendiente"
+    (recuperable con reintentar-descarga) en vez de fallido, y el render no se
+    borra. Devuelve True si lo recuperó.
+    """
+    if trabajo.etapa not in ("render", "descarga") or not trabajo.render_id_externo:
+        return False
+    try:
+        estado = obtener_proveedor(trabajo.proveedor).consultar_render(trabajo.render_id_externo)
+    except Exception:
+        logger.warning("No se pudo consultar el render vencido del trabajo %s", trabajo.id, exc_info=True)
+        return False
+    if estado.estado != RENDER_COMPLETADO:
+        return False
+    if estado.duracion_segundos is not None:
+        trabajo.duracion_segundos = estado.duracion_segundos
+    trabajo.estado = "descarga_pendiente"
+    trabajo.etapa = "descarga"
+    trabajo.mensaje_error = "El render terminó, pero el video no se copió dentro del tiempo límite. Reintentá la descarga."
+    _limpiar_recursos(trabajo)
+    return True
+
+
 def _vencer_trabajos(db_session: Session, usuario_id: int | None = None, trabajo_id: int | None = None) -> None:
-    """Pasa a fallido los trabajos activos que superaron el tiempo límite."""
+    """
+    Pasa a fallido los trabajos activos que superaron el tiempo límite, salvo
+    los que ya tienen el render terminado (ver _recuperar_render_terminado).
+    """
     limite = datetime.utcnow() - timedelta(minutes=config.VIDEO_IA_TIEMPO_LIMITE_MINUTOS)
     consulta = db_session.query(Trabajo).filter(Trabajo.estado.in_(ACTIVOS), Trabajo.creado_en < limite)
     if usuario_id is not None:
@@ -214,6 +265,8 @@ def _vencer_trabajos(db_session: Session, usuario_id: int | None = None, trabajo
         consulta = consulta.filter(Trabajo.id == trabajo_id)
     vencidos = consulta.with_for_update(skip_locked=True).all()
     for trabajo in vencidos:
+        if _recuperar_render_terminado(trabajo):
+            continue
         _fallar(trabajo, f"Se superó el tiempo límite de {config.VIDEO_IA_TIEMPO_LIMITE_MINUTOS} minutos.")
     if vencidos:
         db_session.commit()
@@ -243,13 +296,24 @@ def _verificar_storage() -> None:
         raise RuntimeError("Supabase Storage no está configurado (SUPABASE_URL/SUPABASE_SERVICE_KEY faltantes).")
 
 
+_ALFABETO_NOMBRE = string.ascii_lowercase + string.digits
+
+
+def _nombre_video(trabajo_id: int) -> str:
+    """
+    Nombre del mp4 en Storage con un sufijo aleatorio de 16 caracteres, para
+    que la URL pública del bucket no se pueda adivinar a partir del id.
+    """
+    sufijo = "".join(secrets.choice(_ALFABETO_NOMBRE) for _ in range(16))
+    return f"trabajo-{trabajo_id}-{sufijo}.mp4"
+
+
 def _copiar_video_a_storage(url_origen: str, nombre_archivo: str) -> str:
     """
-    Descarga el mp4 en streaming a un archivo temporal y lo sube a Storage.
-    Corta si se supera VIDEO_IA_TIEMPO_MAX_DESCARGA_SEGUNDOS. El nombre es fijo
-    por trabajo y se sube con x-upsert, así que repetirlo no duplica archivos.
-    PENDIENTE DE VALIDAR en la fase con HeyGen: tamaño real de un video de
-    5 minutos y si cabe en el tiempo máximo de la función de Vercel.
+    Descarga el mp4 en streaming a un archivo temporal y lo sube a Storage con
+    la subida estándar (validada con 160 MB; el límite del proyecto es 500 MB).
+    Corta si se supera VIDEO_IA_TIEMPO_MAX_DESCARGA_SEGUNDOS. Cada intento usa
+    un nombre aleatorio nuevo, así que un reintento nunca pisa otro archivo.
     """
     _verificar_storage()
     maximo = config.VIDEO_IA_TIEMPO_MAX_DESCARGA_SEGUNDOS
@@ -267,7 +331,7 @@ def _copiar_video_a_storage(url_origen: str, nombre_archivo: str) -> str:
         bucket = config.SUPABASE_BUCKET_VIDEOS_IA
         subida = requests.post(
             f"{SUPABASE_URL}/storage/v1/object/{bucket}/{nombre_archivo}",
-            headers={**_cabeceras_storage("video/mp4"), "x-upsert": "true", "Content-Length": str(tamano)},
+            headers={**_cabeceras_storage("video/mp4"), "Content-Length": str(tamano)},
             data=temporal,
             timeout=(10, restante),
         )
@@ -367,6 +431,8 @@ def _paso_render(trabajo: Trabajo) -> None:
             raise ValueError(f"El video renderizado dura {estado.duracion_segundos:.0f} s y supera el máximo.")
         trabajo.duracion_segundos = estado.duracion_segundos
         trabajo.etapa = "descarga"
+        # El zip ya no hace falta una vez renderizado: se borra del proveedor.
+        _limpiar_recursos(trabajo)
 
 
 def _paso_descarga(trabajo: Trabajo) -> None:
@@ -378,7 +444,7 @@ def _paso_descarga(trabajo: Trabajo) -> None:
         estado = obtener_proveedor(trabajo.proveedor).consultar_render(trabajo.render_id_externo)
         if estado.estado != RENDER_COMPLETADO or not estado.enlace_descarga:
             raise RuntimeError("El proveedor no devolvió un enlace de descarga para el render.")
-        enlace = _copiar_video_a_storage(estado.enlace_descarga, f"trabajo-{trabajo.id}.mp4")
+        enlace = _copiar_video_a_storage(estado.enlace_descarga, _nombre_video(trabajo.id))
     except Exception as exc:
         logger.warning("Copia del mp4 del trabajo %s fallida; queda recuperable", trabajo.id, exc_info=True)
         trabajo.estado = "descarga_pendiente"
@@ -636,13 +702,13 @@ def publicar_trabajo(
 @router.delete("/{trabajo_id}", response_model=schemas.MessageResponse, summary="Eliminar un trabajo")
 def eliminar_trabajo(trabajo_id: int, db_session: Session = Depends(db.get_db), current_user: models.User = Depends(requiere_rol)):
     """
-    Elimina el trabajo. Si estaba activo, antes pide al proveedor borrar el
-    render. Si nunca se publicó, también borra su mp4 de Storage; si se
-    publicó, el video del manual no se toca.
+    Elimina el trabajo. Antes pide al proveedor borrar el render (en cualquier
+    estado: el mp4 ya está copiado en Storage o el trabajo se descarta) y los
+    recursos subidos. Si nunca se publicó, también borra su mp4 de Storage;
+    si se publicó, el video del manual no se toca.
     """
     trabajo = _obtener_trabajo(db_session, trabajo_id, bloquear=True)
-    if trabajo.estado in ACTIVOS:
-        _cancelar_en_proveedor(trabajo)
+    _cancelar_en_proveedor(trabajo)
     _limpiar_recursos(trabajo)
     if not trabajo.video_id and trabajo.enlace:
         _eliminar_de_storage(config.SUPABASE_BUCKET_VIDEOS_IA, trabajo.enlace)

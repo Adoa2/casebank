@@ -2,7 +2,7 @@
 Interfaz neutral de proveedor de video con IA.
 
 El router de videos con IA solo conoce esta interfaz; cada proveedor (por
-ahora solo HeyGen, como esqueleto) la implementa en su propio módulo. Así el
+ahora solo HeyGen, en heygen_client.py) la implementa en su propio módulo. Así el
 flujo de trabajos, los límites y la publicación no dependen del proveedor.
 
 Contrato:
