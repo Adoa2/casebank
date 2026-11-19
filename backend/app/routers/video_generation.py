@@ -91,8 +91,12 @@ TOLERANCIA_DURACION_REAL_SEGUNDOS = 30
 # --- Schemas (locales a este router) ---
 
 class PasoEntrada(BaseModel):
-    """Un paso de la solución con su captura opcional."""
-    texto: str
+    """
+    Un paso de la solución. El texto y la captura son obligatorios, pero se
+    validan en crear_trabajo (no aquí) para responder con un mensaje claro
+    que indique qué paso está incompleto, en lugar de un error 422 genérico.
+    """
+    texto: str = ""
     imagen_url: str | None = None
 
 
@@ -172,6 +176,45 @@ def estimar_costo(caracteres: int, duracion_segundos: float) -> float:
     voz = caracteres * config.VIDEO_IA_PRECIO_VOZ_USD_POR_MILLON_CARACTERES / 1_000_000
     render = duracion_segundos * config.VIDEO_IA_PRECIO_RENDER_USD_POR_SEGUNDO
     return round(voz + render, 4)
+
+
+# --- Validación de pasos ---
+# Cada paso es una escena del video con su narración y su captura, así que ambos
+# son obligatorios al crear un trabajo. Solo se exige aquí, al crear: los trabajos
+# ya guardados con pasos sin imagen siguen pudiendo avanzar y renderizarse.
+
+def _prefijo_capturas() -> str | None:
+    """URL pública del bucket de capturas, o None si Supabase no está configurado."""
+    if not SUPABASE_URL:
+        return None
+    return f"{SUPABASE_URL}/storage/v1/object/public/{config.SUPABASE_BUCKET_VIDEOS_IA_IMAGENES}/"
+
+
+def validar_pasos(pasos: list[PasoEntrada]) -> list[PasoEntrada]:
+    """
+    Exige al menos un paso y que cada uno tenga texto y captura subida al bucket
+    de capturas. Lanza 400 indicando el primer paso incompleto y qué le falta.
+    """
+    if not pasos:
+        raise HTTPException(status_code=400, detail="Agrega al menos un paso de la solución.")
+
+    prefijo = _prefijo_capturas()
+    for numero, paso in enumerate(pasos, start=1):
+        falta_texto = not (paso.texto or "").strip()
+        imagen = (paso.imagen_url or "").strip()
+        falta_captura = not imagen
+        if falta_texto and falta_captura:
+            raise HTTPException(status_code=400, detail=f"El paso {numero} necesita su descripción y su captura.")
+        if falta_texto:
+            raise HTTPException(status_code=400, detail=f"El paso {numero} necesita su descripción.")
+        if falta_captura:
+            raise HTTPException(status_code=400, detail=f"El paso {numero} necesita su captura.")
+        if prefijo and not imagen.startswith(prefijo):
+            raise HTTPException(
+                status_code=400,
+                detail=f"La captura del paso {numero} no es válida. Súbela de nuevo desde el formulario.",
+            )
+    return pasos
 
 
 # --- Utilidades de trabajos ---
@@ -531,9 +574,7 @@ def crear_trabajo(
     """
     if not datos.titulo.strip() or not datos.descripcion_inconveniente.strip():
         raise HTTPException(status_code=400, detail="El título y la descripción son obligatorios.")
-    pasos = [p for p in datos.pasos if p.texto.strip()]
-    if not pasos:
-        raise HTTPException(status_code=400, detail="Agregá al menos un paso de la solución con texto.")
+    pasos = validar_pasos(datos.pasos)
 
     puntos = (datos.puntos_a_considerar or "").strip() or None
     n_escenas = video_script_generator.escenas_esperadas(len(pasos), bool(puntos))
@@ -562,7 +603,7 @@ def crear_trabajo(
     trabajo = Trabajo(
         titulo=datos.titulo.strip(),
         descripcion_inconveniente=datos.descripcion_inconveniente.strip(),
-        pasos=[{"texto": p.texto.strip(), "imagen_url": p.imagen_url} for p in pasos],
+        pasos=[{"texto": p.texto.strip(), "imagen_url": p.imagen_url.strip()} for p in pasos],
         puntos_a_considerar=puntos,
         estado="pendiente",
         proveedor=config.VIDEO_IA_PROVEEDOR,

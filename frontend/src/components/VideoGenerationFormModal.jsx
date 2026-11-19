@@ -79,6 +79,38 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
   const limitePasosAlcanzado = Boolean(maxEscenas) && escenasPosibles >= maxEscenas
   // --- fin límites ---
 
+  // --- Campos obligatorios ---
+  // Cada paso es una escena del video: necesita su descripción y su captura.
+  // "Generar video" solo se habilita con todo completo; el backend lo valida igual.
+  const estadoPasos = pasos.map((p) => ({ faltaTexto: !p.texto.trim(), faltaCaptura: !p.imagenUrl }))
+  const primerPasoIncompleto = estadoPasos.findIndex((e) => e.faltaTexto || e.faltaCaptura)
+  let faltante = null
+  if (!titulo.trim()) {
+    faltante = 'Falta el título.'
+  } else if (!descripcion.trim()) {
+    faltante = 'Falta la descripción del inconveniente.'
+  } else if (primerPasoIncompleto !== -1) {
+    const { faltaTexto, faltaCaptura } = estadoPasos[primerPasoIncompleto]
+    const que = faltaTexto && faltaCaptura ? 'su descripción y su captura' : faltaTexto ? 'su descripción' : 'su captura'
+    faltante = `El paso ${primerPasoIncompleto + 1} necesita ${que}.`
+  }
+
+  /** Marca un paso si está a medio llenar, o si es el primero incompleto y el aviso lo nombra. */
+  function pasoMarcado(index) {
+    const { faltaTexto, faltaCaptura } = estadoPasos[index]
+    if (!faltaTexto && !faltaCaptura) return false
+    if (faltaTexto !== faltaCaptura) return true
+    return Boolean(faltante?.startsWith('El paso')) && index === primerPasoIncompleto
+  }
+
+  /** Texto corto de lo que le falta a un paso. */
+  function textoFaltaPaso(index) {
+    const { faltaTexto, faltaCaptura } = estadoPasos[index]
+    if (faltaTexto && faltaCaptura) return 'Falta su descripción y su captura'
+    return faltaTexto ? 'Falta su descripción' : 'Falta su captura'
+  }
+  // --- fin campos obligatorios ---
+
   function actualizarTextoPaso(index, valor) {
     setPasos((prev) => prev.map((p, i) => (i === index ? { ...p, texto: valor } : p)))
   }
@@ -149,9 +181,8 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
     e.preventDefault()
     setErrorGeneral(null)
 
-    const pasosConTexto = pasos.filter((p) => p.texto.trim())
-    if (!titulo.trim() || !descripcion.trim() || pasosConTexto.length === 0) {
-      setErrorGeneral('Completa el título, la descripción y al menos un paso con texto.')
+    if (faltante) {
+      setErrorGeneral(faltante)
       return
     }
     if (excedeEscenas) return setErrorGeneral(`El video tendría ${escenas} escenas; el máximo es ${maxEscenas}.`)
@@ -162,7 +193,7 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
       const trabajo = await crearTrabajoVideoIA({
         titulo: titulo.trim(),
         descripcionInconveniente: descripcion.trim(),
-        pasos: pasosConTexto.map((p) => ({ texto: p.texto.trim(), imagen_url: p.imagenUrl })),
+        pasos: pasos.map((p) => ({ texto: p.texto.trim(), imagen_url: p.imagenUrl })),
         puntosAConsiderar: puntos.trim() || null,
       })
       onCreado?.(trabajo)
@@ -186,19 +217,25 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
 
         <form onSubmit={handleGenerar} className="space-y-5">
           <div>
-            <label className="block text-sm font-medium mb-1">Título</label>
+            <label className="block text-sm font-medium mb-1">
+              Título <span className="text-red-500">*</span>
+            </label>
             <input type="text" value={titulo} onChange={(e) => setTitulo(e.target.value)} className="w-full border rounded px-3 py-2" required />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Descripción del inconveniente</label>
+            <label className="block text-sm font-medium mb-1">
+              Descripción del inconveniente <span className="text-red-500">*</span>
+            </label>
             <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className="w-full border rounded px-3 py-2" rows={3} required />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Pasos de la solución</label>
+            <label className="block text-sm font-medium mb-1">
+              Pasos de la solución <span className="text-red-500">*</span>
+            </label>
             <p className="text-xs text-gray-500 mb-2">
-              Cada paso se convierte en una escena del video, con su propia captura (opcional).
+              Cada paso se convierte en una escena del video y necesita su descripción y su captura.
             </p>
 
             <div className="space-y-3">
@@ -207,11 +244,20 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
                   key={index}
                   {...propsDestino(index)}
                   className={`rounded-lg border p-3 transition ${
-                    destinoResaltado === index ? 'border-blue-300 bg-blue-50/40' : 'border-gray-200'
+                    destinoResaltado === index
+                      ? 'border-blue-300 bg-blue-50/40'
+                      : pasoMarcado(index)
+                        ? 'border-amber-300'
+                        : 'border-gray-200'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <p className="text-xs font-semibold text-gray-500">Paso {index + 1}</p>
+                    <p className="text-xs font-semibold text-gray-500">
+                      Paso {index + 1}
+                      {pasoMarcado(index) && (
+                        <span className="ml-2 font-medium text-amber-700">{textoFaltaPaso(index)}</span>
+                      )}
+                    </p>
                     {pasos.length > 1 && (
                       <button type="button" onClick={() => quitarPaso(index)} className="text-xs font-semibold text-red-600 hover:underline">
                         Quitar
@@ -219,11 +265,16 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
                     )}
                   </div>
 
+                  <label htmlFor={`paso-${index}-texto`} className="mb-1 block text-xs font-medium text-gray-700">
+                    Descripción <span className="text-red-500">*</span>
+                  </label>
                   <textarea
+                    id={`paso-${index}-texto`}
                     ref={(el) => {
                       pasoTextareaRefs.current[index] = el
                     }}
-                    aria-label={`Texto del paso ${index + 1}`}
+                    aria-label={`Descripción del paso ${index + 1}`}
+                    aria-required="true"
                     value={paso.texto}
                     onChange={(e) => actualizarTextoPaso(index, e.target.value)}
                     placeholder="Describe este paso..."
@@ -231,14 +282,18 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
                     rows={2}
                   />
 
+                  <p id={`paso-${index}-captura`} className="mb-1 mt-2 block text-xs font-medium text-gray-700">
+                    Captura <span className="text-red-500">*</span>
+                  </p>
                   <div
                     tabIndex={0}
                     role="button"
+                    aria-labelledby={`paso-${index}-captura`}
                     onClick={() => abrirSelectorArchivo(index)}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') abrirSelectorArchivo(index)
                     }}
-                    className="mt-2 flex min-h-[64px] cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-center outline-none transition hover:border-blue-400 focus:border-blue-500"
+                    className="flex min-h-[64px] cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-center outline-none transition hover:border-blue-400 focus:border-blue-500"
                   >
                     {subiendo.has(index) ? (
                       <span className="text-xs text-gray-500">Subiendo imagen...</span>
@@ -258,7 +313,7 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
                       </div>
                     ) : (
                       <span className="text-xs text-gray-500">
-                        Captura para este paso (opcional): haz clic para elegir un archivo, o presiona Ctrl+V para pegar aquí
+                        Haz clic para elegir un archivo, o presiona Ctrl+V para pegar aquí
                       </span>
                     )}
                   </div>
@@ -308,6 +363,11 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
           <input ref={fileInputRef} type="file" accept="image/jpeg,image/jpg,image/png" onChange={handleFileInputChange} className="hidden" />
 
           {errorGeneral && <p className="text-sm text-red-700">{errorGeneral}</p>}
+          {!errorGeneral && faltante && (
+            <p id="aviso-faltante" className="text-right text-xs text-amber-700">
+              Para generar el video: {faltante}
+            </p>
+          )}
 
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} disabled={enviando} className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">
@@ -315,7 +375,8 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
             </button>
             <button
               type="submit"
-              disabled={enviando || subiendo.size > 0 || excedeEscenas || excedeCaracteres}
+              disabled={enviando || subiendo.size > 0 || excedeEscenas || excedeCaracteres || Boolean(faltante)}
+              aria-describedby={faltante ? 'aviso-faltante' : undefined}
               className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {enviando ? 'Creando...' : 'Generar video'}
