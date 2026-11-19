@@ -1,24 +1,60 @@
 // Modal lightbox de videos formativos de una sección del manual con reproductor embebido.
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { clasificarEnlaceVideo, obtenerEnlaceVideo } from '../utils/videoEnlace'
 
-function esYoutube(url) {
-  return /youtu\.?be/i.test(url)
-}
+// --- Reproductor del video activo ---
+// Lee la direccion con obtenerEnlaceVideo (campo "enlace" de la API) y
+// elige la etiqueta segun clasificarEnlaceVideo:
+//   - YouTube  -> <iframe> embed, ocupa todo el espacio, con pantalla completa.
+//   - Archivo  -> <video controls> (mp4/webm, Supabase Storage, Dropbox).
+//   - Externo  -> mensaje + boton para abrir el enlace en otra pestana.
+//   - Invalido -> mensaje corto en lugar de un reproductor vacio.
+// Antes leia "activo.url", que la API ya no envia tras la normalizacion:
+// el <video> quedaba sin src y se veia negro en 0:00. Ademas la rama de
+// YouTube llamaba a obtenerEmbedYoutube, que no existia.
+function ReproductorVideo({ video }) {
+  const enlace = obtenerEnlaceVideo(video)
+  const { tipo, src } = clasificarEnlaceVideo(enlace)
 
-function obtenerUrlReproducible(url) {
-  try {
-    const u = new URL(url)
-    if (u.hostname.includes('dropbox.com')) {
-      u.hostname = 'dl.dropboxusercontent.com'
-      u.searchParams.delete('dl')
-      return u.toString()
-    }
-    return url
-  } catch {
-    return url
+  if (tipo === 'youtube') {
+    return (
+      <iframe
+        src={src}
+        title={video.titulo}
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        referrerPolicy="strict-origin-when-cross-origin"
+        allowFullScreen
+        className="h-full w-full border-0"
+      />
+    )
   }
+
+  if (tipo === 'archivo') {
+    return <video src={src} controls autoPlay playsInline className="h-full w-full bg-black object-contain" />
+  }
+
+  return (
+    <div className="max-w-md px-6 text-center text-slate-200">
+      <p className="text-sm">
+        {tipo === 'externo'
+          ? 'Este video no se puede reproducir aquí.'
+          : 'El enlace de este video no es válido. Avisa a un administrador para que lo corrija.'}
+      </p>
+      {tipo === 'externo' && (
+        <a
+          href={src}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-4 inline-block rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-100"
+        >
+          Abrir en una pestaña nueva
+        </a>
+      )}
+    </div>
+  )
 }
+// --- fin reproductor del video activo ---
 
 /** Modal de galería de videos formativos de una sección con reproductor inline. */
 export default function VideoGalleryModal({ videos, onClose }) {
@@ -56,17 +92,7 @@ export default function VideoGalleryModal({ videos, onClose }) {
       </div>
 
       <div className="flex flex-1 items-center justify-center overflow-hidden bg-black">
-        {esYoutube(activo.url) ? (
-          <iframe
-            src={obtenerEmbedYoutube(activo.url)}
-            title={activo.titulo}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            className="h-full w-full"
-          />
-        ) : (
-          <video src={obtenerUrlReproducible(activo.url)} controls autoPlay className="h-full w-full bg-black object-contain" />
-        )}
+        <ReproductorVideo video={activo} />
       </div>
     </div>
   ) : (

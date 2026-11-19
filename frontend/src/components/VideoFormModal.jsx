@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchManualStructure } from '../api/manual'
 import { buildJerarquiaAnidada } from '../utils/manualTree'
+import { obtenerEnlaceVideo } from '../utils/videoEnlace'
 // TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
 // import { listarDisponiblesParaManual, vincularJobAVideo } from '../api/videoGeneration'
 
@@ -22,7 +23,12 @@ function Field({ label, hint, children }) {
 export default function VideoFormModal({ mode = 'create', initialData, onClose, onSubmit }) {
   const isEdit = mode === 'edit'
   const [titulo, setTitulo] = useState(initialData?.titulo || '')
-  const [url, setUrl] = useState(initialData?.enlace || '')
+  // --- Enlace del video ---
+  // El estado local se llama "url" solo por ser el valor del input; al
+  // editar se precarga desde "enlace" y se envia unicamente como "enlace"
+  // (schemas.VideoCreate / VideoUpdate). No se envia "url".
+  // --- fin enlace del video ---
+  const [url, setUrl] = useState(obtenerEnlaceVideo(initialData))
   const [arbol, setArbol] = useState([])
   const [loadingArbol, setLoadingArbol] = useState(true)
   const [errorArbol, setErrorArbol] = useState(null)
