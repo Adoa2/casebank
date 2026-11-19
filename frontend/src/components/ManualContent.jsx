@@ -254,8 +254,122 @@ function ImagenManual({ nombre, titulo, onZoom, integrada = false }) {
   )
 }
 
+// --- Secciones sin texto propio ---------------------------------------------
+// Algunas secciones del PDF solo tienen su título: son encabezados que agrupan
+// subsecciones (ej. 3.2 Menú de Caja) o títulos que el manual deja sin desarrollar
+// (ej. 3.1.5 Confirmación de Cheques). En lugar de un aviso vacío se ofrece
+// navegación a sus subsecciones o a la sección siguiente.
+
+/** Texto de páginas para tarjetas: "Página 58" o "Páginas 58 – 61". */
+function etiquetaPaginas(seccion) {
+  if (seccion.paginaInicio == null) return null
+  if (seccion.paginaFin && seccion.paginaFin !== seccion.paginaInicio) {
+    return `Páginas ${seccion.paginaInicio} – ${seccion.paginaFin}`
+  }
+  return `Página ${seccion.paginaInicio}`
+}
+
+/**
+ * Busca en la lista plana del manual las subsecciones directas de una sección
+ * (las del nivel inmediato inferior dentro de su rango) y la sección siguiente.
+ */
+function buscarNavegacion(seccionesPlanas, subchapter) {
+  const indice = seccionesPlanas.findIndex((item) => item.subchapter.id === subchapter.id)
+  if (indice === -1) return { hijas: [], siguiente: null }
+
+  const descendientes = []
+  for (let i = indice + 1; i < seccionesPlanas.length; i += 1) {
+    const item = seccionesPlanas[i]
+    if (item.chapter.id !== seccionesPlanas[indice].chapter.id) break
+    if (item.subchapter.nivel <= subchapter.nivel) break
+    descendientes.push(item)
+  }
+  const nivelDirecto = Math.min(...descendientes.map((item) => item.subchapter.nivel))
+  const hijas = descendientes.filter((item) => item.subchapter.nivel === nivelDirecto)
+
+  return { hijas, siguiente: seccionesPlanas[indice + 1] || null }
+}
+
+/** Contenido alternativo para secciones sin texto: lista de subsecciones o botón a la siguiente. */
+function SeccionSinTexto({ subchapter, seccionesPlanas, onNavegar, onPreguntarCasey }) {
+  const { hijas, siguiente } = buscarNavegacion(seccionesPlanas, subchapter)
+
+  if (hijas.length > 0) {
+    return (
+      <section
+        aria-labelledby="temas-agrupados"
+        className="rounded-xl border border-line bg-white px-5 py-6 shadow-sm sm:px-7"
+      >
+        <h2 id="temas-agrupados" className="mb-4 text-[15px] leading-7 text-slate">
+          Esta sección agrupa los siguientes temas:
+        </h2>
+        <ul className="grid gap-3 sm:grid-cols-2">
+          {hijas.map(({ subchapter: hija, chapter }) => (
+            <li key={hija.id}>
+              <button
+                type="button"
+                onClick={() => onNavegar(hija, chapter)}
+                className="group flex h-full w-full items-start justify-between gap-3 rounded-lg border border-line bg-white px-4 py-3 text-left transition hover:border-brand-blue/40 hover:bg-blue-50 focus:outline-none focus:ring-[3px] focus:ring-brand-blue/15"
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-ink group-hover:text-brand-blue">{hija.title}</span>
+                  {etiquetaPaginas(hija) && (
+                    <span className="mt-1 block text-xs text-slate">{etiquetaPaginas(hija)}</span>
+                  )}
+                </span>
+                <svg className="mt-0.5 h-4 w-4 shrink-0 text-slate group-hover:text-brand-blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                  <path d="m9 6 6 6-6 6" />
+                </svg>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
+
+  return (
+    <section className="rounded-xl border border-line bg-white px-5 py-6 shadow-sm sm:px-7">
+      <p className="mb-4 text-[15px] leading-7 text-slate">
+        El manual no desarrolla este tema por separado. Puedes continuar con la sección siguiente
+        {onPreguntarCasey ? ' o preguntarle a Casey.' : '.'}
+      </p>
+      <div className="flex flex-wrap gap-3">
+        {siguiente && (
+          <button
+            type="button"
+            onClick={() => onNavegar(siguiente.subchapter, siguiente.chapter)}
+            className="flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-[3px] focus:ring-brand-blue/25"
+          >
+            Siguiente: {siguiente.subchapter.title}
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <path d="m9 6 6 6-6 6" />
+            </svg>
+          </button>
+        )}
+        {onPreguntarCasey && (
+          <button
+            type="button"
+            onClick={() => onPreguntarCasey(`¿Cómo uso la opción ${subchapter.title.replace(/^[\d.]+\s*/, '')}?`)}
+            className="flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-sm font-medium text-brand-blue transition hover:border-brand-blue/30 hover:bg-blue-100 focus:outline-none focus:ring-[3px] focus:ring-brand-blue/15"
+          >
+            Preguntarle a Casey sobre este tema
+          </button>
+        )}
+      </div>
+    </section>
+  )
+}
+
 /** Renderiza el contenido de una sección del manual: texto, imágenes autenticadas y galería de videos. */
-export default function ManualContent({ chapter, subchapter, onGoHome }) {
+export default function ManualContent({
+  chapter,
+  subchapter,
+  onGoHome,
+  seccionesPlanas = [],
+  onNavegar,
+  onPreguntarCasey,
+}) {
   const [imagenActiva, setImagenActiva] = useState(null)
   const [videos, setVideos] = useState([])
   const [galeriaAbierta, setGaleriaAbierta] = useState(false)
@@ -493,9 +607,12 @@ export default function ManualContent({ chapter, subchapter, onGoHome }) {
             </div>
           </article>
         ) : (
-          <div className="rounded-xl border border-line bg-white p-5 text-sm leading-relaxed text-slate">
-            Esta sección no tiene contenido de texto adicional.
-          </div>
+          <SeccionSinTexto
+            subchapter={subchapter}
+            seccionesPlanas={seccionesPlanas}
+            onNavegar={onNavegar}
+            onPreguntarCasey={onPreguntarCasey}
+          />
         )}
 
         {imagenesSinInline.length > 0 && (

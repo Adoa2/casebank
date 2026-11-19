@@ -20,6 +20,8 @@ export default function DashboardView({ onLogout, isAdmin, onGoAdmin }) {
   const [manualCollapsed, setManualCollapsed] = useState(false)
   const [chatCollapsed, setChatCollapsed] = useState(false)
   const [mobilePanel, setMobilePanel] = useState(null)
+  // Pregunta que el visor deja escrita en el chat de Casey; { id, texto } o null
+  const [preguntaCasey, setPreguntaCasey] = useState(null)
 
   // Cargar la estructura del manual una sola vez al montar; usar flag para evitar setState en desmontado
   useEffect(() => {
@@ -79,6 +81,17 @@ export default function DashboardView({ onLogout, isAdmin, onGoAdmin }) {
     }
   }
 
+  // Abre el chat de Casey (panel lateral en escritorio, panel flotante en pantallas
+  // pequeñas) y deja la pregunta escrita para que el usuario la revise y la envíe.
+  function preguntarACasey(texto) {
+    setPreguntaCasey({ id: Date.now(), texto })
+    if (window.matchMedia('(min-width: 1280px)').matches) {
+      setChatCollapsed(false)
+    } else {
+      setMobilePanel('chat')
+    }
+  }
+
   return (
     <div className="flex h-screen h-dvh flex-col">
       <Header onLogout={onLogout} isAdmin={isAdmin} onGoAdmin={onGoAdmin} />
@@ -121,7 +134,14 @@ export default function DashboardView({ onLogout, isAdmin, onGoAdmin }) {
           )}
         </div>
 
-        <ManualContent chapter={selected.chapter} subchapter={selected.subchapter} onGoHome={goHome} />
+        <ManualContent
+          chapter={selected.chapter}
+          subchapter={selected.subchapter}
+          onGoHome={goHome}
+          seccionesPlanas={flatSections}
+          onNavegar={handleSelect}
+          onPreguntarCasey={preguntarACasey}
+        />
 
         <div
           className={`hidden min-h-0 flex-shrink-0 border-l border-line transition-[width] duration-300 xl:block ${
@@ -149,7 +169,12 @@ export default function DashboardView({ onLogout, isAdmin, onGoAdmin }) {
               </div>
             </div>
           ) : (
-            <ChatPanel onSelectSource={handleSelectSource} onCollapse={() => setChatCollapsed(true)} />
+            <ChatPanel
+              onSelectSource={handleSelectSource}
+              onCollapse={() => setChatCollapsed(true)}
+              preguntaPendiente={preguntaCasey}
+              onPreguntaUsada={() => setPreguntaCasey(null)}
+            />
           )}
         </div>
       </div>
@@ -199,7 +224,12 @@ export default function DashboardView({ onLogout, isAdmin, onGoAdmin }) {
                 onCollapse={() => setMobilePanel(null)}
               />
             ) : (
-              <ChatPanel onSelectSource={handleSelectSource} onCollapse={() => setMobilePanel(null)} />
+              <ChatPanel
+                onSelectSource={handleSelectSource}
+                onCollapse={() => setMobilePanel(null)}
+                preguntaPendiente={preguntaCasey}
+                onPreguntaUsada={() => setPreguntaCasey(null)}
+              />
             )}
           </div>
         </div>

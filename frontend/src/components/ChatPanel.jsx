@@ -78,7 +78,7 @@ function formatearRangoPaginas(fuente) {
 }
 
 /** Panel del asistente Casey: maneja historial, confirmación de errores y diagnóstico interactivo. */
-export default function ChatPanel({ onSelectSource, onCollapse }) {
+export default function ChatPanel({ onSelectSource, onCollapse, preguntaPendiente = null, onPreguntaUsada }) {
   const [messages, setMessages] = useState(INITIAL_MESSAGES)
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(false)
@@ -86,7 +86,17 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
   const [activeDiagnostico, setActiveDiagnostico] = useState(null)
   const [lightboxUrl, setLightboxUrl] = useState(null)
   const messagesEndRef = useRef(null)
+  const textareaRef = useRef(null)
   const selectedClarificationsRef = useRef(new Set())
+
+  // Pregunta sugerida desde el visor del manual: se deja escrita (sin enviarla)
+  // para que el usuario la revise, y se avisa al padre que ya se usó.
+  useEffect(() => {
+    if (!preguntaPendiente) return
+    setDraft(preguntaPendiente.texto)
+    textareaRef.current?.focus()
+    onPreguntaUsada?.()
+  }, [preguntaPendiente?.id])
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -417,6 +427,7 @@ export default function ChatPanel({ onSelectSource, onCollapse }) {
         )}
         <div className="relative rounded-xl border border-blue-200 bg-white shadow-sm transition focus-within:border-brand-blue focus-within:ring-[3px] focus-within:ring-brand-blue/15">
         <textarea
+          ref={textareaRef}
           rows="1"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
