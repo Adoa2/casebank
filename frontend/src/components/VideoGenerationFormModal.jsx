@@ -2,6 +2,7 @@
 // Crear es rápido: el trabajo queda "En cola" y la sección de videos lo va avanzando.
 import React, { useEffect, useRef, useState } from 'react'
 import { crearTrabajoVideoIA, subirImagenVideoIA } from '../api/videosIA'
+import BotonAgregarPunteado from './BotonAgregarPunteado'
 
 const TIPOS_PERMITIDOS = ['image/jpeg', 'image/jpg', 'image/png']
 const MAX_FILE_SIZE = 5 * 1024 * 1024
@@ -25,6 +26,19 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
 
   const fileInputRef = useRef(null)
   const indiceParaSubidaRef = useRef(null)
+  // Campos de texto de cada paso, para llevar la vista y el cursor al paso recién agregado
+  const pasoTextareaRefs = useRef([])
+  const [pasoAEnfocar, setPasoAEnfocar] = useState(null)
+
+  useEffect(() => {
+    if (pasoAEnfocar === null) return
+    const campo = pasoTextareaRefs.current[pasoAEnfocar]
+    if (campo) {
+      campo.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      campo.focus({ preventScroll: true })
+    }
+    setPasoAEnfocar(null)
+  }, [pasoAEnfocar])
 
   useEffect(() => {
     if (!isOpen) return
@@ -48,6 +62,10 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
   const caracteres = descripcion.trim().length + pasos.reduce((total, p) => total + p.texto.trim().length, 0) + puntos.trim().length
   const excedeEscenas = maxEscenas && escenas > maxEscenas
   const excedeCaracteres = maxCaracteres && caracteres > maxCaracteres
+  // Escenas que ocuparía el formulario si se llenan todos los pasos (incluidos los vacíos);
+  // al llegar al máximo ya no se pueden agregar más pasos.
+  const escenasPosibles = 1 + pasos.length + (puntos.trim() ? 1 : 0)
+  const limitePasosAlcanzado = Boolean(maxEscenas) && escenasPosibles >= maxEscenas
   // --- fin límites ---
 
   function actualizarTextoPaso(index, valor) {
@@ -55,7 +73,9 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
   }
 
   function agregarPaso() {
+    if (limitePasosAlcanzado) return
     setPasos((prev) => [...prev, pasoVacio()])
+    setPasoAEnfocar(pasos.length)
   }
 
   function quitarPaso(index) {
@@ -114,7 +134,7 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
 
     const pasosConTexto = pasos.filter((p) => p.texto.trim())
     if (!titulo.trim() || !descripcion.trim() || pasosConTexto.length === 0) {
-      setErrorGeneral('Completá el título, la descripción y al menos un paso con texto.')
+      setErrorGeneral('Completa el título, la descripción y al menos un paso con texto.')
       return
     }
     if (excedeEscenas) return setErrorGeneral(`El video tendría ${escenas} escenas; el máximo es ${maxEscenas}.`)
@@ -159,12 +179,7 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-medium">Pasos de la solución</label>
-              <button type="button" onClick={agregarPaso} className="text-xs font-semibold text-blue-600 hover:underline">
-                + Agregar paso
-              </button>
-            </div>
+            <label className="block text-sm font-medium mb-1">Pasos de la solución</label>
             <p className="text-xs text-gray-500 mb-2">
               Cada paso se convierte en una escena del video, con su propia captura (opcional).
             </p>
@@ -182,9 +197,13 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
                   </div>
 
                   <textarea
+                    ref={(el) => {
+                      pasoTextareaRefs.current[index] = el
+                    }}
+                    aria-label={`Texto del paso ${index + 1}`}
                     value={paso.texto}
                     onChange={(e) => actualizarTextoPaso(index, e.target.value)}
-                    placeholder="Describí este paso..."
+                    placeholder="Describe este paso..."
                     className="w-full border rounded px-3 py-2 text-sm"
                     rows={2}
                   />
@@ -217,12 +236,28 @@ export default function VideoGenerationFormModal({ isOpen, onClose, onCreado, tr
                       </div>
                     ) : (
                       <span className="text-xs text-gray-500">
-                        Captura para este paso (opcional): hacé clic para elegir un archivo, o hacé clic acá y pegá con Ctrl+V
+                        Captura para este paso (opcional): haz clic para elegir un archivo, o haz clic aquí y pega con Ctrl+V
                       </span>
                     )}
                   </div>
                 </div>
               ))}
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <BotonAgregarPunteado
+                onClick={agregarPaso}
+                disabled={limitePasosAlcanzado}
+                aria-describedby={limitePasosAlcanzado ? 'aviso-limite-pasos' : undefined}
+              >
+                + Agregar paso
+              </BotonAgregarPunteado>
+              {limitePasosAlcanzado && (
+                <p id="aviso-limite-pasos" className="text-xs text-gray-500">
+                  Llegaste al máximo de {maxEscenas} escenas por video (la introducción y los puntos a considerar
+                  también cuentan).
+                </p>
+              )}
             </div>
           </div>
 

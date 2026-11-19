@@ -1,6 +1,7 @@
 // Modal de creación y edición de errores frecuentes, con soporte para diagnóstico interactivo y subida de imagen.
 import { useEffect, useRef, useState } from 'react'
 import { uploadImagenError } from '../api/errors'
+import BotonAgregarPunteado from './BotonAgregarPunteado'
 
 const STEPS = [
   { id: 'informacion', label: 'Información' },
@@ -367,13 +368,9 @@ export default function ErrorFormModal({ mode = 'create', initialData, onClose, 
                         ))}
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={agregarDiagnosticoOpcion}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-blue-300 px-3 py-2 text-xs font-semibold text-blue-600 transition hover:bg-blue-50"
-                      >
+                      <BotonAgregarPunteado onClick={agregarDiagnosticoOpcion}>
                         + Agregar otra opción
-                      </button>
+                      </BotonAgregarPunteado>
                     </div>
                   )}
                 </div>
