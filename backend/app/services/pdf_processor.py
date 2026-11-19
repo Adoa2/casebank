@@ -1,6 +1,7 @@
 # Extrae texto estructurado e imágenes del PDF del manual usando PyMuPDF.
 # Genera manual_structure.json con secciones mapeadas al índice digital (TOC) del PDF.
 import fitz  # PyMuPDF
+import bisect
 import hashlib
 import os
 import re
@@ -51,6 +52,14 @@ _LISTA_INICIO_RE = re.compile(
     r')'
 )
 _BULLET_NORM_RE = re.compile(r'^[•·–▪]\s')
+
+
+def _archivo_tiene_bytes(ruta, contenido):
+    """Indica si el archivo ya existe con exactamente el mismo contenido."""
+    if not os.path.isfile(ruta) or os.path.getsize(ruta) != len(contenido):
+        return False
+    with open(ruta, "rb") as f:
+        return f.read() == contenido
 
 
 def normalizar_espacios(texto):
@@ -434,8 +443,10 @@ def extract_page_content(
             try:
                 filename = f"pagina_{page_num + 1}_icono_{idx_icono}.{ext}"
                 filepath = os.path.join(images_dir, filename)
-                with open(filepath, "wb") as f:
-                    f.write(img_bytes)
+                # No reescribir imágenes idénticas: evita cambios de fecha y resincronizaciones
+                if not _archivo_tiene_bytes(filepath, img_bytes):
+                    with open(filepath, "wb") as f:
+                        f.write(img_bytes)
                 piezas.append(f"[IMG:{filename}]")
                 idx_icono += 1
             except Exception as e:
@@ -444,6 +455,179 @@ def extract_page_content(
             ultimo_bloque_texto = None
 
     return "\n\n".join(piezas)
+
+
+# --- Corte de secciones por títulos -------------------------------------------
+# El índice digital solo dice en qué página empieza cada sección. Varias
+# secciones pueden empezar en la misma página o a mitad de ella, así que cortar
+# por páginas mezcla secciones vecinas. Aquí se une el texto de todo el manual
+# y se corta exactamente en la línea donde aparece cada título.
+
+def _normalizar_titulo(texto):
+    """Quita marcas de negrita, unifica espacios y minúsculas para comparar títulos."""
+    return normalizar_espacios((texto or "").replace("*", "")).casefold()
+
+
+def _unir_paginas(pages_content, primera_pagina, ultima_pagina):
+    """
+    Une el texto de las páginas indicadas en un solo texto.
+    Devuelve el texto y una lista ordenada de (posición de inicio, número de página)
+    para saber a qué página pertenece cada posición.
+    """
+    partes = []
+    inicios_pagina = []
+    posicion = 0
+    for p in range(primera_pagina, ultima_pagina + 1):
+        contenido_pagina = (pages_content.get(p) or "").strip()
+        if not contenido_pagina:
+            continue
+        inicios_pagina.append((posicion, p))
+        bloque = contenido_pagina + "\n\n"
+        partes.append(bloque)
+        posicion += len(bloque)
+    return "".join(partes), inicios_pagina
+
+
+def _pagina_de_posicion(posicion, inicios_pagina):
+    """Devuelve el número de página que contiene la posición dada del texto unido."""
+    claves = [inicio for inicio, _ in inicios_pagina]
+    indice = bisect.bisect_right(claves, posicion) - 1
+    return inicios_pagina[max(indice, 0)][1]
+
+
+def _localizar_titulos(entradas, lineas, inicios_pagina):
+    """
+    Busca cada título del índice como línea completa del texto, en orden,
+    empezando después del título anterior encontrado.
+
+    Un título solo se acepta si cae entre su página del índice y la página
+    donde empieza la siguiente entrada; así una mención del mismo texto más
+    adelante no se confunde con el título. Devuelve una posición por entrada
+    (None si no se encontró o no se aceptó) y la lista de incidencias.
+    """
+    posiciones = []
+    incidencias = []
+    siguiente_linea = 0
+
+    for k, (_, titulo, pagina_indice) in enumerate(entradas):
+        pagina_limite = entradas[k + 1][2] if k + 1 < len(entradas) else None
+        objetivo = _normalizar_titulo(titulo)
+
+        encontrada = None
+        for idx in range(siguiente_linea, len(lineas)):
+            if lineas[idx][1] == objetivo:
+                encontrada = idx
+                break
+
+        if encontrada is None:
+            incidencias.append(
+                f"'{titulo}' (página {pagina_indice}): no se encontró como línea completa."
+            )
+            posiciones.append(None)
+            continue
+
+        posicion = lineas[encontrada][0]
+        pagina_encontrada = _pagina_de_posicion(posicion, inicios_pagina)
+        fuera_de_rango = pagina_encontrada < pagina_indice or (
+            pagina_limite is not None and pagina_encontrada > max(pagina_limite, pagina_indice)
+        )
+        if fuera_de_rango:
+            incidencias.append(
+                f"'{titulo}' (página {pagina_indice}): solo aparece en la página "
+                f"{pagina_encontrada}, fuera de orden; no se cortó ahí."
+            )
+            posiciones.append(None)
+            continue
+
+        posiciones.append(posicion)
+        siguiente_linea = encontrada + 1
+
+    return posiciones, incidencias
+
+
+def _texto_por_paginas(pages_content, pagina_inicio, pagina_fin):
+    """Respaldo: texto completo de un rango de páginas (corte anterior por páginas)."""
+    texto = ""
+    for p in range(pagina_inicio, pagina_fin + 1):
+        contenido_pagina = (pages_content.get(p) or "").strip()
+        if contenido_pagina:
+            texto += contenido_pagina + "\n\n"
+    return texto.strip()
+
+
+def construir_secciones_por_titulos(toc, pages_content, total_pages, pages_full_render=None):
+    """
+    Arma la lista de secciones cortando el texto del manual en cada título del TOC.
+
+    Cada sección va desde la línea de su título hasta la línea del siguiente
+    título encontrado. pagina_inicio y pagina_fin son las páginas reales donde
+    empieza y termina ese texto. Si un título no se encuentra (o aparece fuera
+    de orden), su texto queda dentro de la sección anterior y esa sección usa
+    como respaldo el texto de su página del índice; el caso queda en incidencias.
+    """
+    pages_full_render = pages_full_render or {}
+    entradas = [
+        (nivel, titulo.strip(), pagina)
+        for nivel, titulo, pagina, *_ in toc
+        if pagina >= PRIMERA_PAGINA_CONTENIDO
+    ]
+    if not entradas:
+        return [], []
+
+    texto, inicios_pagina = _unir_paginas(pages_content, entradas[0][2], total_pages)
+    lineas = [
+        (m.start(), _normalizar_titulo(m.group(0)))
+        for m in re.finditer(r"[^\n]+", texto)
+    ]
+
+    posiciones, incidencias = _localizar_titulos(entradas, lineas, inicios_pagina)
+
+    encontradas = [p for p in posiciones if p is not None]
+    if encontradas and texto[:encontradas[0]].strip():
+        incidencias.append(
+            "Hay texto antes del primer título encontrado; no pertenece a ninguna sección."
+        )
+
+    manual_data = []
+    for k, (nivel, titulo, pagina_indice) in enumerate(entradas):
+        inicio = posiciones[k]
+
+        if inicio is None:
+            # Respaldo: sin título localizable, se usa solo su página del índice
+            pagina_inicio = pagina_fin = pagina_indice
+            texto_seccion = _texto_por_paginas(pages_content, pagina_inicio, pagina_fin)
+        else:
+            fin = next((p for p in posiciones[k + 1:] if p is not None), len(texto))
+            bruto = texto[inicio:fin]
+            texto_seccion = bruto.strip()
+            ultimo_caracter = inicio + len(bruto.rstrip()) - 1
+            pagina_inicio = _pagina_de_posicion(inicio, inicios_pagina)
+            pagina_fin = _pagina_de_posicion(max(ultimo_caracter, inicio), inicios_pagina)
+
+        iconos_seccion = []
+        for nombre in IMG_MARKER_PATTERN.findall(texto_seccion):
+            if nombre not in iconos_seccion:
+                iconos_seccion.append(nombre)
+
+        seccion_info = {
+            "id": len(manual_data) + 1,
+            "nivel": nivel,
+            "titulo": titulo,
+            "pagina_inicio": pagina_inicio,
+            "pagina_fin": pagina_fin,
+            "contenido": texto_seccion,
+            "imagenes": iconos_seccion,
+        }
+        if RENDER_FULL_PAGE:
+            seccion_info["capturas_pagina_completa"] = [
+                pages_full_render[p]
+                for p in range(pagina_inicio, pagina_fin + 1)
+                if pages_full_render.get(p)
+            ]
+
+        manual_data.append(seccion_info)
+
+    return manual_data, incidencias
 
 
 def process_pdf_high_performance(pdf_path: str, output_dir: str):
@@ -514,58 +698,15 @@ def process_pdf_high_performance(pdf_path: str, output_dir: str):
         if p_num % 200 == 0:
             print(f"-> Procesadas {p_num} de {total_pages} páginas...")
 
-    print("Paso 2: Mapeando secciones con el índice digital (TOC)...")
-    manual_data = []
+    print("Paso 2: Cortando el texto del manual por los títulos del índice digital (TOC)...")
+    manual_data, incidencias = construir_secciones_por_titulos(
+        toc, pages_content, total_pages, pages_full_render
+    )
 
-    for i in range(len(toc)):
-        nivel = toc[i][0]
-        titulo = toc[i][1]
-        pagina_inicio = toc[i][2]
-
-        if pagina_inicio < PRIMERA_PAGINA_CONTENIDO:
-            continue
-
-        # La sección termina donde empieza la siguiente con página mayor
-        pagina_fin = total_pages
-        for j in range(i + 1, len(toc)):
-            if toc[j][2] > pagina_inicio:
-                pagina_fin = toc[j][2] - 1
-                break
-
-        if pagina_fin < pagina_inicio:
-            pagina_fin = pagina_inicio
-
-        texto_seccion = ""
-        capturas_seccion = []
-
-        for p in range(pagina_inicio, pagina_fin + 1):
-            if p in pages_content:
-                contenido_pagina = pages_content[p].strip()
-                if contenido_pagina:
-                    texto_seccion += contenido_pagina + "\n\n"
-            if RENDER_FULL_PAGE and pages_full_render.get(p):
-                capturas_seccion.append(pages_full_render[p])
-
-        texto_seccion = texto_seccion.strip()
-
-        iconos_seccion = []
-        for nombre in IMG_MARKER_PATTERN.findall(texto_seccion):
-            if nombre not in iconos_seccion:
-                iconos_seccion.append(nombre)
-
-        seccion_info = {
-            "id": len(manual_data) + 1,
-            "nivel": nivel,
-            "titulo": titulo.strip(),
-            "pagina_inicio": pagina_inicio,
-            "pagina_fin": pagina_fin,
-            "contenido": texto_seccion,
-            "imagenes": iconos_seccion,
-        }
-        if RENDER_FULL_PAGE:
-            seccion_info["capturas_pagina_completa"] = capturas_seccion
-
-        manual_data.append(seccion_info)
+    if incidencias:
+        print(f"\nADVERTENCIA: {len(incidencias)} título(s) con incidencias en el corte:")
+        for incidencia in incidencias:
+            print(f"  - {incidencia}")
 
     json_path = os.path.join(output_dir, "manual_structure.json")
     with open(json_path, "w", encoding="utf-8") as json_file:
