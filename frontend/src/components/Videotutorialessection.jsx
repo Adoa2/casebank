@@ -1,34 +1,67 @@
-// TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
-// Este componente no está montado en AdminView mientras la función esté deshabilitada.
-import { useEffect, useRef, useState } from 'react'
+// Sección "Video Tutoriales": trabajos de video con IA, su avance y su publicación en el manual.
+// Solo se monta con VITE_VIDEO_IA_HABILITADO=true (ver AdminView y AdminSidebar).
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  listarJobsVideoGeneracion,
-  eliminarJobVideoGeneracion,
-  regenerarJobVideoGeneracion,
-  cancelarJobVideoGeneracion,
-  reintentarEstadoJob,
-} from '../api/videoGeneration'
+  avanzarTrabajoVideoIA,
+  cancelarTrabajoVideoIA,
+  eliminarTrabajoVideoIA,
+  listarTrabajosVideoIA,
+  obtenerConfiguracionVideosIA,
+  publicarTrabajoVideoIA,
+  reintentarDescargaVideoIA,
+} from '../api/videosIA'
+import { obtenerEnlaceVideo } from '../utils/videoEnlace'
+import VideoFormModal from './VideoFormModal'
 import VideoGenerationFormModal from './VideoGenerationFormModal'
 import VideoGenerationStatusBadge from './Videogenerationstatusbadge'
 
-const POLL_INTERVAL_MS = 8000
+// --- Avance de los trabajos ---
+// Cada consulta ejecuta un paso corto en el backend. El trabajo solo avanza
+// mientras esta sección está abierta; si nadie lo consulta durante el tiempo
+// límite (15 minutos), el backend lo marca como fallido.
+const POLL_INTERVAL_MS = 5000
+const ESTADOS_ACTIVOS = ['pendiente', 'procesando']
+// --- fin avance de los trabajos ---
 
+const TEXTOS_ETAPA = {
+  guion: 'Escribiendo el guion...',
+  voz: 'Generando la voz...',
+  render: 'Componiendo el video...',
+  descarga: 'Guardando el video...',
+}
+
+function formatearCosto(valor) {
+  return valor === null || valor === undefined ? '-' : `USD ${Number(valor).toFixed(2)}`
+}
+
+function formatearDuracion(segundos) {
+  if (segundos === null || segundos === undefined) return '-'
+  const total = Math.round(Number(segundos))
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+}
+
+/** Lista de trabajos con acciones: cancelar, reintentar descarga, publicar, regenerar y eliminar. */
 export default function VideoTutorialesSection() {
-  const [jobs, setJobs] = useState([])
+  const [trabajos, setTrabajos] = useState([])
+  const [configuracion, setConfiguracion] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [jobParaEditar, setJobParaEditar] = useState(null)
-  const [accionEnCurso, setAccionEnCurso] = useState(null) // { id, tipo: 'borrar' | 'regenerar' | 'cancelar' }
+  const [formAbierto, setFormAbierto] = useState(false)
+  const [trabajoBase, setTrabajoBase] = useState(null)
+  const [trabajoAPublicar, setTrabajoAPublicar] = useState(null)
+  const [accionEnCurso, setAccionEnCurso] = useState(null) // { id, tipo }
 
-  const pollRef = useRef(null)
+  const avanzandoRef = useRef(false)
 
-  async function cargarJobs() {
+  const reemplazarTrabajo = useCallback((actualizado) => {
+    setTrabajos((prev) => prev.map((t) => (t.id === actualizado.id ? actualizado : t)))
+  }, [])
+
+  async function cargarTrabajos() {
     setLoading(true)
     setError(null)
     try {
-      const data = await listarJobsVideoGeneracion()
-      setJobs(data)
+      setTrabajos(await listarTrabajosVideoIA())
     } catch (err) {
       setError(err.message || 'No se pudieron cargar los video tutoriales.')
     } finally {
@@ -37,92 +70,90 @@ export default function VideoTutorialesSection() {
   }
 
   useEffect(() => {
-    cargarJobs()
+    cargarTrabajos()
+    obtenerConfiguracionVideosIA().then(setConfiguracion).catch(() => setConfiguracion(null))
   }, [])
 
-  // Auto-refresca las tarjetas que están "procesando" contra Shotstack, para
-  // que se vea el cambio de estado sin tener que recargar la página.
+  // Avanza los trabajos activos, de a uno y sin solapar consultas.
   useEffect(() => {
-    const enProceso = jobs.filter((j) => j.estado === 'procesando')
-    if (enProceso.length === 0) return
+    const activos = trabajos.filter((t) => ESTADOS_ACTIVOS.includes(t.estado))
+    if (activos.length === 0) return undefined
 
-    pollRef.current = setInterval(async () => {
-      for (const job of enProceso) {
-        try {
-          const actualizado = await reintentarEstadoJob(job.id)
-          setJobs((prev) => prev.map((j) => (j.id === actualizado.id ? actualizado : j)))
-        } catch (err) {
-          console.error('Error consultando estado del job:', err)
+    const intervalo = setInterval(async () => {
+      if (avanzandoRef.current) return
+      avanzandoRef.current = true
+      try {
+        for (const trabajo of activos) {
+          try {
+            reemplazarTrabajo(await avanzarTrabajoVideoIA(trabajo.id))
+          } catch (err) {
+            console.error('Error avanzando el trabajo de video:', err)
+          }
         }
+      } finally {
+        avanzandoRef.current = false
       }
     }, POLL_INTERVAL_MS)
 
-    return () => clearInterval(pollRef.current)
-  }, [jobs])
+    return () => clearInterval(intervalo)
+  }, [trabajos, reemplazarTrabajo])
 
-  function handleGenerarNuevo() {
-    setJobParaEditar(null)
-    setModalOpen(true)
-  }
-
-  function handleEditar(job) {
-    setJobParaEditar(job)
-    setModalOpen(true)
-  }
-
-  function handleCerrarModal() {
-    setModalOpen(false)
-    setJobParaEditar(null)
-    cargarJobs()
-  }
-
-  async function handleBorrar(job) {
-    const confirmado = window.confirm(
-      `¿Eliminar "${job.titulo}"? Esto borra el video generado y no se puede deshacer.`
-    )
-    if (!confirmado) return
-
-    setAccionEnCurso({ id: job.id, tipo: 'borrar' })
-    try {
-      await eliminarJobVideoGeneracion(job.id)
-      setJobs((prev) => prev.filter((j) => j.id !== job.id))
-    } catch (err) {
-      setError(err.message || 'No se pudo eliminar el video tutorial.')
-    } finally {
-      setAccionEnCurso(null)
-    }
-  }
-
-  async function handleRegenerar(job) {
-    const confirmado = window.confirm(
-      `¿Regenerar "${job.titulo}"? El video actual (si existe) se va a reemplazar por uno nuevo.`
-    )
-    if (!confirmado) return
-
-    setAccionEnCurso({ id: job.id, tipo: 'regenerar' })
+  async function ejecutarAccion(trabajo, tipo, accion) {
+    setAccionEnCurso({ id: trabajo.id, tipo })
     setError(null)
     try {
-      const actualizado = await regenerarJobVideoGeneracion(job.id)
-      setJobs((prev) => prev.map((j) => (j.id === job.id ? actualizado : j)))
+      await accion()
     } catch (err) {
-      setError(err.message || 'No se pudo regenerar el video tutorial.')
-      cargarJobs()
+      setError(err.message || 'No se pudo completar la acción.')
     } finally {
       setAccionEnCurso(null)
     }
   }
 
-  async function handleCancelar(job) {
-    setAccionEnCurso({ id: job.id, tipo: 'cancelar' })
-    setError(null)
-    try {
-      const actualizado = await cancelarJobVideoGeneracion(job.id)
-      setJobs((prev) => prev.map((j) => (j.id === job.id ? actualizado : j)))
-    } catch (err) {
-      setError(err.message || 'No se pudo cancelar.')
-    } finally {
-      setAccionEnCurso(null)
-    }
+  function handleNuevo() {
+    setTrabajoBase(null)
+    setFormAbierto(true)
+  }
+
+  function handleRegenerar(trabajo) {
+    setTrabajoBase(trabajo)
+    setFormAbierto(true)
+  }
+
+  function handleCreado(trabajo) {
+    setTrabajos((prev) => [trabajo, ...prev])
+  }
+
+  function handleCancelar(trabajo) {
+    return ejecutarAccion(trabajo, 'cancelar', async () => reemplazarTrabajo(await cancelarTrabajoVideoIA(trabajo.id)))
+  }
+
+  function handleReintentarDescarga(trabajo) {
+    return ejecutarAccion(trabajo, 'descarga', async () => reemplazarTrabajo(await reintentarDescargaVideoIA(trabajo.id)))
+  }
+
+  function handleEliminar(trabajo) {
+    const aviso = trabajo.video_id
+      ? `¿Eliminar "${trabajo.titulo}"? El video ya publicado en el manual no se borra.`
+      : `¿Eliminar "${trabajo.titulo}"? Se borra también el video generado y no se puede deshacer.`
+    if (!window.confirm(aviso)) return undefined
+    return ejecutarAccion(trabajo, 'eliminar', async () => {
+      await eliminarTrabajoVideoIA(trabajo.id)
+      setTrabajos((prev) => prev.filter((t) => t.id !== trabajo.id))
+    })
+  }
+
+  // Publicar: crea el video del manual y enlaza el trabajo en una sola transacción.
+  async function handlePublicar(datos) {
+    const { trabajo } = await publicarTrabajoVideoIA(trabajoAPublicar.id, {
+      titulo: datos.titulo,
+      seccion_id: datos.seccion_id,
+      capitulo: datos.capitulo,
+      seccion: datos.seccion,
+      subseccion: datos.subseccion,
+    })
+    reemplazarTrabajo(trabajo)
+    setTrabajoAPublicar(null)
   }
 
   return (
@@ -131,88 +162,115 @@ export default function VideoTutorialesSection() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[#101a38]">Video Tutoriales</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Generá video tutoriales automáticamente a partir de un reporte de error, usando IA.
+            Generá video tutoriales con IA a partir de un reporte de error y publicalos en el manual.
           </p>
         </div>
         <button
           type="button"
-          onClick={handleGenerarNuevo}
+          onClick={handleNuevo}
           className="inline-flex h-11 items-center gap-2 rounded-lg bg-gradient-to-r from-[#075fe5] to-[#19bfe3] px-5 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(21,94,239,.2)] transition hover:brightness-105"
         >
           + Generar Video
         </button>
       </div>
 
+      {configuracion && (
+        <p className="mb-4 text-xs text-slate-500">
+          Límites: {configuracion.max_escenas} escenas, {configuracion.max_caracteres} caracteres,{' '}
+          {Math.round(configuracion.max_duracion_segundos / 60)} minutos por video, {configuracion.max_trabajos_por_dia} videos
+          por día y uno a la vez. Calidad {configuracion.resolucion}.
+        </p>
+      )}
+
       {loading && <p className="text-sm text-slate-500">Cargando...</p>}
       {error && <p className="mb-4 text-sm text-red-700">{error}</p>}
 
-      {!loading && jobs.length === 0 && (
+      {!loading && trabajos.length === 0 && (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center">
           <p className="text-sm text-slate-500">Todavía no generaste ningún video tutorial.</p>
         </div>
       )}
 
-      {!loading && jobs.length > 0 && (
+      {!loading && trabajos.length > 0 && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {jobs.map((job) => {
-            const procesando = job.estado === 'procesando'
-            const accionActual = accionEnCurso?.id === job.id ? accionEnCurso.tipo : null
-            const algunaAccionEnCurso = accionActual !== null
+          {trabajos.map((trabajo) => {
+            const activo = ESTADOS_ACTIVOS.includes(trabajo.estado)
+            const accionActual = accionEnCurso?.id === trabajo.id ? accionEnCurso.tipo : null
+            const ocupado = accionActual !== null
+            const enlace = obtenerEnlaceVideo(trabajo)
+            const publicable = trabajo.estado === 'completado' && enlace && !trabajo.video_id
 
             return (
-              <div key={job.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div key={trabajo.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-[#17213e]">{job.titulo}</h3>
-                  <VideoGenerationStatusBadge estado={job.estado} />
+                  <h3 className="text-sm font-semibold text-[#17213e]">{trabajo.titulo}</h3>
+                  <VideoGenerationStatusBadge estado={trabajo.estado} />
                 </div>
 
-                {job.estado === 'completado' && job.video_url && (
-                  <video controls className="mt-3 w-full rounded-lg" src={job.video_url} />
+                {trabajo.estado === 'completado' && enlace && <video controls className="mt-3 w-full rounded-lg" src={enlace} />}
+
+                {activo && (
+                  <p className="mt-3 text-xs text-slate-500">{TEXTOS_ETAPA[trabajo.etapa] || 'En cola...'}</p>
                 )}
 
-                {procesando && (
-                  <p className="mt-3 text-xs text-slate-500">Shotstack está renderizando este video...</p>
+                {trabajo.mensaje_error && trabajo.estado !== 'completado' && (
+                  <p className="mt-3 text-xs text-red-700">{trabajo.mensaje_error}</p>
                 )}
 
-                {(job.estado === 'fallido' || job.estado === 'cancelado') && job.error_mensaje && (
-                  <p className="mt-3 text-xs text-red-700">{job.error_mensaje}</p>
-                )}
+                <p className="mt-3 text-xs text-slate-500">
+                  Duración {formatearDuracion(trabajo.duracion_segundos ?? trabajo.duracion_estimada_segundos)} · Costo estimado{' '}
+                  {formatearCosto(trabajo.costo_estimado_usd)}
+                  {trabajo.video_id ? ' · Publicado en el manual' : ''}
+                </p>
 
-                <div className="mt-3 flex gap-2 border-t border-slate-100 pt-3">
-                  {procesando ? (
+                <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+                  {activo && (
                     <button
                       type="button"
-                      onClick={() => handleCancelar(job)}
-                      disabled={algunaAccionEnCurso}
+                      onClick={() => handleCancelar(trabajo)}
+                      disabled={ocupado}
                       className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
                     >
                       {accionActual === 'cancelar' ? 'Cancelando...' : 'Cancelar'}
                     </button>
-                  ) : (
+                  )}
+                  {trabajo.estado === 'descarga_pendiente' && (
+                    <button
+                      type="button"
+                      onClick={() => handleReintentarDescarga(trabajo)}
+                      disabled={ocupado}
+                      className="flex-1 rounded-lg border border-orange-200 px-3 py-1.5 text-xs font-semibold text-orange-700 transition hover:bg-orange-50 disabled:opacity-50"
+                    >
+                      {accionActual === 'descarga' ? 'Reintentando...' : 'Reintentar descarga'}
+                    </button>
+                  )}
+                  {publicable && (
+                    <button
+                      type="button"
+                      onClick={() => setTrabajoAPublicar(trabajo)}
+                      disabled={ocupado}
+                      className="flex-1 rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50"
+                    >
+                      Publicar en el manual
+                    </button>
+                  )}
+                  {!activo && (
                     <>
                       <button
                         type="button"
-                        onClick={() => handleEditar(job)}
-                        disabled={algunaAccionEnCurso}
-                        className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
-                      >
-                        Editar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRegenerar(job)}
-                        disabled={algunaAccionEnCurso}
+                        onClick={() => handleRegenerar(trabajo)}
+                        disabled={ocupado}
                         className="flex-1 rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-600 transition hover:bg-blue-50 disabled:opacity-50"
                       >
-                        {accionActual === 'regenerar' ? 'Regenerando...' : 'Regenerar'}
+                        Editar y regenerar
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleBorrar(job)}
-                        disabled={algunaAccionEnCurso}
+                        onClick={() => handleEliminar(trabajo)}
+                        disabled={ocupado}
                         className="flex-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
                       >
-                        {accionActual === 'borrar' ? 'Eliminando...' : 'Eliminar'}
+                        {accionActual === 'eliminar' ? 'Eliminando...' : 'Eliminar'}
                       </button>
                     </>
                   )}
@@ -223,12 +281,22 @@ export default function VideoTutorialesSection() {
         </div>
       )}
 
-      {modalOpen && (
+      {formAbierto && (
         <VideoGenerationFormModal
-          isOpen={modalOpen}
-          onClose={handleCerrarModal}
-          onCompletado={cargarJobs}
-          jobParaEditar={jobParaEditar}
+          isOpen={formAbierto}
+          onClose={() => setFormAbierto(false)}
+          onCreado={handleCreado}
+          trabajoBase={trabajoBase}
+          configuracion={configuracion}
+        />
+      )}
+
+      {trabajoAPublicar && (
+        <VideoFormModal
+          mode="publicar"
+          initialData={{ titulo: trabajoAPublicar.titulo, enlace: trabajoAPublicar.enlace }}
+          onClose={() => setTrabajoAPublicar(null)}
+          onSubmit={handlePublicar}
         />
       )}
     </div>

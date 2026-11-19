@@ -23,22 +23,48 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 
-# TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
-# SHOTSTACK_API_KEY = os.getenv("SHOTSTACK_API_KEY")
+# --- Videos con IA ---
+# Todo el sistema queda apagado mientras VIDEO_IA_HABILITADO no sea "true":
+# el router no se registra y la tabla trabajos_generacion_video no se crea
+# automáticamente (solo con sql/migracion_videos_ia.sql).
 
-# SHOTSTACK_EDIT_BASE_URL = os.getenv("SHOTSTACK_EDIT_BASE_URL", "https://api.shotstack.io/edit/v1")
-# SHOTSTACK_WEBHOOK_URL = os.getenv("SHOTSTACK_WEBHOOK_URL", "")
 
-# Voz y ritmo de narración en español.
-# Voces disponibles en español: Lucia/Sergio (es-ES), Mia/Andrés (es-MX), Lupe/Pedro (es-US)
-# SHOTSTACK_TTS_VOICE = os.getenv("SHOTSTACK_TTS_VOICE", "Mia")
-# SHOTSTACK_TTS_LANGUAGE = os.getenv("SHOTSTACK_TTS_LANGUAGE", "es-MX")
-# SHOTSTACK_WORDS_PER_SECOND = float(os.getenv("SHOTSTACK_WORDS_PER_SECOND", "2.3"))
-# SHOTSTACK_ESCENA_PADDING_SEGUNDOS = float(os.getenv("SHOTSTACK_ESCENA_PADDING_SEGUNDOS", "1.0"))
+def _bandera(nombre: str, por_defecto: bool = False) -> bool:
+    """Lee una variable de entorno booleana ("true", "1", "si" o "yes" la activan)."""
+    valor = os.getenv(nombre)
+    if valor is None:
+        return por_defecto
+    return valor.strip().lower() in ("true", "1", "si", "sí", "yes")
 
-# Buckets de Supabase Storage.
-# SUPABASE_BUCKET_VIDEOS_GENERADOS = os.getenv("SUPABASE_BUCKET_VIDEOS_GENERADOS", "videos-generados")
-# SUPABASE_BUCKET_VIDEO_GEN_IMAGENES = os.getenv("SUPABASE_BUCKET_VIDEO_GEN_IMAGENES", "video-generacion-imagenes")
 
-# VIDEO_GENERACION_INTRO_IMAGEN_URL = os.getenv("VIDEO_GENERACION_INTRO_IMAGEN_URL", "")
-# VIDEO_GENERACION_OUTRO_IMAGEN_URL = os.getenv("VIDEO_GENERACION_OUTRO_IMAGEN_URL", "")
+VIDEO_IA_HABILITADO = _bandera("VIDEO_IA_HABILITADO", False)
+
+# Proveedor de render. Solo "heygen" está previsto; su cliente aún es un esqueleto.
+VIDEO_IA_PROVEEDOR = os.getenv("VIDEO_IA_PROVEEDOR", "heygen")
+HEYGEN_API_KEY = os.getenv("HEYGEN_API_KEY")  # opcional mientras el sistema esté apagado
+
+# Calidad fija: 1080p. 4K no se permite (cuesta 1,5 veces más).
+VIDEO_IA_RESOLUCION = "1080p"
+
+# Límites de costo, configurables.
+VIDEO_IA_MAX_ESCENAS = int(os.getenv("VIDEO_IA_MAX_ESCENAS", "20"))
+VIDEO_IA_MAX_CARACTERES = int(os.getenv("VIDEO_IA_MAX_CARACTERES", "4500"))
+VIDEO_IA_MAX_DURACION_SEGUNDOS = int(os.getenv("VIDEO_IA_MAX_DURACION_SEGUNDOS", "300"))
+VIDEO_IA_MAX_TRABAJOS_POR_DIA = int(os.getenv("VIDEO_IA_MAX_TRABAJOS_POR_DIA", "10"))
+VIDEO_IA_TIEMPO_LIMITE_MINUTOS = int(os.getenv("VIDEO_IA_TIEMPO_LIMITE_MINUTOS", "15"))
+
+# Trabajo por consulta del panel: cuántas narraciones se generan en cada paso
+# y cuánto puede durar la copia del mp4 antes de dejarla para un reintento.
+VIDEO_IA_NARRACIONES_POR_PASO = int(os.getenv("VIDEO_IA_NARRACIONES_POR_PASO", "4"))
+VIDEO_IA_TIEMPO_MAX_DESCARGA_SEGUNDOS = int(os.getenv("VIDEO_IA_TIEMPO_MAX_DESCARGA_SEGUNDOS", "240"))
+
+# Estimación de costo y duración. La tarifa de render sale de una sola medición
+# (USD 0,05 por 16,9 s a 1080p) y debe confirmarse con la tarifa oficial.
+VIDEO_IA_PRECIO_VOZ_USD_POR_MILLON_CARACTERES = float(os.getenv("VIDEO_IA_PRECIO_VOZ_USD_POR_MILLON_CARACTERES", "15.0"))
+VIDEO_IA_PRECIO_RENDER_USD_POR_SEGUNDO = float(os.getenv("VIDEO_IA_PRECIO_RENDER_USD_POR_SEGUNDO", "0.003"))
+VIDEO_IA_CARACTERES_POR_SEGUNDO = float(os.getenv("VIDEO_IA_CARACTERES_POR_SEGUNDO", "16.5"))
+VIDEO_IA_PAUSA_ESCENA_SEGUNDOS = float(os.getenv("VIDEO_IA_PAUSA_ESCENA_SEGUNDOS", "0.4"))
+
+# Buckets de Supabase Storage (mismos nombres que usaba la versión anterior).
+SUPABASE_BUCKET_VIDEOS_IA = os.getenv("SUPABASE_BUCKET_VIDEOS_IA", "videos-generados")
+SUPABASE_BUCKET_VIDEOS_IA_IMAGENES = os.getenv("SUPABASE_BUCKET_VIDEOS_IA_IMAGENES", "video-generacion-imagenes")

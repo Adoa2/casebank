@@ -7,10 +7,14 @@ from .database import models
 from .database.db import engine
 from .database.db import ensure_schema_columns
 from .routers import auth, chat, manual, admin_users, errors, videos, updates
-# TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
-# from .routers import ... video_generation
+from .config import VIDEO_IA_HABILITADO
 
-models.Base.metadata.create_all(bind=engine)
+# create_all omite las tablas que solo se crean con su migración SQL
+# (trabajos_generacion_video), para que activar el código no altere la base.
+models.Base.metadata.create_all(
+    bind=engine,
+    tables=[t for t in models.Base.metadata.sorted_tables if t.name not in models.TABLAS_SOLO_MIGRACION],
+)
 ensure_schema_columns()
 
 tags_metadata = [
@@ -42,12 +46,14 @@ tags_metadata = [
         "name": "Actualizaciones",
         "description": "Administracion e indexacion de documentos PDF. Requiere privilegio mayor.",
     },
-    # TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
-    # {
-    #     "name": "Generación de video tutoriales",
-    #     "description": "Genera video tutoriales automáticamente a partir de un reporte de error, usando Shotstack.",
-    # },
 ]
+
+if VIDEO_IA_HABILITADO:
+    tags_metadata.append({
+        "name": "Videos con IA",
+        "description": "Trabajos de generación de video tutoriales con IA y su publicación en el manual. "
+                       "Requiere privilegio mayor.",
+    })
 
 app = FastAPI(
     title="Manual Interactivo CaseBank API",
@@ -75,8 +81,12 @@ api_router.include_router(admin_users.router)
 api_router.include_router(errors.router)
 api_router.include_router(videos.router)
 api_router.include_router(updates.router)
-# TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
-# api_router.include_router(video_generation.router)
+
+# Videos con IA: solo se registra con VIDEO_IA_HABILITADO=true. Requiere haber
+# ejecutado sql/migracion_videos_ia.sql en la base de datos.
+if VIDEO_IA_HABILITADO:
+    from .routers import video_generation
+    api_router.include_router(video_generation.router)
 
 @api_router.get(
     "/",

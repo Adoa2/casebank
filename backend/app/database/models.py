@@ -4,7 +4,8 @@ import random
 import string
 from datetime import datetime, timedelta
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, JSON
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from .db import Base
@@ -157,26 +158,63 @@ class UpdateDocument(Base):
         return self.creator.nombre_usuario if self.creator else None
 
 
-# TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
-# class VideoGenerationJob(Base):
-#     __tablename__ = "trabajos_generacion_video"
-#
-#     id = Column(Integer, primary_key=True, index=True)
-#     titulo = Column(String, nullable=False)
-#     descripcion_inconveniente = Column(Text, nullable=False)
-#     solucion = Column(Text, nullable=False)
-#     puntos_a_considerar = Column(Text, nullable=True)
-#     pasos_json = Column(JSON, nullable=True)
-#     imagenes = Column(JSON, nullable=True, default=list)
-#     guion_json = Column(JSON, nullable=True)
-#     shotstack_render_id = Column(String, nullable=True, index=True)
-#     estado = Column(String, nullable=False, default="pendiente")
-#     enlace_video = Column(String, nullable=True)
-#     video_id = Column(Integer, ForeignKey("videos.id", ondelete="SET NULL"), nullable=True)
-#     error_mensaje = Column(Text, nullable=True)
-#     creado_por = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
-#     creado_en = Column(DateTime, default=datetime.utcnow, nullable=False)
-#     actualizado_en = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-#
-#     creator = relationship("User", foreign_keys=[creado_por])
-#     video = relationship("Video", foreign_keys=[video_id])
+# --- Videos con IA ---
+# Esta tabla NO la crea Base.metadata.create_all (ver TABLAS_SOLO_MIGRACION y
+# main.py): solo existe si se ejecuta sql/migracion_videos_ia.sql. Así, con
+# VIDEO_IA_HABILITADO en falso, producción no cambia.
+ESTADOS_TRABAJO_VIDEO = ("pendiente", "procesando", "descarga_pendiente", "completado", "fallido", "cancelado")
+ESTADOS_TRABAJO_VIDEO_ACTIVOS = ("pendiente", "procesando")
+ETAPAS_TRABAJO_VIDEO = ("guion", "voz", "render", "descarga")
+
+
+class TrabajoGeneracionVideo(Base):
+    """
+    Trabajo de generación de un video con IA.
+
+    Estados: pendiente -> procesando -> completado | fallido | cancelado.
+    descarga_pendiente: el render terminó pero no se pudo copiar el mp4; se
+    conserva render_id_externo para pedir un enlace nuevo al proveedor.
+    etapa indica el paso interno dentro de "procesando": guion, voz, render, descarga.
+    Un índice único parcial en la migración permite un solo trabajo activo
+    (pendiente o procesando) por usuario.
+    """
+    __tablename__ = "trabajos_generacion_video"
+    __table_args__ = (
+        UniqueConstraint("proveedor", "render_id_externo", name="uq_trabajos_video_render_externo"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    titulo = Column(String, nullable=False)
+    descripcion_inconveniente = Column(Text, nullable=False)
+    pasos = Column(JSONB, nullable=False)  # [{"texto": str, "imagen_url": str | None}]
+    puntos_a_considerar = Column(Text, nullable=True)
+    guion = Column(JSONB, nullable=True)  # {"escenas": [{"titulo", "narracion", "captura", ...}]}
+    estado = Column(String, nullable=False, default="pendiente")
+    etapa = Column(String, nullable=True)
+    proveedor = Column(String, nullable=False)
+    render_id_externo = Column(String, nullable=True)
+    recursos_externos = Column(JSONB, nullable=False, default=list)  # ids de assets subidos al proveedor
+    resolucion = Column(String, nullable=False, default="1080p")
+    caracteres_narracion = Column(Integer, nullable=True)
+    duracion_estimada_segundos = Column(Numeric(7, 2), nullable=True)
+    duracion_segundos = Column(Numeric(7, 2), nullable=True)
+    costo_estimado_usd = Column(Numeric(10, 4), nullable=True)
+    enlace = Column(String, nullable=True)  # mp4 final en Supabase Storage
+    mensaje_error = Column(Text, nullable=True)
+    video_id = Column(Integer, ForeignKey("videos.id", ondelete="SET NULL"), nullable=True, unique=True)
+    creado_por = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    creado_en = Column(DateTime, default=datetime.utcnow, nullable=False)
+    actualizado_en = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    completado_en = Column(DateTime, nullable=True)
+
+    creator = relationship("User", foreign_keys=[creado_por])
+    video = relationship("Video", foreign_keys=[video_id])
+
+    @property
+    def creado_por_nombre(self):
+        """Nombre del usuario que creó el trabajo (desde la relación ORM)."""
+        return self.creator.nombre_usuario if self.creator else None
+
+
+# Tablas que solo se crean con su migración SQL, nunca con create_all.
+TABLAS_SOLO_MIGRACION = {TrabajoGeneracionVideo.__tablename__}

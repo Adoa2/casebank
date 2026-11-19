@@ -1,14 +1,17 @@
 // Shell del panel de administración: enruta entre Home, Usuarios, Errores, Videos y Actualizaciones.
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import Header from '../components/Header'
 import AdminSidebar from '../components/AdminSidebar'
 import UsersSection from '../components/UsersSection'
 import ErrorsSection from '../components/ErrorsSection'
 import VideosSection from '../components/VideosSection'
-// TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
-// import VideoTutorialesSection from '../components/Videotutorialessection'
 import AdminHome from '../components/AdminHome'
 import UpdatesSection from '../components/UpdatesSection'
+import { VIDEO_IA_HABILITADO } from '../config'
+
+// Videos con IA: carga diferida y solo con VITE_VIDEO_IA_HABILITADO=true, así el
+// build con la bandera apagada no incluye la sección.
+const VideoTutorialesSection = VIDEO_IA_HABILITADO ? lazy(() => import('../components/Videotutorialessection')) : null
 
 /** Vista principal del panel administrativo: orquesta el sidebar y la sección activa. */
 export default function AdminView({ onLogout, onGoDashboard, role = 0 }) {
@@ -17,7 +20,8 @@ export default function AdminView({ onLogout, onGoDashboard, role = 0 }) {
 
   function handleSelectSection(id) {
     // Bloquear navegación a secciones con restricción de rol antes de intentar cargarlas
-    if ((id === 'usuarios' || id === 'videos' || id === 'actualizaciones') && role < 2) return
+    if ((id === 'usuarios' || id === 'videos' || id === 'actualizaciones' || id === 'video-tutoriales') && role < 2) return
+    if (id === 'video-tutoriales' && !VIDEO_IA_HABILITADO) return
     setIsViewingDetail(false)
     setActiveSection(id)
   }
@@ -48,8 +52,11 @@ export default function AdminView({ onLogout, onGoDashboard, role = 0 }) {
             {activeSection === 'usuarios' && role >= 2 && <UsersSection />}
             {activeSection === 'errores-frecuentes' && role >= 1 && <ErrorsSection onDetailChange={setIsViewingDetail} />}
             {activeSection === 'videos' && role >= 2 && <VideosSection />}
-            {/* TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA */}
-            {/* {activeSection === 'video-tutoriales' && role >= 2 && <VideoTutorialesSection />} */}
+            {VideoTutorialesSection && activeSection === 'video-tutoriales' && role >= 2 && (
+              <Suspense fallback={<p className="text-sm text-slate-500">Cargando...</p>}>
+                <VideoTutorialesSection />
+              </Suspense>
+            )}
             {activeSection === 'actualizaciones' && role >= 2 && <UpdatesSection />}
 
             <footer className="mt-auto pt-8 text-center text-xs text-slate-500 sm:text-sm">

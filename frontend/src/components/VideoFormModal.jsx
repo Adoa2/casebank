@@ -3,8 +3,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { fetchManualStructure } from '../api/manual'
 import { buildJerarquiaAnidada } from '../utils/manualTree'
 import { obtenerEnlaceVideo } from '../utils/videoEnlace'
-// TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
-// import { listarDisponiblesParaManual, vincularJobAVideo } from '../api/videoGeneration'
 
 function aplanarDescendientes(nodo) {
   const resultado = []
@@ -19,9 +17,15 @@ function Field({ label, hint, children }) {
   return <div><label className="mb-1.5 block text-sm font-semibold text-[#17213e]">{label} <span className="text-red-500">*</span></label>{children}{hint && <p className="mt-1.5 text-xs text-slate-500">{hint}</p>}</div>
 }
 
-/** Modal para crear o editar un video formativo vinculado a una sección del manual. */
+/**
+ * Modal para crear o editar un video formativo vinculado a una sección del manual.
+ * mode: 'create' | 'edit' | 'publicar'. En 'publicar' (videos con IA) el enlace
+ * viene del trabajo y no se puede cambiar; onSubmit crea el video y enlaza el
+ * trabajo en una sola operación del backend.
+ */
 export default function VideoFormModal({ mode = 'create', initialData, onClose, onSubmit }) {
   const isEdit = mode === 'edit'
+  const isPublicar = mode === 'publicar'
   const [titulo, setTitulo] = useState(initialData?.titulo || '')
   // --- Enlace del video ---
   // El estado local se llama "url" solo por ser el valor del input; al
@@ -38,33 +42,6 @@ export default function VideoFormModal({ mode = 'create', initialData, onClose, 
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
 
-  // TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
-  // const [usarVideoIA, setUsarVideoIA] = useState(false)
-  // const [jobsDisponibles, setJobsDisponibles] = useState([])
-  // const [loadingJobs, setLoadingJobs] = useState(false)
-  // const [errorJobs, setErrorJobs] = useState(null)
-  // const [jobSeleccionadoId, setJobSeleccionadoId] = useState(null)
-
-  // useEffect(() => {
-  //   if (!usarVideoIA || isEdit) return
-  //   let cancelado = false
-  //   async function cargarJobs() {
-  //     setLoadingJobs(true); setErrorJobs(null)
-  //     try {
-  //       const data = await listarDisponiblesParaManual()
-  //       if (!cancelado) setJobsDisponibles(data)
-  //     } catch (err) {
-  //       if (!cancelado) setErrorJobs(err.message || 'No se pudieron cargar los videos generados por IA.')
-  //     } finally {
-  //       if (!cancelado) setLoadingJobs(false)
-  //     }
-  //   }
-  //   cargarJobs()
-  //   return () => { cancelado = true }
-  // }, [usarVideoIA, isEdit])
-
-  // function handleToggleUsarVideoIA(checked) { ... }
-  // function handleSeleccionarJob(job) { ... }
 
   useEffect(() => {
     let cancelado = false
@@ -145,8 +122,6 @@ export default function VideoFormModal({ mode = 'create', initialData, onClose, 
     if (!titulo.trim()) return setError('El título es obligatorio.')
     if (!capituloId || !seccionId) return setError('Selecciona capítulo y sección.')
     if (!subseccionId) return setError('Selecciona la subsección o la opción de esta sección.')
-    // TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
-    // if (usarVideoIA && !jobSeleccionadoId) return setError('Selecciona un video generado por IA de la lista.')
     if (!/^https?:\/\//i.test(url.trim())) return setError('La URL debe comenzar con http:// o https://')
 
     const subseccionSeleccionada = subsecciones.find((item) => String(item.id) === subseccionId)
@@ -161,12 +136,6 @@ export default function VideoFormModal({ mode = 'create', initialData, onClose, 
         seccion: seccionSeleccionada.titulo,
         subseccion: esLaMismaSeccion ? null : subseccionSeleccionada?.titulo || null,
       })
-
-      // TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
-      // if (usarVideoIA && jobSeleccionadoId && videoCreado?.id) {
-      //   try { await vincularJobAVideo(jobSeleccionadoId, videoCreado.id) }
-      //   catch (err) { console.error('No se pudo marcar el video generado por IA como vinculado:', err) }
-      // }
     } catch (err) {
       setError(err.message || 'No se pudo guardar el video.')
       setSaving(false)
@@ -182,7 +151,7 @@ export default function VideoFormModal({ mode = 'create', initialData, onClose, 
         <header className="flex shrink-0 items-start justify-between gap-4 px-5 pb-4 pt-5 sm:px-8 sm:pt-7">
           <div className="flex items-center gap-4">
             <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl ${isEdit ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}><svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{isEdit ? <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19 3 20l1-4Z" /> : <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m10 9 5 3-5 3Z" /></>}</svg></span>
-            <div><h2 id="video-modal-title" className="text-xl font-bold tracking-tight text-[#101a38] sm:text-[26px]">{isEdit ? 'Editar video' : 'Nuevo video'}</h2><p className="mt-1 text-xs text-slate-500 sm:text-sm">{isEdit ? 'Actualiza la información y ubicación de este video.' : 'Vincula un video formativo con una sección del manual.'}</p></div>
+            <div><h2 id="video-modal-title" className="text-xl font-bold tracking-tight text-[#101a38] sm:text-[26px]">{isEdit ? 'Editar video' : isPublicar ? 'Publicar en el manual' : 'Nuevo video'}</h2><p className="mt-1 text-xs text-slate-500 sm:text-sm">{isEdit ? 'Actualiza la información y ubicación de este video.' : isPublicar ? 'Elige dónde aparecerá el video generado con IA.' : 'Vincula un video formativo con una sección del manual.'}</p></div>
           </div>
           <button type="button" onClick={onClose} disabled={saving} aria-label="Cerrar" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:opacity-50"><svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m6 6 12 12M18 6 6 18" /></svg></button>
         </header>
@@ -203,16 +172,14 @@ export default function VideoFormModal({ mode = 'create', initialData, onClose, 
                 </div>
               </div>
 
-              {/* TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA */}
-              {/* Sección "Usar un video generado por IA" oculta hasta reactivación */}
-
-              <Field label="URL del video" hint="Acepta enlaces públicos que comiencen con http:// o https://.">
+              <Field label="URL del video" hint={isPublicar ? 'Enlace del video generado con IA. No se puede cambiar.' : 'Acepta enlaces públicos que comiencen con http:// o https://.'}>
                 <div className="relative">
                   <svg className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.1 1.1M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.1-1.1" /></svg>
                   <input
                     type="url"
                     value={url}
                     onChange={(event) => { setUrl(event.target.value); setError(null) }}
+                    readOnly={isPublicar}
                     placeholder="https://www.youtube.com/..."
                     className={`${fieldClass} pl-12 pr-28`}
                   />
@@ -222,7 +189,7 @@ export default function VideoFormModal({ mode = 'create', initialData, onClose, 
             </div>
           </div>
 
-          <footer className="video-form-modal-footer shrink-0 border-t border-slate-200 bg-white px-5 py-4 sm:px-8 sm:py-5"><button type="button" onClick={onClose} disabled={saving} className="h-11 rounded-lg border border-slate-200 bg-white px-7 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:opacity-50">Cancelar</button><button type="submit" disabled={saving || loadingArbol || Boolean(errorArbol)} className="inline-flex h-11 items-center justify-center gap-2.5 rounded-lg bg-gradient-to-r from-[#075fe5] to-[#17bce1] px-7 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(21,94,239,.22)] transition hover:brightness-105 focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-60"><svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 3h12l2 2v16H5V3Z" /><path d="M8 3v6h8V3M8 21v-7h8v7" /></svg>{saving ? 'Guardando...' : isEdit ? 'Guardar cambios' : 'Crear video'}</button></footer>
+          <footer className="video-form-modal-footer shrink-0 border-t border-slate-200 bg-white px-5 py-4 sm:px-8 sm:py-5"><button type="button" onClick={onClose} disabled={saving} className="h-11 rounded-lg border border-slate-200 bg-white px-7 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:opacity-50">Cancelar</button><button type="submit" disabled={saving || loadingArbol || Boolean(errorArbol)} className="inline-flex h-11 items-center justify-center gap-2.5 rounded-lg bg-gradient-to-r from-[#075fe5] to-[#17bce1] px-7 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(21,94,239,.22)] transition hover:brightness-105 focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-60"><svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 3h12l2 2v16H5V3Z" /><path d="M8 3v6h8V3M8 21v-7h8v7" /></svg>{saving ? 'Guardando...' : isEdit ? 'Guardar cambios' : isPublicar ? 'Publicar' : 'Crear video'}</button></footer>
         </form>
       </div>
     </div>

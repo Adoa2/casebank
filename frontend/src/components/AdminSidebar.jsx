@@ -1,12 +1,13 @@
 // Menú lateral del panel de administración con navegación entre secciones.
 import logo from '../assets/logo.png'
+import { VIDEO_IA_HABILITADO } from '../config'
 
 const NAV_ITEMS = [
   { id: 'inicio', label: 'Inicio', minRole: 1, icon: 'home' },
   { id: 'usuarios', label: 'Usuarios', minRole: 2, icon: 'users' },
   { id: 'videos', label: 'Administrar Videos', minRole: 2, icon: 'video' },
-  // TODO: DESHABILITADO TEMPORALMENTE - generación de videos IA
-  // { id: 'video-tutoriales', label: 'Video Tutoriales', minRole: 2, icon: 'magic' },
+  // Videos con IA: solo aparece con VITE_VIDEO_IA_HABILITADO=true.
+  ...(VIDEO_IA_HABILITADO ? [{ id: 'video-tutoriales', label: 'Video Tutoriales', minRole: 2, icon: 'magic' }] : []),
   { id: 'actualizaciones', label: 'Actualizaciones PDF', minRole: 2, icon: 'document' },
   { id: 'errores-frecuentes', label: 'Errores Frecuentes', minRole: 1, icon: 'warning' },
 ]
