@@ -47,7 +47,7 @@ MAX_CARACTERES_NARRACION_ESCENA = 450
 
 PROMPT_GUION = """Sos un asistente que convierte un reporte de error interno, ya dividido en pasos por un técnico, en un guion para un video tutorial de capacitación de una cooperativa financiera.
 
-Vas a recibir el título del problema, su descripción y una lista ORDENADA de pasos de la solución. Generá EXACTAMENTE una escena por cada uno de estos bloques, en este orden:
+Vas a recibir el título del problema, su descripción y una lista ORDENADA de pasos de la solución. Genera EXACTAMENTE una escena por cada uno de estos bloques, en este orden:
 
 1. Una escena de introducción que presente el problema (a partir del título y la descripción).
 2. Una escena por CADA paso de la lista, en el MISMO ORDEN y la MISMA CANTIDAD ({n_pasos} pasos -> {n_pasos} escenas). No combines dos pasos en una escena ni dividas un paso en dos. La narración debe transmitir la misma idea del paso en un tono natural para ser leída en voz alta, sin cambiar el significado ni omitir instrucciones.
@@ -56,13 +56,13 @@ Vas a recibir el título del problema, su descripción y una lista ORDENADA de p
 Reglas estrictas:
 - Cada escena tiene "titulo" (máximo {max_palabras_titulo} palabras, aparece en pantalla), "narracion" (1 a 2 oraciones cortas en español neutro, tono claro y profesional, máximo {max_caracteres_narracion} caracteres) y "captura".
 - "captura" es el número del paso cuya imagen acompaña la escena: null en la introducción, el número del paso (1 a {n_pasos}) en cada escena de paso, y null en la escena de puntos a considerar.
-- Para marcar una pausa en la narración escribí exactamente [pause]. No uses ninguna otra marca entre corchetes.
-- Usá ortografía española completa, con todas las tildes y eñes (por ejemplo: parámetro, menú, operación, módulo, configuración). La voz lee el texto tal cual y sin tildes pronuncia mal.
-- Escribí texto plano: sin Markdown (nada de asteriscos, almohadillas, guiones de lista ni comillas invertidas), sin etiquetas SSML ni HTML, sin emojis y sin URLs.
+- Para marcar una pausa en la narración escribe exactamente [pause]. No uses ninguna otra marca entre corchetes.
+- Usa ortografía española completa, con todas las tildes y eñes (por ejemplo: parámetro, menú, operación, módulo, configuración). La voz lee el texto tal cual y sin tildes pronuncia mal.
+- Escribe texto plano: sin Markdown (nada de asteriscos, almohadillas, guiones de lista ni comillas invertidas), sin etiquetas SSML ni HTML, sin emojis y sin URLs.
 - No repitas literalmente el "titulo" dentro de la "narracion".
 - El total de escenas debe ser EXACTAMENTE {escenas_esperadas}.
-- Si algún dato no está en la información recibida, no lo inventes: narrá solo lo que el técnico escribió.
-- Devolvé ÚNICAMENTE un JSON válido, sin texto antes o después y sin bloques de código, con este formato exacto:
+- Si algún dato no está en la información recibida, no lo inventes: narra solo lo que el técnico escribió.
+- Devuelve ÚNICAMENTE un JSON válido, sin texto antes o después y sin bloques de código, con este formato exacto:
 {{"escenas": [{{"titulo": "...", "narracion": "...", "captura": null}}]}}
 
 Título: {titulo}
@@ -192,7 +192,7 @@ def generar_guion(titulo: str, descripcion: str, pasos: list[str], puntos: str |
         puntos=puntos.strip() if incluye_puntos else "Ninguno",
         n_pasos=len(pasos_limpios),
         instruccion_puntos=(
-            "Como hay puntos a considerar, agregá UNA escena final con esos puntos como recomendaciones."
+            "Como hay puntos a considerar, agrega UNA escena final con esos puntos como recomendaciones."
             if incluye_puntos
             else "No hay puntos a considerar: NO agregues ninguna escena adicional de cierre."
         ),
@@ -229,7 +229,7 @@ def generar_guion(titulo: str, descripcion: str, pasos: list[str], puntos: str |
     if len(escenas) != total:
         raise ValueError(
             f"El guion tiene {len(escenas)} escena(s) y se esperaban {total}. "
-            "Puede pasar ocasionalmente con el modelo de IA; probá generar el video de nuevo."
+            "Puede pasar ocasionalmente con el modelo de IA; prueba generar el video de nuevo."
         )
 
     return [_normalizar_escena(e, i, len(pasos_limpios)) for i, e in enumerate(escenas)]

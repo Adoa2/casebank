@@ -162,7 +162,7 @@ export default function VideoTutorialesSection() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[#101a38]">Video Tutoriales</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Generá video tutoriales con IA a partir de un reporte de error y publicalos en el manual.
+            Genera video tutoriales con IA a partir de un reporte de error y publícalos en el manual.
           </p>
         </div>
         <button

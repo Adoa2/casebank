@@ -290,7 +290,7 @@ def _recuperar_render_terminado(trabajo: Trabajo) -> bool:
         trabajo.duracion_segundos = estado.duracion_segundos
     trabajo.estado = "descarga_pendiente"
     trabajo.etapa = "descarga"
-    trabajo.mensaje_error = "El render terminó, pero el video no se copió dentro del tiempo límite. Reintentá la descarga."
+    trabajo.mensaje_error = "El render terminó, pero el video no se copió dentro del tiempo límite. Reintenta la descarga."
     _limpiar_recursos(trabajo)
     return True
 
@@ -491,7 +491,7 @@ def _paso_descarga(trabajo: Trabajo) -> None:
     except Exception as exc:
         logger.warning("Copia del mp4 del trabajo %s fallida; queda recuperable", trabajo.id, exc_info=True)
         trabajo.estado = "descarga_pendiente"
-        trabajo.mensaje_error = f"El render terminó pero no se pudo copiar el video: {exc}. Reintentá la descarga."
+        trabajo.mensaje_error = f"El render terminó pero no se pudo copiar el video: {exc}. Reintenta la descarga."
         return
 
     trabajo.enlace = enlace
@@ -594,7 +594,7 @@ def crear_trabajo(
     db_session.query(models.User).filter(models.User.id == current_user.id).with_for_update().one()
     activos = db_session.query(Trabajo).filter(Trabajo.creado_por == current_user.id, Trabajo.estado.in_(ACTIVOS)).count()
     if activos:
-        raise HTTPException(status_code=409, detail="Ya tenés un video generándose. Esperá a que termine o cancelalo.")
+        raise HTTPException(status_code=409, detail="Ya tienes un video generándose. Espera a que termine o cancélalo.")
     inicio_dia = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     hoy = db_session.query(Trabajo).filter(Trabajo.creado_por == current_user.id, Trabajo.creado_en >= inicio_dia).count()
     if hoy >= config.VIDEO_IA_MAX_TRABAJOS_POR_DIA:
@@ -620,7 +620,7 @@ def crear_trabajo(
     except IntegrityError:
         # El índice único parcial también impide dos trabajos activos simultáneos.
         db_session.rollback()
-        raise HTTPException(status_code=409, detail="Ya tenés un video generándose. Esperá a que termine o cancelalo.")
+        raise HTTPException(status_code=409, detail="Ya tienes un video generándose. Espera a que termine o cancélalo.")
     db_session.refresh(trabajo)
     return trabajo
 
@@ -734,7 +734,7 @@ def publicar_trabajo(
         db_session.commit()
     except IntegrityError:
         db_session.rollback()
-        raise HTTPException(status_code=409, detail="El trabajo ya fue publicado. Recargá la lista.")
+        raise HTTPException(status_code=409, detail="El trabajo ya fue publicado. Recarga la lista.")
     db_session.refresh(trabajo)
     db_session.refresh(video)
     return {"trabajo": trabajo, "video": video}
