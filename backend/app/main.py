@@ -8,6 +8,8 @@ from .database.db import engine
 from .database.db import ensure_schema_columns
 from .routers import auth, chat, manual, admin_users, errors, videos, updates
 from .config import VIDEO_IA_HABILITADO
+from .services import almacenamiento
+from .services.archivos_estaticos import montar_archivos_locales
 
 # create_all omite las tablas que solo se crean con su migración SQL
 # (trabajos_generacion_video), para que activar el código no altere la base.
@@ -109,5 +111,11 @@ def read_secret_manual(current_user: models.User = Depends(auth.get_current_user
     return {
         "mensaje": f"¡Hola, {current_user.nombre_usuario}! Has entrado a la zona protegida.",
     }
+
+# Archivos subidos: con ALMACENAMIENTO_PROVEEDOR=local se crean las carpetas y se
+# sirven en ARCHIVOS_URL_BASE (por defecto /api/archivos). En modo supabase no se monta.
+# almacenamiento.proveedor() falla al arrancar si el valor de la variable no es válido.
+almacenamiento.proveedor()
+montar_archivos_locales(app)
 
 app.include_router(api_router)

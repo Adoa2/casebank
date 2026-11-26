@@ -27,6 +27,13 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 
+# --- Almacenamiento de archivos subidos (services/almacenamiento.py) ---
+# "supabase" (por defecto): Supabase Storage, como siempre.
+# "local": subcarpetas de ARCHIVOS_DIR servidas en ARCHIVOS_URL_BASE.
+ALMACENAMIENTO_PROVEEDOR = os.getenv("ALMACENAMIENTO_PROVEEDOR", "supabase").strip().lower() or "supabase"
+ARCHIVOS_DIR = os.getenv("ARCHIVOS_DIR")
+ARCHIVOS_URL_BASE = os.getenv("ARCHIVOS_URL_BASE", "/api/archivos").strip().rstrip("/") or "/api/archivos"
+
 # --- Videos con IA ---
 # Todo el sistema queda apagado mientras VIDEO_IA_HABILITADO no sea "true":
 # el router no se registra y la tabla trabajos_generacion_video no se crea
