@@ -250,7 +250,7 @@ class ErrorReportReview(BaseModel):
 
 
 class ImagenUploadResponse(BaseModel):
-    """URL publica devuelta tras subir una imagen de evidencia a Supabase Storage."""
+    """URL publica (relativa en almacenamiento local) devuelta tras subir una imagen de evidencia."""
     url: str = Field(..., description="URL publica de la imagen subida.")
 
 

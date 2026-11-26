@@ -199,7 +199,7 @@ class TrabajoGeneracionVideo(Base):
     duracion_estimada_segundos = Column(Numeric(7, 2), nullable=True)
     duracion_segundos = Column(Numeric(7, 2), nullable=True)
     costo_estimado_usd = Column(Numeric(10, 4), nullable=True)
-    enlace = Column(String, nullable=True)  # mp4 final en Supabase Storage
+    enlace = Column(String, nullable=True)  # mp4 final en el almacenamiento (local o Supabase)
     mensaje_error = Column(Text, nullable=True)
     video_id = Column(Integer, ForeignKey("videos.id", ondelete="SET NULL"), nullable=True, unique=True)
     creado_por = Column(Integer, ForeignKey("usuarios.id"), nullable=False)

@@ -1,6 +1,5 @@
 # Gestión de errores frecuentes: CRUD, subida de evidencia y aprobación con indexado en RAG.
 import time
-import uuid
 from datetime import datetime
 from typing import List
 
@@ -15,9 +14,8 @@ from ..config import (
     GEMINI_API_KEY,
     GEMINI_EMBEDDING_MODEL,
     DATABASE_URL,
-    SUPABASE_URL,
-    SUPABASE_SERVICE_KEY,
 )
+from ..services import almacenamiento
 from . import auth
 
 router = APIRouter(prefix="/errors", tags=["Errores frecuentes"])
@@ -28,12 +26,7 @@ GEMINI_EMBED_URL = (
     f"{GEMINI_EMBEDDING_MODEL}:embedContent"
 )
 
-SUPABASE_STORAGE_BUCKET = "error-evidencias"
-EXTENSIONES_PERMITIDAS = {
-    "image/jpeg": "jpg",
-    "image/jpg": "jpg",
-    "image/png": "png",
-}
+BUCKET_EVIDENCIAS = almacenamiento.BUCKET_ERRORES
 MAX_TAMANO_IMAGEN_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
@@ -89,7 +82,7 @@ def _indexar_error(error: models.ErrorReport):
     "/upload-imagen",
     response_model=schemas.ImagenUploadResponse,
     summary="Subir imagen de evidencia de un error",
-    description="Sube una imagen (JPG, JPEG o PNG) a Supabase Storage y devuelve su URL publica, "
+    description="Sube una imagen (JPG, JPEG o PNG) al almacenamiento de archivos y devuelve su URL publica, "
                 "para asociarla luego al campo imagen_url de un error frecuente. "
                 "Requiere privilegio de administrador.",
 )
@@ -98,48 +91,21 @@ def subir_imagen_evidencia(
     current_user: models.User = Depends(auth.get_current_admin),
 ):
     """
-    Sube una imagen (JPG/PNG ≤ 5 MB) a Supabase Storage con nombre UUID
+    Sube una imagen (JPG/PNG ≤ 5 MB) al almacenamiento (local o Supabase) con nombre UUID
     y devuelve la URL pública para usarla en imagen_url del error.
     """
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="Supabase Storage no esta configurado (SUPABASE_URL/SUPABASE_SERVICE_KEY faltantes).",
+    # Solo JPG/PNG para mantener consistencia visual en el chat; se comprueba
+    # la firma real de los bytes, no solo el tipo que declara el navegador.
+    contenido = file.file.read(MAX_TAMANO_IMAGEN_BYTES + 1)
+    try:
+        extension, tipo_mime = almacenamiento.validar_imagen(contenido, file.content_type, MAX_TAMANO_IMAGEN_BYTES)
+        # UUID como nombre evita colisiones y oculta metadatos del cliente
+        url_publica = almacenamiento.subir(
+            BUCKET_EVIDENCIAS, almacenamiento.generar_nombre(extension), contenido, tipo_mime
         )
-
-    # Solo JPG/PNG para mantener consistencia visual en el chat
-    extension = EXTENSIONES_PERMITIDAS.get(file.content_type)
-    if not extension:
-        raise HTTPException(
-            status_code=400,
-            detail="Solo se permiten imagenes en formato JPG, JPEG o PNG.",
-        )
-
-    contenido = file.file.read()
-    if len(contenido) > MAX_TAMANO_IMAGEN_BYTES:
-        raise HTTPException(status_code=400, detail="La imagen no debe superar los 5 MB.")
-
-    # UUID como nombre evita colisiones y oculta metadatos del cliente
-    nombre_archivo = f"{uuid.uuid4().hex}.{extension}"
-    url_subida = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_STORAGE_BUCKET}/{nombre_archivo}"
-
-    respuesta = requests.post(
-        url_subida,
-        headers={
-            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-            "apikey": SUPABASE_SERVICE_KEY,
-            "Content-Type": file.content_type,
-        },
-        data=contenido,
-    )
-
-    if respuesta.status_code not in (200, 201):
-        raise HTTPException(
-            status_code=502,
-            detail=f"No se pudo subir la imagen a Supabase Storage: {respuesta.text[:300]}",
-        )
-
-    url_publica = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_STORAGE_BUCKET}/{nombre_archivo}"
+    except almacenamiento.ErrorAlmacenamiento as exc:
+        detalle = str(exc) if exc.estado_http < 502 else f"No se pudo subir la imagen: {exc}"
+        raise HTTPException(status_code=exc.estado_http, detail=detalle) from exc
     return {"url": url_publica}
 
 

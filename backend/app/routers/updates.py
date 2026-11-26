@@ -1,6 +1,6 @@
-# Gestión de documentos de actualización: carga, indexado en RAG y reemplazo de PDF en Supabase Storage.
+# Gestión de documentos de actualización: carga, indexado en RAG y reemplazo de PDF en el almacenamiento de archivos.
+import io
 import time
-import uuid
 from typing import List
 
 import fitz
@@ -14,15 +14,14 @@ from ..config import (
     DATABASE_URL,
     GEMINI_API_KEY,
     GEMINI_EMBEDDING_MODEL,
-    SUPABASE_SERVICE_KEY,
-    SUPABASE_URL,
 )
 from ..database import db, models
+from ..services import almacenamiento
 from . import auth
 
 router = APIRouter(prefix="/updates", tags=["Actualizaciones"])
 
-STORAGE_BUCKET = "actualizaciones-pdf"
+STORAGE_BUCKET = almacenamiento.BUCKET_ACTUALIZACIONES
 MAX_PDF_BYTES = 15 * 1024 * 1024
 MAX_CHUNK_CHARS = 1800
 CHUNK_OVERLAP = 220
@@ -54,125 +53,23 @@ def _validate_applicability(value: str) -> str:
     return clean
 
 
-def _ensure_storage_bucket():
-    """
-    Crea el bucket de Supabase Storage si no existe.
-    Se llama solo cuando Supabase responde 400/404 con 'bucket' en el mensaje;
-    así funciona con claves que pueden subir objetos pero no administrar buckets.
-    """
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        raise HTTPException(status_code=500, detail="Supabase Storage no está configurado.")
-
-    base_url = SUPABASE_URL.rstrip("/")
-    headers = {
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Content-Type": "application/json",
-    }
-    try:
-        created = requests.post(
-            f"{base_url}/storage/v1/bucket",
-            headers=headers,
-            json={
-                "id": STORAGE_BUCKET,
-                "name": STORAGE_BUCKET,
-                "public": True,
-                "file_size_limit": MAX_PDF_BYTES,
-                "allowed_mime_types": ["application/pdf"],
-            },
-            timeout=20,
-        )
-    except requests.exceptions.RequestException as exc:
-        raise HTTPException(
-            status_code=502,
-            detail="No se pudo conectar con Supabase para crear el almacenamiento de PDF.",
-        ) from exc
-    response_text = created.text.lower()
-    # 400/409 con "already exists" es OK: el bucket ya existe, no es un error real
-    already_exists = created.status_code in (400, 409) and any(
-        marker in response_text for marker in ("already exists", "duplicate", "ya existe")
-    )
-    if created.status_code not in (200, 201) and not already_exists:
-        if created.status_code in (401, 403):
-            detail = (
-                "La clave SUPABASE_SERVICE_KEY configurada en Vercel no tiene permisos "
-                "para crear el almacenamiento de PDF. Debe utilizarse la clave service_role."
-            )
-        else:
-            detail = f"No se pudo crear el bucket de PDF en Supabase ({created.status_code})."
-        raise HTTPException(status_code=502, detail=detail)
-
-
 def _upload_pdf(content: bytes) -> tuple[str, str]:
     """
-    Sube el PDF a Supabase Storage. Devuelve (ruta_almacenamiento, url_publica).
-    Intenta usar un bucket existente; solo crea uno nuevo si Supabase indica que no lo encuentra.
+    Sube el PDF al almacenamiento. Devuelve (ruta_almacenamiento, url_publica).
+    En modo supabase, si el bucket no existe se crea y se reintenta (como antes).
     """
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        raise HTTPException(status_code=500, detail="Supabase Storage no está configurado.")
-
-    base_url = SUPABASE_URL.rstrip("/")
-    storage_path = f"{uuid.uuid4().hex}.pdf"
-
-    def upload():
-        """Envía el PDF a Supabase Storage; retorna el objeto Response de requests."""
-        return requests.post(
-            f"{base_url}/storage/v1/object/{STORAGE_BUCKET}/{storage_path}",
-            headers={
-                "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-                "apikey": SUPABASE_SERVICE_KEY,
-                "Content-Type": "application/pdf",
-            },
-            data=content,
-            timeout=45,
-        )
-
-    # Primero intenta usar un bucket que ya exista. Solo intenta crearlo si
-    # Supabase indica que no lo encuentra; así también funciona en proyectos
-    # donde la clave puede subir objetos pero no administrar buckets.
+    storage_path = almacenamiento.generar_nombre("pdf")
     try:
-        response = upload()
-    except requests.exceptions.RequestException as exc:
-        raise HTTPException(
-            status_code=502,
-            detail="No se pudo conectar con Supabase para subir el PDF.",
-        ) from exc
-    if response.status_code in (400, 404) and "bucket" in response.text.lower():
-        _ensure_storage_bucket()
-        try:
-            response = upload()
-        except requests.exceptions.RequestException as exc:
-            raise HTTPException(
-                status_code=502,
-                detail="El bucket se preparó, pero no se pudo conectar para subir el PDF.",
-            ) from exc
-
-    if response.status_code not in (200, 201):
-        if response.status_code in (401, 403):
-            detail = (
-                "Supabase rechazó la carga del PDF. Verifica que SUPABASE_SERVICE_KEY "
-                "en Vercel sea la clave service_role del mismo proyecto."
-            )
-        else:
-            detail = f"No se pudo subir el PDF a Supabase ({response.status_code})."
-        raise HTTPException(status_code=502, detail=detail)
-
-    public_url = f"{base_url}/storage/v1/object/public/{STORAGE_BUCKET}/{storage_path}"
+        public_url = almacenamiento.subir(STORAGE_BUCKET, storage_path, content, "application/pdf", timeout=45)
+    except almacenamiento.ErrorAlmacenamiento as exc:
+        detalle = str(exc) if exc.estado_http < 502 else f"No se pudo subir el PDF: {exc}"
+        raise HTTPException(status_code=exc.estado_http, detail=detalle) from exc
     return storage_path, public_url
 
 
 def _delete_pdf(storage_path: str):
-    """Elimina un PDF de Supabase Storage. Fallo silencioso si la ruta está vacía o las credenciales faltan."""
-    if not storage_path or not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        return
-    requests.delete(
-        f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/{STORAGE_BUCKET}/{storage_path}",
-        headers={
-            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-            "apikey": SUPABASE_SERVICE_KEY,
-        },
-        timeout=20,
-    )
+    """Elimina un PDF del almacenamiento. Best-effort: si falla solo se registra un aviso."""
+    almacenamiento.borrar_sin_fallar(STORAGE_BUCKET, storage_path)
 
 
 def _read_pdf(file: UploadFile) -> tuple[bytes, list[dict]]:
@@ -312,10 +209,12 @@ def _index_document(document: models.UpdateDocument, pages: list[dict]):
 
 
 def _load_pages_from_storage(document: models.UpdateDocument) -> list[dict]:
-    """Descarga el PDF desde Supabase Storage y extrae su texto, para re-indexar tras un cambio de metadatos."""
-    response = requests.get(document.archivo_url, timeout=45)
-    response.raise_for_status()
-    pseudo_file = UploadFile(filename=document.archivo_nombre, file=__import__("io").BytesIO(response.content))
+    """
+    Lee el PDF del almacenamiento por su ruta_almacenamiento (no descarga URLs
+    arbitrarias) y extrae su texto, para re-indexar tras un cambio de metadatos.
+    """
+    content = almacenamiento.leer(STORAGE_BUCKET, document.ruta_almacenamiento)
+    pseudo_file = UploadFile(filename=document.archivo_nombre, file=io.BytesIO(content))
     _, pages = _read_pdf(pseudo_file)
     return pages
 
@@ -349,7 +248,7 @@ def create_update(
     current_user: models.User = Depends(auth.get_current_reviewer),
 ):
     """
-    Recibe el formulario multipart, sube el PDF a Supabase Storage, persiste el registro
+    Recibe el formulario multipart, sube el PDF al almacenamiento, persiste el registro
     en la BD y lo indexa en fragmentos_actualizacion. Si el indexado falla, deshace la subida.
     """
     title = _validate_text(titulo, "El título", 3)
@@ -437,7 +336,7 @@ def replace_pdf(
 ):
     """
     Reemplaza el PDF de un documento existente. Sube el nuevo archivo, re-indexa y
-    borra el archivo anterior de Supabase. Si el indexado falla, restaura los datos originales.
+    borra el archivo anterior del almacenamiento. Si el indexado falla, restaura los datos originales.
     """
     document = db_session.query(models.UpdateDocument).filter(models.UpdateDocument.id == document_id).first()
     if not document:
@@ -470,7 +369,7 @@ def delete_update(
     db_session: Session = Depends(db.get_db),
     current_user: models.User = Depends(auth.get_current_reviewer),
 ):
-    """Elimina el documento y su PDF de Supabase; los fragmentos se borran por ON DELETE CASCADE."""
+    """Elimina el documento y su PDF del almacenamiento; los fragmentos se borran por ON DELETE CASCADE."""
     document = db_session.query(models.UpdateDocument).filter(models.UpdateDocument.id == document_id).first()
     if not document:
         raise HTTPException(status_code=404, detail="Actualización no encontrada.")

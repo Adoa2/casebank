@@ -31,6 +31,7 @@ from pathlib import Path
 import requests
 
 from .. import config
+from . import almacenamiento
 from .proveedor_video import (
     RENDER_COMPLETADO,
     RENDER_EN_CURSO,
@@ -375,22 +376,22 @@ def _descargar(url: str, que: str) -> bytes:
 
 def _descargar_imagen(url: str) -> tuple[bytes, str]:
     """
-    Descarga una captura. Solo se aceptan las del bucket de capturas de
-    Supabase (evita que el servidor descargue URLs arbitrarias).
+    Lee una captura del almacenamiento. Solo se aceptan URLs del bucket de
+    capturas con el proveedor actual (evita que el servidor lea o descargue
+    URLs arbitrarias). En modo local se lee del disco; en supabase se descarga
+    de su URL pública, como antes. El tipo se deduce de la firma de los bytes.
     """
-    permitido = f"{config.SUPABASE_URL}/storage/v1/object/public/{config.SUPABASE_BUCKET_VIDEOS_IA_IMAGENES}/"
-    if not config.SUPABASE_URL or not url.startswith(permitido):
+    bucket = config.SUPABASE_BUCKET_VIDEOS_IA_IMAGENES
+    nombre = almacenamiento.nombre_desde_url(bucket, url)
+    if not nombre:
         raise ValueError("La captura no pertenece al bucket de capturas de videos con IA.")
-    respuesta = requests.get(url, timeout=TIMEOUT_DESCARGA)
-    if respuesta.status_code != 200:
-        raise RuntimeError(f"No se pudo descargar una captura (HTTP {respuesta.status_code}).")
-    tipo = respuesta.headers.get("Content-Type", "").split(";")[0].strip().lower()
-    if tipo not in TIPOS_IMAGEN:
-        # Supabase a veces responde application/octet-stream: se deduce por la firma.
-        contenido = respuesta.content
-        tipo = "image/png" if contenido[:8] == b"\x89PNG\r\n\x1a\n" else "image/jpeg" if contenido[:3] == b"\xff\xd8\xff" else ""
+    try:
+        contenido = almacenamiento.leer(bucket, nombre, timeout=TIMEOUT_DESCARGA)
+    except almacenamiento.ErrorAlmacenamiento as exc:
+        raise RuntimeError(f"No se pudo leer una captura: {exc}") from exc
+    tipo = almacenamiento.tipo_imagen_por_firma(contenido) or ""
     if tipo not in TIPOS_IMAGEN:
         raise ValueError("La captura no es PNG ni JPG.")
-    if len(respuesta.content) > MAX_TAMANO_IMAGEN_BYTES:
+    if len(contenido) > MAX_TAMANO_IMAGEN_BYTES:
         raise ValueError("La captura supera el tamaño máximo.")
-    return respuesta.content, tipo
+    return contenido, tipo

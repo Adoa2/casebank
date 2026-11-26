@@ -10,7 +10,7 @@ Flujo sin trabajo largo dentro de una petición HTTP:
        guion    -> genera el guion con Gemini.
        voz      -> genera hasta VIDEO_IA_NARRACIONES_POR_PASO narraciones.
        render   -> inicia el render o consulta su estado.
-       descarga -> copia el mp4 a Supabase Storage y marca "completado".
+       descarga -> copia el mp4 al almacenamiento (local o Supabase) y marca "completado".
    La fila se bloquea con FOR UPDATE SKIP LOCKED: si otra consulta ya la está
    procesando, esta devuelve el estado actual sin hacer nada.
 3. Si la copia del mp4 falla o excede su tiempo, el trabajo queda en
@@ -50,7 +50,6 @@ import secrets
 import string
 import tempfile
 import time
-import uuid
 from datetime import datetime, timedelta
 
 import requests
@@ -61,9 +60,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from .. import config, schemas
-from ..config import SUPABASE_SERVICE_KEY, SUPABASE_URL
 from ..database import db, models
-from ..services import video_script_generator
+from ..services import almacenamiento, video_script_generator
 from ..services.proveedor_video import (
     RENDER_COMPLETADO,
     RENDER_FALLIDO,
@@ -83,7 +81,6 @@ requiere_rol = auth.get_current_reviewer
 Trabajo = models.TrabajoGeneracionVideo
 ACTIVOS = models.ESTADOS_TRABAJO_VIDEO_ACTIVOS
 
-EXTENSIONES_PERMITIDAS = {"image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png"}
 MAX_TAMANO_IMAGEN_BYTES = 5 * 1024 * 1024  # 5 MB
 TOLERANCIA_DURACION_REAL_SEGUNDOS = 30
 
@@ -184,10 +181,8 @@ def estimar_costo(caracteres: int, duracion_segundos: float) -> float:
 # ya guardados con pasos sin imagen siguen pudiendo avanzar y renderizarse.
 
 def _prefijo_capturas() -> str | None:
-    """URL pública del bucket de capturas, o None si Supabase no está configurado."""
-    if not SUPABASE_URL:
-        return None
-    return f"{SUPABASE_URL}/storage/v1/object/public/{config.SUPABASE_BUCKET_VIDEOS_IA_IMAGENES}/"
+    """Prefijo de URL del bucket de capturas, o None si es supabase sin SUPABASE_URL."""
+    return almacenamiento.prefijo_publico(config.SUPABASE_BUCKET_VIDEOS_IA_IMAGENES)
 
 
 def validar_pasos(pasos: list[PasoEntrada]) -> list[PasoEntrada]:
@@ -209,7 +204,7 @@ def validar_pasos(pasos: list[PasoEntrada]) -> list[PasoEntrada]:
             raise HTTPException(status_code=400, detail=f"El paso {numero} necesita su descripción.")
         if falta_captura:
             raise HTTPException(status_code=400, detail=f"El paso {numero} necesita su captura.")
-        if prefijo and not imagen.startswith(prefijo):
+        if prefijo and almacenamiento.nombre_desde_url(config.SUPABASE_BUCKET_VIDEOS_IA_IMAGENES, imagen) is None:
             raise HTTPException(
                 status_code=400,
                 detail=f"La captura del paso {numero} no es válida. Súbela de nuevo desde el formulario.",
@@ -325,19 +320,7 @@ def _url_captura(trabajo: Trabajo, captura: int | None) -> str | None:
     return None
 
 
-# --- Supabase Storage ---
-
-def _cabeceras_storage(content_type: str | None = None) -> dict:
-    cabeceras = {"Authorization": f"Bearer {SUPABASE_SERVICE_KEY}", "apikey": SUPABASE_SERVICE_KEY}
-    if content_type:
-        cabeceras["Content-Type"] = content_type
-    return cabeceras
-
-
-def _verificar_storage() -> None:
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        raise RuntimeError("Supabase Storage no está configurado (SUPABASE_URL/SUPABASE_SERVICE_KEY faltantes).")
-
+# --- Almacenamiento (services/almacenamiento.py) ---
 
 _ALFABETO_NOMBRE = string.ascii_lowercase + string.digits
 
@@ -353,46 +336,43 @@ def _nombre_video(trabajo_id: int) -> str:
 
 def _copiar_video_a_storage(url_origen: str, nombre_archivo: str) -> str:
     """
-    Descarga el mp4 en streaming a un archivo temporal y lo sube a Storage con
-    la subida estándar (validada con 160 MB; el límite del proyecto es 500 MB).
-    Corta si se supera VIDEO_IA_TIEMPO_MAX_DESCARGA_SEGUNDOS. Cada intento usa
-    un nombre aleatorio nuevo, así que un reintento nunca pisa otro archivo.
+    Descarga el mp4 en streaming a un archivo temporal y lo guarda en el
+    almacenamiento (en Supabase, con la subida estándar, validada con 160 MB;
+    el límite del proyecto es 500 MB). Corta si se supera
+    VIDEO_IA_TIEMPO_MAX_DESCARGA_SEGUNDOS. Cada intento usa un nombre aleatorio
+    nuevo, así que un reintento nunca pisa otro archivo.
     """
-    _verificar_storage()
+    try:
+        almacenamiento.verificar_configuracion()  # falla antes de descargar si falta la configuración
+    except almacenamiento.ErrorAlmacenamiento as exc:
+        raise RuntimeError(str(exc)) from exc
     maximo = config.VIDEO_IA_TIEMPO_MAX_DESCARGA_SEGUNDOS
     inicio = time.monotonic()
-    with tempfile.TemporaryFile() as temporal:
-        with requests.get(url_origen, stream=True, timeout=(10, 30)) as respuesta:
-            respuesta.raise_for_status()
-            for bloque in respuesta.iter_content(chunk_size=1024 * 1024):
-                temporal.write(bloque)
-                if time.monotonic() - inicio > maximo:
-                    raise TimeoutError(f"La descarga del video superó {maximo} segundos.")
-        tamano = temporal.tell()
-        temporal.seek(0)
+    with tempfile.TemporaryDirectory() as carpeta:
+        ruta = f"{carpeta}/video.mp4"
+        with open(ruta, "wb") as temporal:
+            with requests.get(url_origen, stream=True, timeout=(10, 30)) as respuesta:
+                respuesta.raise_for_status()
+                for bloque in respuesta.iter_content(chunk_size=1024 * 1024):
+                    temporal.write(bloque)
+                    if time.monotonic() - inicio > maximo:
+                        raise TimeoutError(f"La descarga del video superó {maximo} segundos.")
         restante = max(maximo - (time.monotonic() - inicio), 10)
-        bucket = config.SUPABASE_BUCKET_VIDEOS_IA
-        subida = requests.post(
-            f"{SUPABASE_URL}/storage/v1/object/{bucket}/{nombre_archivo}",
-            headers={**_cabeceras_storage("video/mp4"), "Content-Length": str(tamano)},
-            data=temporal,
-            timeout=(10, restante),
-        )
-    if subida.status_code not in (200, 201):
-        raise RuntimeError(f"No se pudo subir el video a Supabase Storage: {subida.text[:300]}")
-    return f"{SUPABASE_URL}/storage/v1/object/public/{bucket}/{nombre_archivo}"
+        try:
+            return almacenamiento.subir_archivo(
+                config.SUPABASE_BUCKET_VIDEOS_IA, nombre_archivo, ruta, "video/mp4", timeout=(10, restante)
+            )
+        except almacenamiento.ErrorAlmacenamiento as exc:
+            raise RuntimeError(f"No se pudo guardar el video: {exc}") from exc
 
 
 def _eliminar_de_storage(bucket: str, url_publica: str | None) -> None:
-    """Best-effort: borra un archivo de Storage a partir de su URL pública. Nunca lanza."""
-    marcador = f"/storage/v1/object/public/{bucket}/"
-    if not url_publica or marcador not in url_publica:
-        return
-    ruta = url_publica.split(marcador, 1)[1]
+    """Best-effort: borra un archivo del almacenamiento a partir de su URL pública. Nunca lanza."""
     try:
-        requests.delete(f"{SUPABASE_URL}/storage/v1/object/{bucket}/{ruta}", headers=_cabeceras_storage(), timeout=10)
-    except Exception:
-        logger.warning("No se pudo borrar de Storage: %s/%s", bucket, ruta, exc_info=True)
+        nombre = almacenamiento.nombre_desde_url(bucket, url_publica)
+    except almacenamiento.ErrorAlmacenamiento:
+        return
+    almacenamiento.borrar_sin_fallar(bucket, nombre)
 
 
 # --- Pasos del trabajo ---
@@ -538,27 +518,17 @@ def obtener_configuracion(current_user: models.User = Depends(requiere_rol)):
 
 @router.post("/imagenes", response_model=schemas.ImagenUploadResponse, summary="Subir captura de un paso")
 def subir_imagen(file: UploadFile = File(...), current_user: models.User = Depends(requiere_rol)):
-    """Sube una captura JPG o PNG (máximo 5 MB) a Supabase Storage y devuelve su URL pública."""
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        raise HTTPException(status_code=500, detail="Supabase Storage no está configurado.")
-    extension = EXTENSIONES_PERMITIDAS.get(file.content_type)
-    if not extension:
-        raise HTTPException(status_code=400, detail="Solo se permiten imágenes en formato JPG, JPEG o PNG.")
-    contenido = file.file.read()
-    if len(contenido) > MAX_TAMANO_IMAGEN_BYTES:
-        raise HTTPException(status_code=400, detail="La imagen no debe superar los 5 MB.")
-
-    bucket = config.SUPABASE_BUCKET_VIDEOS_IA_IMAGENES
-    nombre = f"{uuid.uuid4().hex}.{extension}"
-    respuesta = requests.post(
-        f"{SUPABASE_URL}/storage/v1/object/{bucket}/{nombre}",
-        headers=_cabeceras_storage(file.content_type),
-        data=contenido,
-        timeout=30,
-    )
-    if respuesta.status_code not in (200, 201):
-        raise HTTPException(status_code=502, detail=f"No se pudo subir la imagen a Supabase Storage: {respuesta.text[:300]}")
-    return {"url": f"{SUPABASE_URL}/storage/v1/object/public/{bucket}/{nombre}"}
+    """Sube una captura JPG o PNG (máximo 5 MB, firma real comprobada) y devuelve su URL pública."""
+    contenido = file.file.read(MAX_TAMANO_IMAGEN_BYTES + 1)
+    try:
+        extension, tipo_mime = almacenamiento.validar_imagen(contenido, file.content_type, MAX_TAMANO_IMAGEN_BYTES)
+        url = almacenamiento.subir(
+            config.SUPABASE_BUCKET_VIDEOS_IA_IMAGENES, almacenamiento.generar_nombre(extension), contenido, tipo_mime
+        )
+    except almacenamiento.ErrorAlmacenamiento as exc:
+        detalle = str(exc) if exc.estado_http < 502 else f"No se pudo subir la imagen: {exc}"
+        raise HTTPException(status_code=exc.estado_http, detail=detalle) from exc
+    return {"url": url}
 
 
 @router.post("", response_model=TrabajoSalida, status_code=status.HTTP_201_CREATED, summary="Crear trabajo de video")
