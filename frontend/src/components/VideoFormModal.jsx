@@ -2,7 +2,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchManualStructure } from '../api/manual'
 import { buildJerarquiaAnidada } from '../utils/manualTree'
-import { obtenerEnlaceVideo } from '../utils/videoEnlace'
+import { API_BASE_URL } from '../config'
+import { esEnlaceVideoValido, obtenerEnlaceVideo, resolverEnlace } from '../utils/videoEnlace'
 
 function aplanarDescendientes(nodo) {
   const resultado = []
@@ -122,7 +123,7 @@ export default function VideoFormModal({ mode = 'create', initialData, onClose, 
     if (!titulo.trim()) return setError('El título es obligatorio.')
     if (!capituloId || !seccionId) return setError('Selecciona capítulo y sección.')
     if (!subseccionId) return setError('Selecciona la subsección o la opción de esta sección.')
-    if (!/^https?:\/\//i.test(url.trim())) return setError('La URL debe comenzar con http:// o https://')
+    if (!esEnlaceVideoValido(url)) return setError('La URL debe comenzar con http:// o https://')
 
     const subseccionSeleccionada = subsecciones.find((item) => String(item.id) === subseccionId)
     const esLaMismaSeccion = subseccionSeleccionada?.id === seccionSeleccionada.id
@@ -143,7 +144,9 @@ export default function VideoFormModal({ mode = 'create', initialData, onClose, 
   }
 
   const fieldClass = 'h-12 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-[#17213e] outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400'
-  const validUrl = /^https?:\/\//i.test(url.trim())
+  // Acepta http(s):// y las rutas relativas de los videos con IA en almacenamiento local.
+  const validUrl = esEnlaceVideoValido(url)
+  const urlComprobar = validUrl ? resolverEnlace(url, API_BASE_URL)?.toString() : null
 
   return (
     <div className="video-form-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 backdrop-blur-[1px]" role="dialog" aria-modal="true" aria-labelledby="video-modal-title" onMouseDown={(event) => event.target === event.currentTarget && !saving && onClose()}>
@@ -183,7 +186,7 @@ export default function VideoFormModal({ mode = 'create', initialData, onClose, 
                     placeholder="https://www.youtube.com/..."
                     className={`${fieldClass} pl-12 pr-28`}
                   />
-                  {validUrl && <a href={url.trim()} target="_blank" rel="noopener noreferrer" className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-100">Comprobar</a>}
+                  {urlComprobar && <a href={urlComprobar} target="_blank" rel="noopener noreferrer" className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-100">Comprobar</a>}
                 </div>
               </Field>
             </div>

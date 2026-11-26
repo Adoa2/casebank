@@ -39,7 +39,7 @@ export async function replaceUpdatePdf(id, file) {
   return parseApiResponse(response)
 }
 
-/** Elimina un documento de actualización y su PDF de Supabase. */
+/** Elimina un documento de actualización y su PDF del almacenamiento de archivos. */
 export async function deleteUpdate(id) {
   const response = await fetch(`${API_BASE_URL}/api/updates/${id}`, {
     method: 'DELETE', headers: authHeaders(),

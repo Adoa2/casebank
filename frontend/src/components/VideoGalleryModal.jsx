@@ -1,13 +1,16 @@
 // Modal lightbox de videos formativos de una sección del manual con reproductor embebido.
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { API_BASE_URL } from '../config'
 import { clasificarEnlaceVideo, obtenerEnlaceVideo } from '../utils/videoEnlace'
 
 // --- Reproductor del video activo ---
 // Lee la direccion con obtenerEnlaceVideo (campo "enlace" de la API) y
 // elige la etiqueta segun clasificarEnlaceVideo:
 //   - YouTube  -> <iframe> embed, ocupa todo el espacio, con pantalla completa.
-//   - Archivo  -> <video controls> (mp4/webm, Supabase Storage, Dropbox).
+//   - Archivo  -> <video controls> (mp4/webm, almacenamiento de archivos
+//                 local o Supabase, Dropbox). Las rutas relativas
+//                 (/api/archivos/...) se resuelven contra API_BASE_URL.
 //   - Externo  -> mensaje + boton para abrir el enlace en otra pestana.
 //   - Invalido -> mensaje corto en lugar de un reproductor vacio.
 // Antes leia "activo.url", que la API ya no envia tras la normalizacion:
@@ -15,7 +18,7 @@ import { clasificarEnlaceVideo, obtenerEnlaceVideo } from '../utils/videoEnlace'
 // YouTube llamaba a obtenerEmbedYoutube, que no existia.
 function ReproductorVideo({ video }) {
   const enlace = obtenerEnlaceVideo(video)
-  const { tipo, src } = clasificarEnlaceVideo(enlace)
+  const { tipo, src } = clasificarEnlaceVideo(enlace, API_BASE_URL)
 
   if (tipo === 'youtube') {
     return (

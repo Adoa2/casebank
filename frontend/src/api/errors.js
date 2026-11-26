@@ -56,7 +56,7 @@ export async function deleteError(id) {
   return parseApiResponse(res)
 }
 
-/** Sube una imagen de evidencia a Supabase Storage y devuelve su URL pública. */
+/** Sube una imagen de evidencia al almacenamiento de archivos del backend y devuelve su URL pública. */
 export async function uploadImagenError(file) {
   const formData = new FormData()
   formData.append('file', file)

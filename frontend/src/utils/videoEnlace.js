@@ -13,6 +13,41 @@ export function obtenerFechaCreacionVideo(video) {
 }
 // --- fin campos de un video formativo ---
 
+// --- Enlaces relativos del almacenamiento local ---
+// Con ALMACENAMIENTO_PROVEEDOR=local el backend guarda rutas relativas como
+// /api/archivos/videos-generados/trabajo-1-abc.mp4. Se resuelven contra
+// API_BASE_URL (si la API esta en otro dominio) o contra el dominio actual.
+// Este archivo no importa config.js para poder probarse con node --test:
+// quien llama pasa API_BASE_URL.
+
+// Ruta absoluta dentro del mismo sitio ("/algo"), no "//otro-dominio".
+export function esRutaRelativa(enlace) {
+  return typeof enlace === 'string' && /^\/(?!\/)/.test(enlace.trim())
+}
+
+// Devuelve un objeto URL o null. Las rutas relativas se resuelven contra
+// apiBaseUrl (concatenando, igual que las llamadas a la API) o el dominio actual.
+export function resolverEnlace(enlace, apiBaseUrl = '') {
+  const limpio = typeof enlace === 'string' ? enlace.trim() : ''
+  try {
+    if (esRutaRelativa(limpio)) {
+      const base = (apiBaseUrl || globalThis.location?.origin || '').replace(/\/+$/, '')
+      return base ? new URL(base + limpio) : null
+    }
+    return new URL(limpio)
+  } catch {
+    return null
+  }
+}
+
+// Validacion del campo "URL del video" del formulario: http(s):// o una ruta
+// relativa del sistema (videos generados con IA en almacenamiento local).
+export function esEnlaceVideoValido(enlace) {
+  const limpio = typeof enlace === 'string' ? enlace.trim() : ''
+  return /^https?:\/\//i.test(limpio) || esRutaRelativa(limpio)
+}
+// --- fin enlaces relativos ---
+
 // --- Deteccion del tipo de reproductor ---
 // Los IDs de YouTube tienen 11 caracteres [A-Za-z0-9_-]. Se aceptan:
 //   youtu.be/ID, youtube.com/watch?v=ID, youtube.com/shorts/ID,
@@ -45,7 +80,8 @@ export function obtenerIdYoutube(enlace) {
 
 // Archivos que <video> puede reproducir directamente: extensiones de video
 // conocidas o cualquier objeto de Supabase Storage (los videos generados
-// por IA se guardan ahi, a veces sin extension visible en la ruta).
+// por IA guardados antes en Supabase, a veces sin extension visible en la
+// ruta). Los del almacenamiento local siempre terminan en .mp4.
 const EXTENSIONES_VIDEO = /\.(mp4|webm|ogg|ogv|mov|m4v)$/i
 
 function esArchivoDeVideo(u) {
@@ -68,18 +104,17 @@ function normalizarDropbox(u) {
 //   { tipo: 'externo', src }  -> URL valida que no se puede incrustar
 //                                (se ofrece abrirla en otra pestana)
 //   { tipo: 'invalido' }      -> enlace vacio o mal formado
-export function clasificarEnlaceVideo(enlace) {
+//
+// apiBaseUrl: valor de API_BASE_URL para resolver rutas relativas
+// (/api/archivos/...); vacio = dominio actual.
+export function clasificarEnlaceVideo(enlace, apiBaseUrl = '') {
   if (!enlace) return { tipo: 'invalido' }
 
   const idYoutube = obtenerIdYoutube(enlace)
   if (idYoutube) return { tipo: 'youtube', src: `https://www.youtube.com/embed/${idYoutube}` }
 
-  let u
-  try {
-    u = new URL(enlace)
-  } catch {
-    return { tipo: 'invalido' }
-  }
+  const u = resolverEnlace(enlace, apiBaseUrl)
+  if (!u) return { tipo: 'invalido' }
   if (u.protocol !== 'http:' && u.protocol !== 'https:') return { tipo: 'invalido' }
 
   // Un enlace de YouTube que llego hasta aqui tiene un ID mal formado.
